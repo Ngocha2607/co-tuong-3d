@@ -1,0 +1,20 @@
+name = "co-tuong-3d"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+
+[build]
+command = "node worker/build.js"
+watch_dir = ["src", "worker"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+# one Durable Object per online room: seats, moves and the result live in its storage
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

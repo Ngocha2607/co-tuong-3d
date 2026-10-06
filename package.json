@@ -1,0 +1,14 @@
+{
+  "name": "co-tuong-3d",
+  "version": "1.0.0",
+  "description": "Cờ tướng 3D: đánh với máy hoặc online, quân cờ hoá chiến binh Tam Quốc khi ra trận",
+  "private": true,
+  "scripts": {
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test/rules.test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.147.0"
+  }
+}

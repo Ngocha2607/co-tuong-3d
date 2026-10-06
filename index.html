@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cờ Tướng 3D</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23e7cf9f' stroke='%23a3201a' stroke-width='4'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%23a3201a' stroke-width='2'/%3E%3C/svg%3E">
+<meta name="description" content="Cờ tướng 3D: đánh với máy hoặc chơi online, quân cờ hoá chiến binh Tam Quốc khi ra trận.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@600;700&family=LXGW+WenKai+TC:wght@700&display=swap">
+<style>
+  :root {
+    --bg: #140d0a;
+    --ink: #f5e9d4;
+    --dim: #b9a58a;
+    --gold: #e3b448;
+    --gold-soft: rgba(227, 180, 72, 0.3);
+    --red: #c8312a;
+    --red-ink: #e0574c;
+    --blue: #3a5378;
+    --jade: #46e0b0;
+    --panel: rgba(26, 15, 10, 0.86);
+    --panel-solid: #1c110c;
+    --line: rgba(227, 180, 72, 0.22);
+    --ui: "Be Vietnam Pro", system-ui, sans-serif;
+    --serif: "Noto Serif", Georgia, serif;
+    --han: "LXGW WenKai TC", "KaiTi", "STKaiti", serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font: 500 14px/1.45 var(--ui); -webkit-tap-highlight-color: transparent; }
+  button { font: inherit; color: inherit; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  [hidden] { display: none !important; }
+
+  /* ---------- top bar ---------- */
+  #top { position: fixed; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 12px; padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px; pointer-events: none; z-index: 5; }
+  #top > * { pointer-events: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .seal { width: 38px; height: 38px; display: grid; place-items: center; background: var(--red); color: #fff3dc; font: 700 22px/1 var(--han); border-radius: 6px; box-shadow: inset 0 0 0 2px rgba(255, 230, 190, 0.35); }
+  .brand b { font: 700 17px/1 var(--serif); letter-spacing: 0.02em; }
+  #status { margin: 0 auto; padding: 8px 18px; font: 600 15px/1.2 var(--ui); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; min-height: 36px; white-space: nowrap; transition: border-color 200ms, color 200ms; }
+  #status:empty { visibility: hidden; }
+  #status.mine { border-color: var(--gold); color: #ffe6a6; box-shadow: 0 0 18px rgba(227, 180, 72, 0.25); }
+  .tools { display: flex; gap: 6px; }
+  .icon { width: 38px; height: 38px; display: grid; place-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; padding: 0; }
+  .icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .icon:hover { border-color: var(--gold); }
+  .icon.on { background: var(--gold); color: #2a1408; border-color: var(--gold); }
+  .icon.off { color: var(--dim); }
+  .icon.off svg .wave { display: none; }
+  .icon:focus-visible, .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+  /* ---------- side panel ---------- */
+  #panel { position: fixed; right: 16px; top: 64px; bottom: 16px; width: 300px; display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); z-index: 4; }
+  body[data-mode="menu"] #panel { display: none; }
+  .players { display: grid; gap: 8px; }
+  .pl { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(245, 233, 212, 0.05); border: 1px solid transparent; transition: border-color 200ms, background 200ms; }
+  .pl .chip { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 700 17px/1 var(--han); background: #ecd6a8; box-shadow: inset 0 0 0 2px currentColor; }
+  .pl.red .chip { color: #a3201a; } .pl.black .chip { color: #1b1b1b; }
+  .pl .nm { font-weight: 700; }
+  .pl .nm small { color: var(--dim); font-weight: 500; }
+  .pl .who { margin-left: auto; color: var(--dim); font-size: 13px; }
+  .pl.turn { border-color: var(--gold); background: rgba(227, 180, 72, 0.12); }
+  .pl.turn .who { color: var(--ink); }
+  .pl.away .who { font-style: italic; }
+  #room { padding: 10px 12px; border-radius: 10px; border: 1px dashed var(--gold-soft); }
+  #room .code { font: 700 22px/1 var(--serif); letter-spacing: 0.2em; color: var(--gold); }
+  #room .link { margin: 6px 0 8px; font-size: 12px; color: var(--dim); overflow-wrap: anywhere; user-select: text; }
+  .mhead { display: flex; justify-content: space-between; align-items: baseline; font: 700 13px/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  #moves { flex: 1; min-height: 80px; margin: 0; padding: 0; list-style: none; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--gold-soft) transparent; }
+  #moves li { display: grid; grid-template-columns: 28px 1fr 1fr; gap: 6px; padding: 5px 4px; border-bottom: 1px solid rgba(245, 233, 212, 0.06); font-size: 13px; }
+  #moves li em { font-style: normal; color: var(--dim); font-variant-numeric: tabular-nums; }
+  #moves .mv.r { color: #ff9a8a; } #moves .mv.b { color: #cfd8e6; }
+  #moves .mv.cap { font-weight: 700; }
+  #moves .empty { display: block; color: var(--dim); border: 0; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.06); font-weight: 600; cursor: pointer; transition: background 150ms, border-color 150ms; }
+  .btn:hover:not(:disabled) { border-color: var(--gold); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .btn.primary { background: linear-gradient(180deg, #d63b2f, #a3201a); border-color: #e0574c; color: #fff4e2; box-shadow: 0 6px 20px rgba(200, 49, 42, 0.35); }
+  .btn.gold { background: var(--gold); border-color: var(--gold); color: #2a1408; }
+  .btn.warn { background: #7a1712; border-color: var(--red-ink); }
+  #bMoves { display: none; }
+
+  /* ---------- banner, toast ---------- */
+  #banner { position: fixed; left: 0; right: 0; top: 30%; display: flex; justify-content: center; pointer-events: none; z-index: 6; opacity: 0; }
+  #banner span { padding: 12px 40px; font: 700 clamp(30px, 6vw, 64px)/1 var(--serif); letter-spacing: 0.06em; color: #fff3dc; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 30px rgba(227, 180, 72, 0.5); background: linear-gradient(90deg, transparent, rgba(20, 10, 6, 0.75) 20%, rgba(20, 10, 6, 0.75) 80%, transparent); }
+  #banner[data-kind="check"] span { color: #ffd6cf; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 34px rgba(255, 60, 40, 0.8); }
+  #banner.show { animation: banner 1.7s ease both; }
+  @keyframes banner { 0% { opacity: 0; transform: scale(1.3); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+  #toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); padding: 10px 16px; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 999px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 250ms, transform 250ms; z-index: 9; max-width: calc(100% - 32px); text-align: center; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* ---------- menu and end screens ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; padding: 24px; overflow-y: auto; }
+  #menu { background: linear-gradient(90deg, rgba(14, 8, 6, 0.92) 0%, rgba(14, 8, 6, 0.72) 42%, rgba(14, 8, 6, 0) 70%); }
+  .card { width: min(440px, 100%); padding: 26px 26px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; backdrop-filter: blur(10px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
+  #menu .card { margin-left: max(0px, 5vw); }
+  .logo { display: flex; align-items: center; gap: 16px; margin-bottom: 18px; }
+  .logo .seal { width: 64px; height: 64px; flex: none; display: grid; place-items: center; background: var(--red); border-radius: 10px; font: 700 27px/0.95 var(--han); color: #fff3dc; box-shadow: inset 0 0 0 3px rgba(255, 230, 190, 0.35), 0 10px 30px rgba(200, 49, 42, 0.35); }
+  .logo h1 { margin: 0; font: 700 32px/1.05 var(--serif); }
+  .logo p { margin: 6px 0 0; color: var(--dim); }
+  .card section { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
+  .card h2 { margin: 0; font: 700 13px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; padding: 4px; background: rgba(0, 0, 0, 0.3); border-radius: 12px; }
+  .seg button { padding: 9px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--dim); font-weight: 600; cursor: pointer; }
+  .seg button.on { background: rgba(245, 233, 212, 0.12); color: var(--ink); box-shadow: inset 0 0 0 1px var(--gold-soft); }
+  .seg button[data-v="1"].on.side { background: linear-gradient(180deg, #d63b2f, #a3201a); color: #fff4e2; }
+  .join { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+  .join input { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--ink); font: 700 16px/1 var(--ui); letter-spacing: 0.25em; text-transform: uppercase; }
+  .join input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+  .note { margin: 0; color: var(--dim); font-size: 13px; }
+  #onlineBox.off .btn, #onlineBox.off .join { opacity: 0.4; pointer-events: none; }
+  .foot { margin: 12px 0 0; color: var(--dim); font-size: 12px; }
+  #end { justify-content: center; background: rgba(10, 6, 4, 0.55); }
+  #end .card { text-align: center; }
+  #end .han { font: 700 64px/1 var(--han); color: var(--gold); }
+  #end[data-result="win"] .han { color: var(--gold); } #end[data-result="lose"] .han { color: #8a96a8; } #end[data-result="draw"] .han { color: var(--dim); }
+  #endTitle { margin: 8px 0 6px; font: 700 34px/1.1 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  #endSub { margin: 0 0 6px; color: var(--dim); }
+  #endNote { min-height: 20px; margin: 4px 0 14px; color: var(--jade); font-weight: 600; }
+  #end .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  #end .row .btn { flex: 1 1 120px; }
+  #end .row .btn:first-child { flex-basis: 100%; }
+  #bEndClose { position: absolute; top: 10px; right: 10px; }
+  #end .card { position: relative; }
+
+  #boot { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: var(--bg); z-index: 20; color: var(--dim); }
+  #boot b { display: block; font: 700 44px/1 var(--han); color: var(--gold); margin-bottom: 12px; }
+
+  /* ---------- phones ---------- */
+  @media (max-width: 760px) {
+    #top { padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px; gap: 8px; flex-wrap: wrap; }
+    .brand b { display: none; }
+    #status { order: 3; flex-basis: 100%; text-align: center; font-size: 14px; }
+    .tools { margin-left: auto; }
+    .icon { width: 36px; height: 36px; }
+    #panel { top: auto; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: auto; padding: 10px; gap: 8px; max-height: 52vh; }
+    .players { grid-template-columns: 1fr 1fr; gap: 6px; }
+    .pl { padding: 6px 8px; gap: 6px; }
+    .pl .chip { width: 24px; height: 24px; font-size: 14px; }
+    .pl .nm small { display: none; }
+    .pl .who { font-size: 12px; }
+    #moves, .mhead { display: none; }
+    body.show-moves #moves { display: block; max-height: 30vh; }
+    body.show-moves .mhead { display: flex; }
+    .actions { grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 6px; }
+    .actions .btn { padding: 9px 2px; font-size: 12.5px; }
+    #bMoves { display: block; }
+    #room { padding: 8px 10px; }
+    #room .link { display: none; }
+    #menu { background: rgba(14, 8, 6, 0.8); justify-content: center; }
+    #menu .card { margin: 0; }
+    .logo h1 { font-size: 26px; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition: none !important; } }
+</style>
+</head>
+<body data-mode="menu">
+<canvas id="view" aria-label="Bàn cờ tướng 3D"></canvas>
+
+<header id="top">
+  <div class="brand"><span class="seal">象</span><b>Cờ Tướng 3D</b></div>
+  <div id="status" role="status" aria-live="polite"></div>
+  <div class="tools">
+    <button class="icon" id="bArmy" type="button" title="Hiện chiến binh trên mọi quân" aria-label="Hiện chiến binh"><svg viewBox="0 0 24 24"><path d="M4 4l10 10M14 14l2.5-.5L20 17l-3 3-3.5-3.5L14 14zM20 4L10 14M10 14l-2.5-.5L4 17l3 3 3.5-3.5L10 14z"/></svg></button>
+    <button class="icon" id="bCam" type="button" title="Đặt lại góc nhìn" aria-label="Đặt lại góc nhìn"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg></button>
+    <button class="icon" id="bMusic" type="button" title="Nhạc nền" aria-label="Nhạc nền"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
+    <button class="icon" id="bSound" type="button" title="Âm thanh" aria-label="Âm thanh"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
+    <button class="icon" id="bMenu" type="button" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  </div>
+</header>
+
+<aside id="panel">
+  <div class="players">
+    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm">Đỏ <small>· Thục</small></span><span class="who"></span></div>
+    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm">Đen <small>· Ngụy</small></span><span class="who"></span></div>
+  </div>
+  <div id="room" hidden>
+    <div class="mhead"><span>Phòng</span></div>
+    <div class="code" id="roomCode"></div>
+    <div class="link" id="roomLink"></div>
+    <button class="btn" id="bCopy" type="button">Sao chép link mời</button>
+  </div>
+  <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
+  <ol id="moves"></ol>
+  <div class="actions">
+    <button class="btn" id="bUndo" type="button">Đi lại</button>
+    <button class="btn" id="bHint" type="button">Gợi ý</button>
+    <button class="btn" id="bMoves" type="button">Biên bản</button>
+    <button class="btn" id="bResign" type="button">Xin thua</button>
+    <button class="btn" id="bNew" type="button">Ván mới</button>
+  </div>
+</aside>
+
+<div id="banner" aria-hidden="true"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="menu" class="overlay" hidden>
+  <div class="card">
+    <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục – Ngụy tranh hùng trên bàn cờ</p></div></div>
+    <section>
+      <h2>Đánh với máy</h2>
+      <div class="seg" id="segSide"><button type="button" data-v="1">Cầm quân Đỏ (đi trước)</button><button type="button" data-v="-1">Cầm quân Đen</button></div>
+      <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+      <button class="btn primary" id="bPlayAI" type="button">Vào trận</button>
+    </section>
+    <section id="onlineBox">
+      <h2>Chơi online</h2>
+      <button class="btn gold" id="bCreate" type="button">Tạo phòng mới</button>
+      <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
+      <p class="note" id="onlineNote"></p>
+    </section>
+    <button class="btn" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
+    <p class="foot">Chạm một quân để xem nước đi, chạm điểm sáng để đi. Kéo để xoay bàn, cuộn chuột hoặc chụm hai ngón để phóng to, nhấp đúp để đặt lại góc nhìn.</p>
+  </div>
+</div>
+
+<div id="end" class="overlay" hidden>
+  <div class="card">
+    <button class="icon" id="bEndClose" type="button" aria-label="Xem lại bàn cờ"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="han">勝</div>
+    <h2 id="endTitle"></h2>
+    <p id="endSub"></p>
+    <p id="endNote"></p>
+    <div class="row">
+      <button class="btn primary" id="bAgain" type="button">Ván mới</button>
+      <button class="btn" id="bEndUndo" type="button">Đi lại</button>
+      <button class="btn" id="bEndMenu" type="button">Về menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="boot"><div><b>象棋</b>Đang bày quân…</div></div>
+
+<script src="src/vendor/three.min.js"></script>
+<script src="src/xiangqi.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/models.js"></script>
+<script src="src/scene.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
