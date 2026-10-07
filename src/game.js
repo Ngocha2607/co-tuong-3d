@@ -10,13 +10,15 @@
   ];
   const SIDE = { 1: 'Đỏ', '-1': 'Đen' }, ARMY = { 1: 'Thục', '-1': 'Ngụy' };
   const REASON = { checkmate: 'Chiếu bí', stalemate: 'Hết nước đi', repetition: 'Lặp lại thế cờ ba lần', quiet: '60 nước liền không ăn quân', resign: 'Xin thua' };
+  const TC = ['', '10+5', '5+3'], TC_NAME = { '600000+5000': '10 phút + 5s', '300000+3000': '5 phút + 3s' };
 
   const G = {
     mode: 'menu', pos: XQ.Pos.fromFen(XQ.START), moves: [], keys: [], log: [], quiet: 0, captured: [],
     me: 1, level: 1, over: null, sel: -1, targets: [], thinking: false, animating: 0,
     room: '', ws: null, you: 0, players: { 1: false, '-1': false }, rematch: { 1: false, '-1': false }, online: false,
+    rated: false, info: { 1: null, '-1': null }, tc: null, clock: null, deadline: null, wantTc: '',
   };
-  let pref = { side: 1, level: 1, army: false };
+  let pref = { side: 1, level: 1, army: false, tc: 0 };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
 
@@ -40,13 +42,17 @@
 
   // apply a move to the record now, animate it when its turn comes
   function commit(m, fast) {
+    // against the clock the animations cost the player time: no close-ups, and none at all when time runs short
+    const timed = G.mode === 'online' && !!G.clock;
+    const opts = { fast: fast || (timed && G.you && clockOf(G.you) < 60000), closeUp: !timed };
+    const mover = G.pos.turn;
+    if (timed && mover === G.you) { G.clock.left[mover] = clockOf(mover); G.clock.running = 0; G.clock.at = performance.now(); }   // the server's reply restarts it
     record(m);
     const st = XQ.status(G.pos, G.keys, G.quiet), turn = G.pos.turn, king = kingOf(turn), gen = G.gen;
     renderMoves();
-    const mover = -G.pos.turn;
     enqueue(async () => {
       if (gen !== G.gen) return;                           // a new game started meanwhile
-      await VIEW.play(m, { fast });
+      await VIEW.play(m, opts);
       if (gen !== G.gen) return;
       VIEW.check(-1);
       if (st.over) { endGame(st); return; }
@@ -92,7 +98,7 @@
 
   // ---------- starting games ----------
   function startAI() {
-    disconnect();
+    disconnect(); stopSeek(); resetOnline();
     G.mode = 'ai'; G.me = pref.side; G.level = pref.level; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
     reset(); clearSel();
     VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
@@ -143,32 +149,90 @@
     if (G.over && G.over.shown) return;
     G.over = Object.assign({}, st, { shown: true });
     VIEW.check(-1); clearSel();
-    const viewer = G.mode === 'online' ? G.you : G.me;
-    if (st.winner && st.reason !== 'resign') VIEW.defeat(kingOf(-st.winner));
+    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted'].includes(st.reason);
+    if (st.winner && onBoard) VIEW.defeat(kingOf(-st.winner));
     if (!st.winner) SFX.gong(); else if (!viewer || st.winner === viewer) SFX.win(); else SFX.lose();
     updateStatus();
-    setTimeout(() => showEnd(true), st.reason === 'resign' ? 200 : 1300);
+    setTimeout(() => showEnd(true), onBoard ? 1300 : 200);
+  }
+  // a ranked result: the rating change arrives with the result, or a little later if saving it had to be retried
+  function rated(m) {
+    if (!G.over || !m.delta) return;
+    G.over.delta = m.delta; G.over.rating = m.rating;
+    if (!$('#end').hidden) renderEnd();
+    ACCOUNT.refresh();
+  }
+  function ratingNote() {
+    const o = G.over;
+    if (o.reason === 'aborted') return 'Ván không tính điểm.';
+    if (!o.delta) return 'Đang cập nhật điểm xếp hạng…';
+    const one = s => `${o.rating[s]} (${ACCOUNT.sign(o.delta[s])})`;
+    return G.you ? `Điểm xếp hạng: ${one(G.you)}` : `Đỏ ${one(1)} · Đen ${one(-1)}`;
   }
   function endText() {
     const st = G.over, viewer = G.mode === 'online' ? G.you : G.me;
     if (!st) return ['', ''];
+    if (st.reason === 'aborted') return ['Ván bị hủy', 'Một bên không đi nước đầu trong 30 giây'];
     let title;
     if (!st.winner) title = 'Hòa cờ';
     else if (!viewer) title = SIDE[st.winner] + ' thắng';
     else title = st.winner === viewer ? 'Chiến thắng!' : 'Thất bại';
     const who = st.winner ? `${SIDE[st.winner]} (${ARMY[st.winner]}) thắng` : 'Hai bên bất phân thắng bại';
-    const why = st.reason === 'resign' ? `${SIDE[-st.winner]} xin thua` : REASON[st.reason] || '';
+    const why = {
+      resign: `${SIDE[-st.winner]} xin thua`,
+      time: st.winner ? `${SIDE[-st.winner]} hết giờ` : 'Hết giờ, nhưng bên kia không còn quân để chiếu bí',
+      abandon: `${SIDE[-st.winner]} rời ván quá 60 giây`,
+    }[st.reason] || REASON[st.reason] || '';
     return [title, `${why} · ${who} sau ${Math.ceil(G.moves.length / 2)} nước`];
   }
+
+  // ---------- clocks ----------
+  // the server sends each clock as it stood when the message left; the page counts down from when it arrived
+  function setTiming(m) {
+    const t = performance.now();
+    if ('clock' in m) G.clock = m.clock ? { left: { ...m.clock.left }, running: m.clock.running, at: t } : null;
+    if ('deadline' in m) G.deadline = m.deadline ? { ...m.deadline, until: t + m.deadline.ms } : null;
+  }
+  function clockOf(side) {
+    const c = G.clock;
+    if (!c) return Infinity;
+    let v = c.left[side];
+    if (c.running === side && !G.over) v -= performance.now() - c.at;
+    return Math.max(0, v);
+  }
+  const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
+  const fmtClock = ms => ms < 10000 ? (Math.floor(ms / 100) / 10).toFixed(1) : mmss(ms);
+  function renderClocks() {
+    for (const side of [1, -1]) {
+      const el = $(side > 0 ? '#plRed .clk' : '#plBlack .clk'), on = G.mode === 'online' && !!G.clock, v = clockOf(side);
+      el.textContent = on ? fmtClock(v) : '';
+      el.classList.toggle('run', on && G.clock.running === side && !G.over);
+      el.classList.toggle('low', on && v < 30000);
+    }
+  }
+  function deadlineText() {
+    const d = G.deadline, s = Math.max(0, Math.ceil((d.until - performance.now()) / 1000));
+    const them = G.you ? 'Đối thủ' : SIDE[d.side];
+    if (d.kind === 'abort') return d.side === G.you ? `Đi nước đầu trong ${s} giây, không thì ván bị hủy` : `Chờ ${them.toLowerCase()} đi nước đầu · ${s}s`;
+    return d.side === G.you ? `Bạn đang mất kết nối · ${s}s` : `${them} mất kết nối · xử thua sau ${s}s`;
+  }
+  setInterval(() => {
+    if (G.mode !== 'online') return;
+    if (G.clock) renderClocks();
+    if (G.deadline && !G.over) updateStatus();
+  }, 200);
 
   // ---------- online ----------
   const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const cleanRoom = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
   const roomLink = () => `${location.origin}${location.pathname}?room=${G.room}`;
+  const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
-  function goOnline(room) {
-    disconnect();
-    G.mode = 'online'; G.room = room; G.you = 0; G.gen = (G.gen || 0) + 1; aiId++;
+  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; }
+  // tc: time control asked for by the player opening a friendly room ('' = untimed)
+  function goOnline(room, tc = '') {
+    disconnect(); stopSeek(); resetOnline();
+    G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++;
     G.players = { 1: false, '-1': false }; G.rematch = { 1: false, '-1': false };
     history.replaceState(null, '', roomLink());
     reset(); clearSel(); VIEW.setMenu(false); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
@@ -184,9 +248,9 @@
   }
   function connect() {
     clearTimeout(retryT);
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?room=${G.room}`);
+    const ws = new WebSocket(`${wsBase()}/ws?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token() })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -201,6 +265,7 @@
       case 'state': {
         const firstSeat = !G.you && m.you;
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
+        G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; setTiming(m);
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
         rebuild(m.moves || []);
         VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
@@ -208,18 +273,49 @@
         const st = XQ.status(G.pos, G.keys, G.quiet); VIEW.check(!m.over && st.check ? kingOf(G.pos.turn) : -1);
         G.over = m.over ? Object.assign({}, m.over, { shown: true }) : null;
         showEnd(!!m.over); renderMoves(); updateStatus();
-        if (!G.moves.length && !m.over && (firstSeat || m.fresh)) { SFX.gong(); banner(G.you ? `Bạn cầm quân ${SIDE[G.you]}` : 'Bạn đang xem trận', 'open'); }
+        if (!G.moves.length && !m.over && (firstSeat || m.fresh)) {
+          SFX.gong(); banner(G.you ? `Bạn cầm quân ${SIDE[G.you]}` : 'Bạn đang xem trận', 'open');
+          const opp = G.you && G.info[-G.you];
+          if (G.rated && opp) toast(`Trận xếp hạng: gặp ${opp.name} · ${opp.rating} điểm`);
+        }
         break;
       }
       case 'move':
+        setTiming(m);
         if (m.ply === G.moves.length) { commit(m.m); }
         else if (m.ply > G.moves.length) send({ t: 'sync' });
         break;
-      case 'presence': G.players = m.players; updateStatus(); break;
-      case 'over': enqueue(async () => { endGame(m); }); break;
+      case 'presence': G.players = m.players; if (m.info) G.info = m.info; setTiming(m); updateStatus(); break;
+      case 'over': setTiming(m); enqueue(async () => { endGame(m); rated(m); }); break;
+      case 'rated': rated(m); break;
       case 'rematch': G.rematch = m.want; renderEnd(); break;
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
     }
+  }
+
+  // ---------- ranked queue ----------
+  let lobby = null, seekT = null;
+  function seek() {
+    if (!ACCOUNT.user) { toast('Đăng nhập Google để chơi xếp hạng'); showEnd(false); showMenu(true); return; }
+    stopSeek(); SFX.init(); showEnd(false);
+    const t0 = Date.now(), ws = new WebSocket(`${wsBase()}/ws/lobby`);
+    lobby = ws;
+    $('#seek').hidden = false; $('#seekInfo').textContent = 'Đang vào hàng chờ…'; $('#seekTime').textContent = '0:00';
+    seekT = setInterval(() => { $('#seekTime').textContent = mmss(Date.now() - t0); }, 500);
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'seek' }));
+    ws.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+      if (m.t === 'seeking') $('#seekInfo').textContent = m.n > 1 ? `${m.n} kỳ thủ đang tìm trận. Đang chờ người có điểm gần bạn…` : 'Lúc này chỉ có bạn đang tìm trận. Chờ thêm chút nhé.';
+      else if (m.t === 'match') { stopSeek(); goOnline(m.room); }
+      else if (m.t === 'cancelled') { stopSeek(); if (m.why === 'elsewhere') toast('Bạn đang tìm trận ở một tab khác'); }
+    };
+    ws.onclose = () => { if (lobby === ws) { stopSeek(); toast('Không vào được hàng chờ. Thử đăng nhập lại nhé.'); ACCOUNT.refresh(); } };
+  }
+  function stopSeek() {
+    clearInterval(seekT); $('#seek').hidden = true;
+    if (!lobby) return;
+    const w = lobby; lobby = null;
+    try { if (w.readyState === 1) w.send(JSON.stringify({ t: 'cancel' })); w.close(); } catch (e) { }
   }
 
   // ---------- input on the board ----------
@@ -276,6 +372,7 @@
     else if (G.mode === 'online') {
       if (G.netState === 'connecting') text = 'Đang kết nối phòng…';
       else if (G.netState === 'lost') text = 'Mất kết nối, đang nối lại…';
+      else if (G.deadline && !G.over) text = deadlineText();
       else if (G.you && !G.players[-G.you]) text = 'Đang chờ đối thủ vào phòng…';
       else if (!G.you) text = `Đang xem · Lượt ${SIDE[turn]}`;
       else text = turn === G.you ? `Lượt bạn · ${SIDE[G.you]}` : 'Lượt đối thủ';
@@ -286,8 +383,9 @@
       const el = $(side > 0 ? '#plRed' : '#plBlack');
       let who = '';
       if (G.mode === 'ai') who = side === G.me ? 'Bạn' : `Máy · ${LEVELS[G.level].name}`;
-      else if (G.mode === 'online') who = side === G.you ? 'Bạn' : G.players[side] ? (G.you ? 'Đối thủ' : 'Người chơi') : 'Chưa vào';
-      el.querySelector('.who').textContent = who;
+      else if (G.mode === 'online') who = whoOnline(side);
+      el.querySelector('.who').innerHTML = who;
+      el.classList.toggle('named', G.mode === 'online' && !!G.info[side]);
       el.classList.toggle('turn', !G.over && G.mode !== 'menu' && (G.animating ? -G.lastMover : turn) === side);
       el.classList.toggle('away', G.mode === 'online' && !G.players[side]);
     }
@@ -296,13 +394,25 @@
     $('#bResign').disabled = !!G.over || G.mode === 'menu' || (G.mode === 'online' && !G.you);
     const room = $('#room');
     room.hidden = G.mode !== 'online';
-    if (G.mode === 'online') { $('#roomCode').textContent = G.room; $('#roomLink').textContent = roomLink(); }
+    if (G.mode === 'online') {
+      const tc = G.tc ? TC_NAME[`${G.tc.base}+${G.tc.inc}`] || '' : '';
+      $('#roomKind').textContent = G.rated ? `Trận xếp hạng · ${tc}` : tc ? `Phòng · ${tc}` : 'Phòng';
+      $('#roomCode').textContent = G.room; $('#roomLink').textContent = roomLink();
+      $('#roomCode').hidden = $('#roomLink').hidden = $('#bCopy').hidden = G.rated;
+    }
+    $('#bNew').textContent = G.mode !== 'online' ? 'Ván mới' : G.rated ? 'Trận mới' : 'Đấu lại';
+    renderClocks();
+  }
+  // a player's name (signed in) or role, with the rating in ranked games; names are escaped, this goes in as HTML
+  function whoOnline(side) {
+    const p = G.info[side];
+    if (!p) return side === G.you ? 'Bạn' : G.players[side] ? (G.you ? 'Đối thủ' : 'Người chơi') : 'Chưa vào';
+    return ACCOUNT.esc(p.name) + (side === G.you ? ' (bạn)' : '') + (G.rated && p.rating ? ` <small>${p.rating}</small>` : '');
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
     VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0);
     $('#bUndo').hidden = $('#bHint').hidden = G.mode !== 'ai';
-    $('#bNew').textContent = G.mode === 'online' ? 'Đấu lại' : 'Ván mới';
   }
   function showMenu(on) {
     $('#menu').hidden = !on;
@@ -317,7 +427,10 @@
     $('#end').dataset.result = result; $('#end .han').textContent = { win: '勝', lose: '敗', draw: '和' }[result] || '';
     const again = $('#bAgain');
     again.hidden = G.mode === 'online' && !G.you;
-    if (G.mode === 'online') {
+    if (G.mode === 'online' && G.rated) {
+      again.textContent = 'Tìm trận mới'; again.disabled = false;
+      $('#endNote').textContent = ratingNote();
+    } else if (G.mode === 'online') {
       const mine = G.rematch[G.you], theirs = G.rematch[-G.you];
       again.textContent = mine ? 'Đang chờ đối thủ…' : theirs ? 'Đồng ý đấu lại' : 'Đấu lại (đổi bên)';
       again.disabled = !!mine;
@@ -327,6 +440,7 @@
   }
   function showEnd(on) { if (on) renderEnd(); $('#end').hidden = !on; }
   function again() {
+    if (G.mode === 'online' && G.rated) { seek(); return; }
     if (G.mode === 'online') { send({ t: 'rematch' }); G.rematch[G.you] = true; renderEnd(); return; }
     startAI();
   }
@@ -340,8 +454,16 @@
   }
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); });
+  seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
+  $('#bRanked').addEventListener('click', seek);
+  $('#bSeekCancel').addEventListener('click', stopSeek);
+  $('#bRanks').addEventListener('click', () => ACCOUNT.openRanks(0));
+  ACCOUNT.onChange(u => {
+    $('#bRanked').disabled = !u;
+    $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở trên để chơi xếp hạng.';
+  });
   $('#bPlayAI').addEventListener('click', () => startAI());
-  $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join('')));
+  $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || ''));
   const joinTyped = () => { const r = cleanRoom($('#inRoom').value); if (r.length < 4) { toast('Nhập mã phòng 4 ký tự'); $('#inRoom').focus(); return; } goOnline(r); };
   $('#bJoin').addEventListener('click', joinTyped);
   $('#inRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinTyped(); });
@@ -380,9 +502,12 @@
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();
     $('#boot').remove();
-    let online = false;
-    try { const r = await fetch('info', { cache: 'no-store' }); online = r.ok && (await r.json()).online === true; } catch (e) { }
+    let info = null;
+    try { const r = await fetch('info', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { }
+    const online = !!info && info.online === true;
     G.online = online;
+    $('#rankedBox').hidden = $('#bRanks').hidden = !(online && info.accounts);
+    if (online) ACCOUNT.init(info, { toast });
     $('#onlineBox').classList.toggle('off', !online);
     $('#onlineNote').textContent = online ? 'Tạo phòng rồi gửi link cho bạn bè, hoặc nhập mã phòng để vào.' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const invited = cleanRoom(new URLSearchParams(location.search).get('room'));

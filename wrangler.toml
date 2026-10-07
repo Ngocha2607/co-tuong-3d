@@ -1,20 +1,42 @@
 name = "co-tuong-3d"
+# the Cloudflare account the game lives in: wrangler refuses to deploy when logged in to another one
+account_id = "a74649dbb29c970d596fe24633da00e8"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
 
 [build]
-command = "node worker/build.js"
+command = "node worker/build.cjs"
 watch_dir = ["src", "worker"]
 
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 
-# one Durable Object per online room: seats, moves and the result live in its storage
+# Google sign-in: the OAuth client id is public (it is sent to the page). Leave it empty to run without accounts.
+# SESSION_SECRET is a secret: `npx wrangler secret put SESSION_SECRET` (and in .dev.vars for `npm start`).
+[vars]
+GOOGLE_CLIENT_ID = "1004336835914-rbujm6bqm11sp7ef1k6ct3fvlo1rn0e4.apps.googleusercontent.com"
+
+# players and ranked games (migrations/); created on the first `npm run deploy`
+[[d1_databases]]
+binding = "DB"
+database_name = "co-tuong-3d"
+migrations_dir = "migrations"
+
+# one Durable Object per online room: seats, moves, clocks and the result live in its storage
 [[durable_objects.bindings]]
 name = "ROOMS"
 class_name = "Room"
 
+# one Durable Object for the ranked queue
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Room"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Lobby"]
