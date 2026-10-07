@@ -1,4 +1,4 @@
-// worker/build.js — copies the public files (index.html + src/) into dist/ for Cloudflare assets
+// worker/build.cjs — copies the public files (the pages + src/) into dist/ for Cloudflare assets
 // Only changed files are written and stale ones removed, with a few retries: on Windows `wrangler dev`
 // watches dist/ and a file it is reading cannot be replaced or deleted for a moment (EBUSY).
 'use strict';
@@ -28,7 +28,7 @@ function copy(rel) {
     if (e.isDirectory()) walk(r); else copy(r);
   }
 })('src');
-copy('index.html');
+for (const page of ['index.html', 'privacy.html', 'terms.html']) copy(page);
 (function prune(dir) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);

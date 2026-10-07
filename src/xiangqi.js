@@ -202,15 +202,77 @@ const XQ = (() => {
   }
 
   // ---------- a game: position + history, end detection ----------
-  // Simplified endings: no legal move loses (checkmate or stalemate), threefold repetition is a draw,
-  // 120 plies (60 moves each) without a capture is a draw.
-  function status(pos, keys, quiet) {
-    const moves = pos.legal();
-    if (!moves.length) return { over: true, winner: -pos.turn, reason: pos.inCheck() ? 'checkmate' : 'stalemate' };
+  // Endings: no legal move loses (checkmate or stalemate); a position seen for the third time ends the game, judged by
+  // judge() below; 120 plies (60 moves each) without a capture is a draw.
+  // keys[i] is the position key before moves[i]; without moves a repetition is simply a draw.
+  function status(pos, keys, quiet, moves) {
+    const legal = pos.legal();
+    if (!legal.length) return { over: true, winner: -pos.turn, reason: pos.inCheck() ? 'checkmate' : 'stalemate' };
     const k = pos.key(); let n = 0; for (const x of keys) if (x === k) n++;
-    if (n >= 2) return { over: true, winner: 0, reason: 'repetition' };   // seen twice before + now = three times
+    if (n >= 2) return moves ? judge(pos, keys, moves) : { over: true, winner: 0, reason: 'repetition' };   // seen twice before + now
     if (quiet >= 120) return { over: true, winner: 0, reason: 'quiet' };
-    return { over: false, check: pos.inCheck() };
+    return { over: false, check: pos.inCheck(), repeat: n };
+  }
+
+  // ---------- perpetual check and perpetual chase (a simplified form of the Asian rules) ----------
+  // Looking at every move since the repeated position first appeared: a side that gave check with each of its moves
+  // loses; otherwise a side that chased one and the same piece with each of its moves loses; anything else is a draw.
+  // A move chases a piece when it creates a legal threat to take it, and the piece is unprotected or worth more than
+  // the attacker. Generals and soldiers may chase, soldiers still on their own side may be chased, and two pieces of
+  // the same kind facing each other are an offered exchange, not a chase.
+  const RANK = [0, 0, 1, 1, 2, 3, 2, 1];               // by type: chariot 3, horse and cannon 2, the rest 1
+  // can the piece on f legally take the piece on t (whoever is to move)?
+  function canTake(p, f, t) {
+    const side = Math.sign(p.b[f]), flip = p.turn !== side, out = [];
+    if (flip) p.pass();
+    p.gen(out, true);
+    let ok = false;
+    for (const m of out) if (from(m) === f && to(m) === t) { const c = p.make(m); ok = !p.checked(side); p.unmake(m, c); break; }
+    if (flip) p.pass();
+    return ok;
+  }
+  // the captures `side` threatens in p that count as chasing
+  function threats(p, side) {
+    const flip = p.turn !== side, out = [], list = [];
+    if (flip) p.pass();
+    p.gen(out, true);
+    for (const m of out) {
+      const f = from(m), t = to(m), a = Math.abs(p.b[f]), v = Math.abs(p.b[t]);
+      if (a === K || a === P || v === K) continue;
+      if (v === P && ownHalf(row(t), -side)) continue;
+      const cap = p.make(m);
+      let real = !p.checked(side);
+      if (real && RANK[a] >= RANK[v]) {                // not worth more than the attacker: a threat only if unprotected
+        const back = []; p.gen(back, true);
+        for (const r of back) if (to(r) === t) { const c = p.make(r); const ok = !p.checked(-side); p.unmake(r, c); if (ok) { real = false; break; } }
+      }
+      p.unmake(m, cap);
+      if (real && a === v && canTake(p, t, f)) real = false;
+      if (real) list.push(m);
+    }
+    if (flip) p.pass();
+    return list;
+  }
+  function judge(pos, keys, moves) {
+    const span = moves.slice(keys.indexOf(pos.key())), p = pos.clone();
+    for (let i = span.length - 1; i >= 0; i--) p.unmake(span[i], 0);   // a repeated position means nothing was taken since
+    const id = new Int16Array(90).fill(-1);                              // follow each piece as it moves
+    for (let s = 0; s < 90; s++) if (p.b[s]) id[s] = s;
+    const pairs = list => new Set(list.map(m => id[from(m)] * 128 + id[to(m)]));
+    const checks = { 1: true, '-1': true }, chased = { 1: null, '-1': null };
+    for (const m of span) {
+      const side = p.turn, before = pairs(threats(p, side));
+      p.make(m); id[to(m)] = id[from(m)]; id[from(m)] = -1;
+      if (!p.checked(-side)) checks[side] = false;
+      const now = new Set();
+      for (const x of threats(p, side)) if (!before.has(id[from(x)] * 128 + id[to(x)])) now.add(id[to(x)]);
+      chased[side] = chased[side] ? new Set([...chased[side]].filter(v => now.has(v))) : now;
+    }
+    const chases = s => chased[s].size > 0;
+    let loser = 0, reason = 'repetition';
+    if (checks[1] !== checks[-1]) { loser = checks[1] ? RED : BLACK; reason = 'perpetual-check'; }
+    else if (!checks[1] && chases(1) !== chases(-1)) { loser = chases(1) ? RED : BLACK; reason = 'perpetual-chase'; }
+    return { over: true, winner: loser ? -loser : 0, reason };
   }
 
   // ---------- Vietnamese notation, e.g. "Pháo 2 bình 5", "Mã 8 tiến 7", "Xe trước tiến 1" ----------

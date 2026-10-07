@@ -55,6 +55,49 @@ test('threefold repetition is a draw', () => {
   for (let i = 0; i < 8; i++) { keys.push(p.key()); p.make(loop[i % 4]); }
   assert.strictEqual(XQ.status(p, keys, 8).reason, 'repetition');
 });
+// play `loop` over and over from fen until its first position has come back twice → status with the full history
+function repeat(fen, loop) {
+  const p = XQ.Pos.fromFen(fen), keys = [], moves = [];
+  for (let i = 0; i < loop.length * 2; i++) {
+    const m = loop[i % loop.length];
+    assert.ok(p.legal().includes(m), 'illegal test move ' + i);
+    keys.push(p.key()); p.make(m); moves.push(m);
+  }
+  return XQ.status(p, keys, moves.length, moves);
+}
+test('perpetual check loses', () => {
+  // the red chariot checks along two files, the black general steps across each time
+  const st = repeat('4k4/9/9/9/9/3R5/9/9/9/5K3 w', [
+    XQ.mv(sq(5, 3), sq(5, 4)), XQ.mv(sq(0, 4), sq(0, 3)), XQ.mv(sq(5, 4), sq(5, 3)), XQ.mv(sq(0, 3), sq(0, 4)),
+  ]);
+  assert.deepStrictEqual(st, { over: true, winner: XQ.BLACK, reason: 'perpetual-check' });
+});
+test('perpetual chase of an unprotected piece loses', () => {
+  // the red chariot keeps attacking a lone black cannon that runs from one side of the board to the other
+  const st = repeat('4k4/9/1c7/9/9/9/1R7/9/9/3K5 b', [
+    XQ.mv(sq(2, 1), sq(2, 7)), XQ.mv(sq(6, 1), sq(6, 7)), XQ.mv(sq(2, 7), sq(2, 1)), XQ.mv(sq(6, 7), sq(6, 1)),
+  ]);
+  assert.deepStrictEqual(st, { over: true, winner: XQ.BLACK, reason: 'perpetual-chase' });
+});
+test('chasing a protected piece of lower value is allowed: repetition is a draw', () => {
+  // same chase, but a black chariot guards each square the cannon runs to; when the cannon leaves, the chariots
+  // face each other, which is an offered exchange and not a chase either
+  const st = repeat('1r2k2r1/9/1c7/9/9/9/1R7/9/9/3K5 b', [
+    XQ.mv(sq(2, 1), sq(2, 7)), XQ.mv(sq(6, 1), sq(6, 7)), XQ.mv(sq(2, 7), sq(2, 1)), XQ.mv(sq(6, 7), sq(6, 1)),
+  ]);
+  assert.strictEqual(st.reason, 'repetition');
+});
+test('both sides just shuffling: repetition is a draw', () => {
+  const st = repeat('4k4/9/9/9/9/9/9/9/9/3K5 w', [
+    XQ.mv(sq(9, 3), sq(8, 3)), XQ.mv(sq(0, 4), sq(1, 4)), XQ.mv(sq(8, 3), sq(9, 3)), XQ.mv(sq(1, 4), sq(0, 4)),
+  ]);
+  assert.deepStrictEqual(st, { over: true, winner: 0, reason: 'repetition' });
+});
+test('second time a position comes back is reported, so players can be warned', () => {
+  const p = XQ.Pos.fromFen('4k4/9/9/9/9/9/9/9/9/3K5 w'), keys = [], moves = [];
+  for (const m of [XQ.mv(sq(9, 3), sq(8, 3)), XQ.mv(sq(0, 4), sq(1, 4)), XQ.mv(sq(8, 3), sq(9, 3)), XQ.mv(sq(1, 4), sq(0, 4))]) { keys.push(p.key()); p.make(m); moves.push(m); }
+  assert.strictEqual(XQ.status(p, keys, 4, moves).repeat, 1);
+});
 test('notation: Pháo 2 bình 5, Mã 2 tiến 3, Xe trước tiến 1', () => {
   const p = XQ.Pos.fromFen(XQ.START);
   assert.strictEqual(XQ.notation(p, XQ.mv(sq(7, 7), sq(7, 4))), 'Pháo 2 bình 5');

@@ -60,7 +60,13 @@
   .pl.red .chip { color: #a3201a; } .pl.black .chip { color: #1b1b1b; }
   .pl .nm { font-weight: 700; }
   .pl .nm small { color: var(--dim); font-weight: 500; }
-  .pl .who { margin-left: auto; color: var(--dim); font-size: 13px; }
+  .pl .who { margin-left: auto; color: var(--dim); font-size: 13px; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl .who small { color: var(--gold); font-weight: 700; }
+  .pl.named .nm small { display: none; }
+  .pl .clk { padding: 3px 8px; border-radius: 7px; background: rgba(0, 0, 0, 0.35); font: 700 15px/1.2 var(--ui); font-variant-numeric: tabular-nums; color: var(--dim); }
+  .pl .clk:empty { display: none; }
+  .pl .clk.run { color: var(--ink); box-shadow: inset 0 0 0 1px var(--gold); }
+  .pl .clk.low { color: #ff8a7a; }
   .pl.turn { border-color: var(--gold); background: rgba(227, 180, 72, 0.12); }
   .pl.turn .who { color: var(--ink); }
   .pl.away .who { font-style: italic; }
@@ -81,7 +87,11 @@
   .btn.primary { background: linear-gradient(180deg, #d63b2f, #a3201a); border-color: #e0574c; color: #fff4e2; box-shadow: 0 6px 20px rgba(200, 49, 42, 0.35); }
   .btn.gold { background: var(--gold); border-color: var(--gold); color: #2a1408; }
   .btn.warn { background: #7a1712; border-color: var(--red-ink); }
+  .btn.wide { width: 100%; }
+  #rankedBox { display: grid; gap: 8px; }
   #bMoves { display: none; }
+  #drawAsk { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); font-weight: 700; }
+  #drawAsk .btn { padding: 7px 12px; }
 
   /* ---------- banner, toast ---------- */
   #banner { position: fixed; left: 0; right: 0; top: 30%; display: flex; justify-content: center; pointer-events: none; z-index: 6; opacity: 0; }
@@ -93,7 +103,8 @@
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
 
   /* ---------- menu and end screens ---------- */
-  .overlay { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; padding: 24px; overflow-y: auto; }
+  .overlay { position: fixed; inset: 0; z-index: 8; display: flex; align-items: flex-start; padding: 24px; overflow-y: auto; }
+  .overlay > .card { margin-top: auto; margin-bottom: auto; }
   #menu { background: linear-gradient(90deg, rgba(14, 8, 6, 0.92) 0%, rgba(14, 8, 6, 0.72) 42%, rgba(14, 8, 6, 0) 70%); }
   .card { width: min(440px, 100%); padding: 26px 26px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; backdrop-filter: blur(10px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
   #menu .card { margin-left: max(0px, 5vw); }
@@ -113,9 +124,54 @@
   .note { margin: 0; color: var(--dim); font-size: 13px; }
   #onlineBox.off .btn, #onlineBox.off .join { opacity: 0.4; pointer-events: none; }
   .foot { margin: 12px 0 0; color: var(--dim); font-size: 12px; }
-  #end { justify-content: center; background: rgba(10, 6, 4, 0.55); }
-  #end .card { text-align: center; }
-  #end .han { font: 700 64px/1 var(--han); color: var(--gold); }
+  .foot a { color: var(--dim); }
+  #end, .dialog { justify-content: center; background: rgba(10, 6, 4, 0.55); }
+  #end .card, #seek .card { text-align: center; }
+  #end .han, #seek .han { font: 700 64px/1 var(--han); color: var(--gold); }
+  .dialog { z-index: 10; }
+  #seek h2 { margin: 8px 0 6px; font: 700 28px/1.1 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  #seek .han { animation: seek 2.4s ease-in-out infinite; }
+  @keyframes seek { 50% { opacity: 0.45; transform: scale(0.92); } }
+  #seekTime { font: 700 22px/1 var(--ui); font-variant-numeric: tabular-nums; color: var(--gold); margin: 10px 0 16px; }
+
+  /* ---------- account, leaderboard ---------- */
+  #gBtn { min-height: 44px; }
+  .me { display: flex; align-items: center; gap: 12px; }
+  .av { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--gold); color: #2a1408; font: 700 18px/1 var(--serif); }
+  .av.big { width: 56px; height: 56px; font-size: 26px; }
+  .me b { display: block; font-size: 16px; }
+  .me small, .phead small { color: var(--dim); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--gold); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; justify-self: start; }
+  #ranks .card { width: min(560px, 100%); position: relative; }
+  #ranks .seg { margin-right: 46px; }
+  #bRanksClose { position: absolute; top: 22px; right: 18px; }
+  #rkBody { margin-top: 14px; min-height: 120px; }
+  .lb { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .lb th { text-align: left; font: 700 11px/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding: 6px 6px 8px; }
+  .lb td { padding: 8px 6px; border-top: 1px solid rgba(245, 233, 212, 0.07); font-variant-numeric: tabular-nums; }
+  .lb tbody tr { cursor: pointer; }
+  .lb tbody tr:hover td { background: rgba(245, 233, 212, 0.05); }
+  .lb tr.me td { background: rgba(227, 180, 72, 0.13); }
+  .lb td.nm { font-weight: 700; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb td:first-child { color: var(--dim); width: 32px; }
+  .lb tbody tr:nth-child(-n+3) td:first-child { color: var(--gold); font-weight: 700; }
+  .note.mine { margin-top: 12px; color: var(--ink); }
+  .phead { display: flex; align-items: center; gap: 14px; }
+  .phead h3 { margin: 0 0 2px; font: 700 22px/1.15 var(--serif); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0; text-align: center; color: var(--dim); font-size: 12px; }
+  .stats div { padding: 8px 4px; border-radius: 10px; background: rgba(245, 233, 212, 0.05); }
+  .stats b { display: block; font: 700 20px/1.2 var(--ui); color: var(--ink); }
+  #rkBody h4 { margin: 4px 0 6px; font: 700 12px/1 var(--ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); }
+  .glist { list-style: none; margin: 0; padding: 0; }
+  .glist li { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; padding: 8px 2px; border-top: 1px solid rgba(245, 233, 212, 0.07); }
+  .glist .r { font: 700 24px/1 var(--han); text-align: center; }
+  .glist .win .r { color: var(--gold); } .glist .lose .r { color: #8a96a8; } .glist .draw .r { color: var(--dim); }
+  .glist small { color: var(--dim); }
+  .glist a { color: var(--ink); font-weight: 700; }
+  .glist .d { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .glist .d small { display: block; font-weight: 500; }
+  .glist .win .d { color: var(--jade); } .glist .lose .d { color: #ff8a7a; }
   #end[data-result="win"] .han { color: var(--gold); } #end[data-result="lose"] .han { color: #8a96a8; } #end[data-result="draw"] .han { color: var(--dim); }
   #endTitle { margin: 8px 0 6px; font: 700 34px/1.1 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
   #endSub { margin: 0 0 6px; color: var(--dim); }
@@ -142,6 +198,8 @@
     .pl .chip { width: 24px; height: 24px; font-size: 14px; }
     .pl .nm small { display: none; }
     .pl .who { font-size: 12px; }
+    .pl .who small { display: none; }
+    .pl .clk { font-size: 13px; padding: 2px 6px; }
     #moves, .mhead { display: none; }
     body.show-moves #moves { display: block; max-height: 30vh; }
     body.show-moves .mhead { display: flex; }
@@ -149,6 +207,7 @@
     .actions .btn { padding: 9px 2px; font-size: 12.5px; }
     #bMoves { display: block; }
     #room { padding: 8px 10px; }
+    #room .mhead { display: flex; }
     #room .link { display: none; }
     #menu { background: rgba(14, 8, 6, 0.8); justify-content: center; }
     #menu .card { margin: 0; }
@@ -174,21 +233,23 @@
 
 <aside id="panel">
   <div class="players">
-    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm">Đỏ <small>· Thục</small></span><span class="who"></span></div>
-    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm">Đen <small>· Ngụy</small></span><span class="who"></span></div>
+    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm">Đỏ <small>· Thục</small></span><span class="who"></span><span class="clk"></span></div>
+    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm">Đen <small>· Ngụy</small></span><span class="who"></span><span class="clk"></span></div>
   </div>
   <div id="room" hidden>
-    <div class="mhead"><span>Phòng</span></div>
+    <div class="mhead"><span id="roomKind">Phòng</span></div>
     <div class="code" id="roomCode"></div>
     <div class="link" id="roomLink"></div>
     <button class="btn" id="bCopy" type="button">Sao chép link mời</button>
   </div>
   <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
   <ol id="moves"></ol>
+  <div id="drawAsk" hidden><span>Đối thủ cầu hòa</span><button class="btn gold" id="bDrawYes" type="button">Đồng ý</button><button class="btn" id="bDrawNo" type="button">Từ chối</button></div>
   <div class="actions">
     <button class="btn" id="bUndo" type="button">Đi lại</button>
     <button class="btn" id="bHint" type="button">Gợi ý</button>
     <button class="btn" id="bMoves" type="button">Biên bản</button>
+    <button class="btn" id="bDraw" type="button" hidden>Cầu hòa</button>
     <button class="btn" id="bResign" type="button">Xin thua</button>
     <button class="btn" id="bNew" type="button">Ván mới</button>
   </div>
@@ -200,6 +261,18 @@
 <div id="menu" class="overlay" hidden>
   <div class="card">
     <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục – Ngụy tranh hùng trên bàn cờ</p></div></div>
+    <section id="account" hidden>
+      <h2>Kỳ thủ</h2>
+      <div id="acOut">
+        <div id="gBtn"></div>
+        <p class="note" id="gNote">Đăng nhập Google để chơi xếp hạng và lưu thành tích. Không đăng nhập vẫn chơi được bình thường.</p>
+      </div>
+      <div id="acIn" hidden>
+        <div class="me"><span class="av" id="meAv"></span><div><b id="meName"></b><small id="meStat"></small></div></div>
+        <form class="join" id="renameForm" hidden><input id="inName" type="text" maxlength="20" placeholder="Tên hiển thị" autocomplete="nickname" spellcheck="false" aria-label="Tên hiển thị"><button class="btn gold" type="submit">Lưu</button></form>
+        <div class="row2"><button class="btn" id="bRename" type="button">Đổi tên</button><button class="btn" id="bLogout" type="button">Đăng xuất</button></div>
+      </div>
+    </section>
     <section>
       <h2>Đánh với máy</h2>
       <div class="seg" id="segSide"><button type="button" data-v="1">Cầm quân Đỏ (đi trước)</button><button type="button" data-v="-1">Cầm quân Đen</button></div>
@@ -208,12 +281,19 @@
     </section>
     <section id="onlineBox">
       <h2>Chơi online</h2>
-      <button class="btn gold" id="bCreate" type="button">Tạo phòng mới</button>
+      <div id="rankedBox" hidden>
+        <button class="btn primary wide" id="bRanked" type="button">Tìm trận xếp hạng · 10 phút</button>
+        <p class="note" id="rankedNote"></p>
+      </div>
+      <div class="seg" id="segTc" title="Thời gian cho phòng chơi với bạn bè"><button type="button" data-v="0">Không giới hạn</button><button type="button" data-v="1">10 phút + 5s</button><button type="button" data-v="2">5 phút + 3s</button></div>
+      <button class="btn gold" id="bCreate" type="button">Tạo phòng với bạn bè</button>
       <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
       <p class="note" id="onlineNote"></p>
+      <button class="linkish" id="bRanks" type="button" hidden>Bảng xếp hạng</button>
     </section>
     <button class="btn" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
     <p class="foot">Chạm một quân để xem nước đi, chạm điểm sáng để đi. Kéo để xoay bàn, cuộn chuột hoặc chụm hai ngón để phóng to, nhấp đúp để đặt lại góc nhìn.</p>
+    <p class="foot"><a href="privacy" target="_blank">Chính sách bảo mật</a> · <a href="terms" target="_blank">Điều khoản sử dụng</a></p>
   </div>
 </div>
 
@@ -232,6 +312,24 @@
   </div>
 </div>
 
+<div id="seek" class="overlay dialog" hidden>
+  <div class="card">
+    <div class="han">尋</div>
+    <h2>Đang tìm đối thủ</h2>
+    <p class="note" id="seekInfo">Đang vào hàng chờ…</p>
+    <div id="seekTime">0:00</div>
+    <button class="btn wide" id="bSeekCancel" type="button">Hủy tìm trận</button>
+  </div>
+</div>
+
+<div id="ranks" class="overlay dialog" hidden>
+  <div class="card">
+    <button class="icon" id="bRanksClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="seg" id="rkTabs"><button type="button" data-v="0">Bảng xếp hạng</button><button type="button" data-v="1">Hồ sơ của tôi</button></div>
+    <div id="rkBody"></div>
+  </div>
+</div>
+
 <div id="boot"><div><b>象棋</b>Đang bày quân…</div></div>
 
 <script src="src/vendor/three.min.js"></script>
@@ -239,6 +337,7 @@
 <script src="src/audio.js"></script>
 <script src="src/models.js"></script>
 <script src="src/scene.js"></script>
+<script src="src/account.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>
