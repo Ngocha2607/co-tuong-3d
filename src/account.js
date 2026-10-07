@@ -4,7 +4,7 @@
 const ACCOUNT = (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const REASON = { checkmate: 'Chiếu bí', stalemate: 'Hết nước', repetition: 'Lặp thế cờ', quiet: '60 nước không ăn quân', resign: 'Xin thua', time: 'Hết giờ', abandon: 'Bỏ ván' };
+  const REASON = { checkmate: 'Chiếu bí', stalemate: 'Hết nước', repetition: 'Lặp thế cờ', quiet: '60 nước không ăn quân', resign: 'Xin thua', time: 'Hết giờ', abandon: 'Bỏ ván', agreement: 'Thỏa thuận hòa', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai' };
   const sign = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
   let user = null, enabled = false, provisional = 10, toast = () => { };
   const subs = [];

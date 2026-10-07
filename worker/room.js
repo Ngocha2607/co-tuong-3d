@@ -13,6 +13,7 @@ const fresh = () => ({
   code: '', rated: false, info: { 1: null, '-1': null },     // info: { id, name, rating? } of a signed-in player
   tc: null, left: null, turnAt: 0, away: { 1: 0, '-1': 0 },  // clocks; when each ranked player lost their connection
   recorded: false, retryAt: 0,                                // ranked result written to D1 / when to try again
+  drawOffer: 0, offeredAt: { 1: -99, '-1': -99 },             // side offering a draw now / ply of each side's last offer
 });
 
 // the signed-in user the router attached to the request (it strips anything a client sent under that name)
@@ -65,8 +66,8 @@ export class Room extends DurableObject {
     };
   }
   stateFor(ws, extra = {}) {
-    const { moves, over, rematch, rated, info, tc } = this.st;
-    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, players: this.presence(), ...this.timing(), ...extra };
+    const { moves, over, rematch, rated, info, tc, drawOffer } = this.st;
+    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, players: this.presence(), ...this.timing(), ...extra };
   }
   // the game so far, replayed: position, earlier position keys, plies without a capture
   replay() {
@@ -93,7 +94,7 @@ export class Room extends DurableObject {
   async finish(over, now = Date.now()) {
     const st = this.st;
     if (st.tc) st.left = C.leftNow(st, now);   // freeze the clocks where they stood
-    st.over = over;
+    st.over = over; st.drawOffer = 0;
     await this.record();
     await this.save(); await this.schedule();
     this.broadcast({ t: 'over', ...st.over, ...this.timing(now) });
@@ -172,9 +173,10 @@ export class Room extends DurableObject {
       keys.push(pos.key());
       const cap = pos.make(m.m);
       st.moves.push(m.m);
-      const res = XQ.status(pos, keys, cap ? 0 : quiet + 1);
+      if (st.drawOffer === -side) st.drawOffer = 0;   // playing on instead of answering turns the offer down
+      const res = XQ.status(pos, keys, cap ? 0 : quiet + 1, st.moves);
       await this.save();
-      this.broadcast({ t: 'move', m: m.m, ply: st.moves.length - 1, ...this.timing(now) });
+      this.broadcast({ t: 'move', m: m.m, ply: st.moves.length - 1, draw: st.drawOffer, ...this.timing(now) });
       if (res.over) await this.finish({ winner: res.winner, reason: res.reason }, now);
       else await this.schedule();
       return;
@@ -182,6 +184,27 @@ export class Room extends DurableObject {
     if (m.t === 'resign') {
       if (!side || st.over) return;
       await this.finish({ winner: -side, reason: 'resign' }, now);
+      return;
+    }
+    // draw offers: 'draw' offers one, or accepts the opponent's; 'draw-no' turns it down
+    if (m.t === 'draw') {
+      if (!side || st.over) return;
+      if (st.drawOffer === -side) { await this.finish({ winner: 0, reason: 'agreement' }, now); return; }
+      if (st.drawOffer === side) return;
+      let why = '';
+      if (st.moves.length < 2) why = 'Chỉ cầu hòa được sau khi hai bên đã đi nước đầu';
+      else if (st.moves.length - st.offeredAt[side] < 4) why = 'Bạn vừa cầu hòa. Đi thêm 2 nước rồi hãy cầu hòa lại';
+      if (why) { this.send(ws, { t: 'error', msg: why }); this.send(ws, { t: 'draw', offer: st.drawOffer }); return; }
+      st.drawOffer = side; st.offeredAt = { ...st.offeredAt, [side]: st.moves.length };
+      await this.save();
+      this.broadcast({ t: 'draw', offer: side });
+      return;
+    }
+    if (m.t === 'draw-no') {
+      if (!side || st.over || st.drawOffer !== -side) return;
+      st.drawOffer = 0;
+      await this.save();
+      this.broadcast({ t: 'draw', offer: 0, declined: side });
       return;
     }
     if (m.t === 'rematch') {

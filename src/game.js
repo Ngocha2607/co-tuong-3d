@@ -9,7 +9,7 @@
     { name: 'Khó', time: 2600 },
   ];
   const SIDE = { 1: 'Đỏ', '-1': 'Đen' }, ARMY = { 1: 'Thục', '-1': 'Ngụy' };
-  const REASON = { checkmate: 'Chiếu bí', stalemate: 'Hết nước đi', repetition: 'Lặp lại thế cờ ba lần', quiet: '60 nước liền không ăn quân', resign: 'Xin thua' };
+  const REASON = { checkmate: 'Chiếu bí', stalemate: 'Hết nước đi', repetition: 'Lặp lại thế cờ ba lần', quiet: '60 nước liền không ăn quân', resign: 'Xin thua', agreement: 'Hai bên đồng ý hòa' };
   const TC = ['', '10+5', '5+3'], TC_NAME = { '600000+5000': '10 phút + 5s', '300000+3000': '5 phút + 3s' };
 
   const G = {
@@ -47,8 +47,9 @@
     const opts = { fast: fast || (timed && G.you && clockOf(G.you) < 60000), closeUp: !timed };
     const mover = G.pos.turn;
     if (timed && mover === G.you) { G.clock.left[mover] = clockOf(mover); G.clock.running = 0; G.clock.at = performance.now(); }   // the server's reply restarts it
+    if (G.mode === 'online' && mover === G.you && G.drawOffer === -G.you) G.drawOffer = 0;   // playing on turns the offer down
     record(m);
-    const st = XQ.status(G.pos, G.keys, G.quiet), turn = G.pos.turn, king = kingOf(turn), gen = G.gen;
+    const st = XQ.status(G.pos, G.keys, G.quiet, G.moves), turn = G.pos.turn, king = kingOf(turn), gen = G.gen;
     renderMoves();
     enqueue(async () => {
       if (gen !== G.gen) return;                           // a new game started meanwhile
@@ -57,6 +58,7 @@
       VIEW.check(-1);
       if (st.over) { endGame(st); return; }
       if (st.check) { VIEW.check(king); VIEW.alarm(king); SFX.drum(); banner('Chiếu tướng!', 'check'); }
+      if (st.repeat === 1) toast('Thế cờ lặp lại lần 2. Lần 3: bên chiếu dai hoặc đuổi dai bị xử thua, không thì hòa');
       if (G.mode === 'ai' && G.pos.turn !== G.me && !G.over && G.animating <= 1) aiMove();
     });
     G.lastMover = mover; updateStatus();
@@ -119,7 +121,7 @@
     G.gen = (G.gen || 0) + 1;
     VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
     const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
-    const st = XQ.status(G.pos, G.keys, G.quiet); VIEW.check(st.check ? kingOf(G.pos.turn) : -1);
+    const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(st.check ? kingOf(G.pos.turn) : -1);
     showEnd(false); renderMoves(); updateStatus(); SFX.pick();
     if (G.pos.turn !== G.me) aiMove();
   }
@@ -149,7 +151,7 @@
     if (G.over && G.over.shown) return;
     G.over = Object.assign({}, st, { shown: true });
     VIEW.check(-1); clearSel();
-    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted'].includes(st.reason);
+    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     if (st.winner && onBoard) VIEW.defeat(kingOf(-st.winner));
     if (!st.winner) SFX.gong(); else if (!viewer || st.winner === viewer) SFX.win(); else SFX.lose();
     updateStatus();
@@ -181,9 +183,12 @@
     const why = {
       resign: `${SIDE[-st.winner]} xin thua`,
       time: st.winner ? `${SIDE[-st.winner]} hết giờ` : 'Hết giờ, nhưng bên kia không còn quân để chiếu bí',
+      'perpetual-check': `${SIDE[-st.winner]} chiếu dai, phạm luật`,
+      'perpetual-chase': `${SIDE[-st.winner]} đuổi dai, phạm luật`,
       abandon: `${SIDE[-st.winner]} rời ván quá 60 giây`,
     }[st.reason] || REASON[st.reason] || '';
-    return [title, `${why} · ${who} sau ${Math.ceil(G.moves.length / 2)} nước`];
+    const after = `sau ${Math.ceil(G.moves.length / 2)} nước`;
+    return [title, st.reason === 'agreement' ? `${why} ${after}` : `${why} · ${who} ${after}`];
   }
 
   // ---------- clocks ----------
@@ -228,7 +233,7 @@
   const roomLink = () => `${location.origin}${location.pathname}?room=${G.room}`;
   const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
-  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; }
+  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; }
   // tc: time control asked for by the player opening a friendly room ('' = untimed)
   function goOnline(room, tc = '') {
     disconnect(); stopSeek(); resetOnline();
@@ -265,12 +270,12 @@
       case 'state': {
         const firstSeat = !G.you && m.you;
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
-        G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; setTiming(m);
+        G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
         rebuild(m.moves || []);
         VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
         const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
-        const st = XQ.status(G.pos, G.keys, G.quiet); VIEW.check(!m.over && st.check ? kingOf(G.pos.turn) : -1);
+        const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(!m.over && st.check ? kingOf(G.pos.turn) : -1);
         G.over = m.over ? Object.assign({}, m.over, { shown: true }) : null;
         showEnd(!!m.over); renderMoves(); updateStatus();
         if (!G.moves.length && !m.over && (firstSeat || m.fresh)) {
@@ -282,6 +287,7 @@
       }
       case 'move':
         setTiming(m);
+        if ('draw' in m) G.drawOffer = m.draw;
         if (m.ply === G.moves.length) { commit(m.m); }
         else if (m.ply > G.moves.length) send({ t: 'sync' });
         break;
@@ -289,6 +295,14 @@
       case 'over': setTiming(m); enqueue(async () => { endGame(m); rated(m); }); break;
       case 'rated': rated(m); break;
       case 'rematch': G.rematch = m.want; renderEnd(); break;
+      case 'draw': {
+        const was = G.drawOffer;
+        G.drawOffer = m.offer;
+        if (G.you && m.offer === -G.you && was !== m.offer) { SFX.pick(); toast('Đối thủ cầu hòa'); }
+        else if (G.you && m.declined === -G.you) toast('Đối thủ từ chối hòa');
+        updateStatus();
+        break;
+      }
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
     }
   }
@@ -392,6 +406,13 @@
     $('#bUndo').disabled = G.mode !== 'ai' || !G.moves.length;
     $('#bHint').disabled = G.mode !== 'ai' || !!G.over;
     $('#bResign').disabled = !!G.over || G.mode === 'menu' || (G.mode === 'online' && !G.you);
+    // draw offers (online): mine pending, theirs waiting for an answer
+    const canDraw = G.mode === 'online' && !!G.you && !G.over, mine = canDraw && G.drawOffer === G.you, theirs = canDraw && G.drawOffer === -G.you;
+    const bDraw = $('#bDraw');
+    bDraw.hidden = G.mode !== 'online' || theirs;   // their offer is answered in #drawAsk
+    bDraw.disabled = !canDraw || mine;
+    bDraw.textContent = mine ? 'Đã cầu hòa' : 'Cầu hòa';
+    $('#drawAsk').hidden = !theirs;
     const room = $('#room');
     room.hidden = G.mode !== 'online';
     if (G.mode === 'online') {
@@ -473,6 +494,13 @@
   $('#bEndUndo').addEventListener('click', undo);
   $('#bHint').addEventListener('click', hint);
   $('#bResign').addEventListener('click', resign);
+  $('#bDraw').addEventListener('click', () => {
+    if (G.mode !== 'online' || !G.you || G.over) return;
+    if (G.drawOffer !== -G.you) G.drawOffer = G.you;   // an offer; otherwise this accepts theirs
+    send({ t: 'draw' }); updateStatus();
+  });
+  $('#bDrawYes').addEventListener('click', () => send({ t: 'draw' }));
+  $('#bDrawNo').addEventListener('click', () => { send({ t: 'draw-no' }); G.drawOffer = 0; updateStatus(); });
   $('#bNew').addEventListener('click', () => { if (G.mode === 'online') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
   $('#bAgain').addEventListener('click', again);
   $('#bEndMenu').addEventListener('click', () => { showEnd(false); showMenu(true); });

@@ -63,7 +63,16 @@ Máy chủ chỉ lưu mã tài khoản Google (`sub`) và tên hiển thị. Kh�
 
 Đủ luật cờ tướng: Tướng và Sĩ không ra khỏi cung, hai Tướng không được đối mặt trên một cột trống, Mã bị cản chân, Tượng bị cản mắt và không qua sông,
 Pháo ăn quân phải có đúng một ngòi, Tốt qua sông mới được đi ngang. Hết nước đi là thua (kể cả khi không bị chiếu).
-Hoà khi một thế cờ lặp lại ba lần, hoặc 60 nước liền không bên nào ăn quân. Luật cấm chiếu dai / đuổi dai chưa được áp dụng.
+Hoà khi 60 nước liền không bên nào ăn quân.
+
+**Lặp thế cờ, chiếu dai, đuổi dai** (theo luật châu Á, có rút gọn): khi một thế cờ xuất hiện lần thứ ba, xét mọi nước đi kể từ lần đầu thế đó xuất hiện:
+- Bên nào nước nào cũng chiếu thì bị xử thua (chiếu dai).
+- Nếu không có ai chiếu dai: bên nào nước nào cũng đuổi cùng một quân thì bị xử thua (đuổi dai).
+- Còn lại là hòa.
+
+Một nước tính là "đuổi" khi nó vừa tạo ra một đe dọa ăn quân hợp lệ, và quân bị dọa không có quân bảo vệ, hoặc đáng giá hơn quân đuổi (Xe > Mã, Pháo > Sĩ, Tượng, Tốt). Tướng và Tốt được phép đuổi. Tốt chưa qua sông được phép bị đuổi. Hai quân cùng loại dọa ăn nhau là mời đổi quân, không tính là đuổi. Khi thế cờ lặp lại lần thứ hai, trang báo trước cho người chơi.
+
+**Cầu hòa** (chơi online): bấm Cầu hòa sau khi hai bên đã đi nước đầu. Đối thủ chọn Đồng ý hoặc Từ chối; đi tiếp mà không trả lời cũng là từ chối. Mỗi bên phải đi thêm 2 nước mới được cầu hòa lại. Hòa thỏa thuận ở trận xếp hạng được tính điểm như một ván hòa.
 
 Biên bản ghi theo cách đọc của Việt Nam, ví dụ `Pháo 2 bình 5`, `Mã 8 tiến 7`, `Xe trước tiến 1`.
 

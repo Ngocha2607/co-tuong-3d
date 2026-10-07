@@ -90,6 +90,8 @@
   .btn.wide { width: 100%; }
   #rankedBox { display: grid; gap: 8px; }
   #bMoves { display: none; }
+  #drawAsk { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); font-weight: 700; }
+  #drawAsk .btn { padding: 7px 12px; }
 
   /* ---------- banner, toast ---------- */
   #banner { position: fixed; left: 0; right: 0; top: 30%; display: flex; justify-content: center; pointer-events: none; z-index: 6; opacity: 0; }
@@ -242,10 +244,12 @@
   </div>
   <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
   <ol id="moves"></ol>
+  <div id="drawAsk" hidden><span>Đối thủ cầu hòa</span><button class="btn gold" id="bDrawYes" type="button">Đồng ý</button><button class="btn" id="bDrawNo" type="button">Từ chối</button></div>
   <div class="actions">
     <button class="btn" id="bUndo" type="button">Đi lại</button>
     <button class="btn" id="bHint" type="button">Gợi ý</button>
     <button class="btn" id="bMoves" type="button">Biên bản</button>
+    <button class="btn" id="bDraw" type="button" hidden>Cầu hòa</button>
     <button class="btn" id="bResign" type="button">Xin thua</button>
     <button class="btn" id="bNew" type="button">Ván mới</button>
   </div>
