@@ -531,7 +531,12 @@
   function showMenu(on) {
     $('#menu').hidden = !on;
     $('#bResume').hidden = !(on && G.mode !== 'menu');
-    if (on) VIEW.setMenu(G.mode === 'menu');
+    if (on) { menuView('home'); VIEW.setMenu(G.mode === 'menu'); }
+  }
+  // the menu's pages: 'home' lists the ways to play, the others hold each one's options
+  function menuView(name) {
+    document.querySelectorAll('#menu .view').forEach(v => { v.hidden = v.dataset.view !== name; });
+    $('#menu').scrollTop = 0;
   }
   function renderEnd() {
     const [title, sub] = endText();
@@ -594,9 +599,23 @@
     mark(value);
     el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); mark(+b.dataset.v); onPick(+b.dataset.v); });
   }
-  seg('#segSide', pref.side, v => { pref.side = v; savePref(); });
-  seg('#segLevel', pref.level, v => { pref.level = v; savePref(); });
+  const renderAINote = () => { $('#aiNote').textContent = `Quân ${pref.side > 0 ? 'Đỏ' : 'Đen'} · ${['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường'}`; };
+  seg('#segSide', pref.side, v => { pref.side = v; savePref(); renderAINote(); });
+  seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
+  renderAINote();
+  $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; SFX.init(); SFX.pick(); menuView(b.dataset.go); });
+  addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || $('#menu').hidden || !$('#campaign').hidden || !$('#ranks').hidden || !$('#seek').hidden) return;
+    if ($('#menu .view[data-view="home"]').hidden) menuView('home');
+    else if (G.mode !== 'menu') showMenu(false);
+  });
+  // the home page's line about the picked hero and battlefield
+  function renderArmyNote() {
+    const h = HEROES.byId[myHero()], s = STAGES.byId[myStage()];
+    $('#armyHz').textContent = h ? h.han : '帥';
+    $('#armyNote').textContent = `${h ? h.name : 'Tướng quân'} · ${s.name}`;
+  }
 
   // hero picker: the general piece of the player's side becomes this hero
   function renderHeroes() {
@@ -609,6 +628,7 @@
     const h = HEROES.byId[cur];
     $('#heroNote').textContent = h ? `${h.name}${h.kingdom ? ' · nhà ' + h.kingdom : ''}: ${h.look}.`
       : 'Chọn một danh tướng: quân Tướng của bạn sẽ hóa thành người đó, và bóng của họ phủ lên bàn cờ khi bạn chiếu tướng.';
+    renderArmyNote();
   }
   $('#heroes').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -629,6 +649,7 @@
       return `<button type="button" data-id="${s.id}" class="${s.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('stage', s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
     }).join('');
     $('#stageNote').textContent = STAGES.byId[cur].note;
+    renderArmyNote();
   }
   $('#segStage').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.dataset.id === myStage()) return;
@@ -671,7 +692,7 @@
       CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
     }
     $('#bRanked').disabled = !u;
-    $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở trên để chơi xếp hạng.';
+    $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
   });
   $('#bPlayAI').addEventListener('click', () => startAI());
   $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || ''));
@@ -729,6 +750,7 @@
     $('#rankedBox').hidden = $('#bRanks').hidden = !(online && info.accounts);
     if (online) ACCOUNT.init(info, { toast });
     $('#onlineBox').classList.toggle('off', !online);
+    $('#onlineSum').textContent = !online ? 'Cần chạy qua Cloudflare Worker' : info.accounts ? 'Xếp hạng hoặc phòng với bạn bè' : 'Phòng chơi với bạn bè';
     $('#onlineNote').textContent = online ? 'Tạo phòng rồi gửi link cho bạn bè, hoặc nhập mã phòng để vào.' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const invited = cleanRoom(new URLSearchParams(location.search).get('room'));
     if (online && invited.length >= 4) goOnline(invited);
