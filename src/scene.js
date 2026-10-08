@@ -10,6 +10,7 @@ const VIEW = (() => {
   const units = new Map();                 // square -> unit { piece, root, disc, war, sq }
   const trays = { 1: [], '-1': [] };       // pieces captured by Red / by Black (meshes)
   let armyOn = false, viewer = 1, menu = false, busy = false;
+  const heroes = { 1: '', '-1': '' };      // hero leading each side (heroes.js id, '' = the plain general)
   let clock = performance.now(), last = clock;
   const tweens = [], parts = [];
   const pos = (s) => new THREE.Vector3(XQ.col(s) - 4, 0, XQ.row(s) - 4.5);
@@ -163,7 +164,7 @@ const VIEW = (() => {
 
   // ---------- units ----------
   function makeUnit(piece, s) {
-    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece);
+    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece, heroes[piece > 0 ? 1 : -1]);
     root.add(disc); war.position.y = DISC_H; root.add(war);
     disc.rotation.y = viewer > 0 ? 0 : Math.PI;
     war.visible = armyOn; war.scale.setScalar(armyOn ? 1 : 0.001);
@@ -198,6 +199,7 @@ const VIEW = (() => {
 
   function setViewer(side, instant) {
     viewer = side;
+    showing++; homeTheta = null; cam.tZoom = 1;          // a game starts: a hero preview still running must not move the camera
     for (const u of units.values()) u.disc.rotation.y = side > 0 ? 0 : Math.PI;
     for (const s of [1, -1]) for (const d of trays[s]) d.rotation.y = side > 0 ? 0 : Math.PI;
     dragged = false; resetCamera();
@@ -304,7 +306,7 @@ const VIEW = (() => {
     if (j.legL) { j.legL.rotation.x = 0; j.legR.rotation.x = 0; }
     if (j.legs) j.legs.forEach(L => { L.rotation.x = 0; });
     if (j.body) j.body.rotation.x = 0;
-    if (j.armR) j.armR.rotation.x = Math.abs(u.piece) === XQ.A ? -0.6 : 0;   // the advisor holds his fan up
+    if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
     u.war.position.y = DISC_H;
   }
   async function march(u, to, ms) {
@@ -421,7 +423,7 @@ const VIEW = (() => {
     const u = units.get(s); if (!u) return;
     const j = u.war.userData.j;
     if (!armyOn) { u.war.visible = true; tween(260, k => u.war.scale.setScalar(Math.max(0.001, 1.8 * backOut(k)))); }
-    tween(900, k => { if (j.armR) j.armR.rotation.x = -2.6 * Math.sin(k * Math.PI); })
+    tween(900, k => { if (j.armR) j.armR.rotation.x = (j.restArm || 0) - 2.6 * Math.sin(k * Math.PI); })
       .then(() => { if (!armyOn && !busy) return tween(220, k => u.war.scale.setScalar(Math.max(0.001, 1.8 * (1 - k)))).then(() => { if (!armyOn) u.war.visible = false; }); });
   }
   // the losing general falls
@@ -430,6 +432,85 @@ const VIEW = (() => {
     u.war.visible = true; u.war.scale.setScalar(1.8);
     tween(900, k => { u.war.rotation.x = -1.5 * out(k); });
     smoke(u.root.position.clone().setY(0.3), 8, '#4a3a2a', 1);
+  }
+
+  // ---------- heroes ----------
+  // the generals of both sides as led by these heroes ({ 1: id, '-1': id }); a side left out keeps its hero
+  function setHeroes(h) {
+    for (const side of [1, -1]) {
+      if (!(side in h) || heroes[side] === (h[side] || '')) continue;
+      heroes[side] = h[side] || '';
+      for (const u of units.values()) {
+        if (u.piece !== side * XQ.K) continue;
+        const shown = u.war.visible, scale = u.war.scale.x;
+        u.root.remove(u.war);
+        u.war = MODELS.warrior(u.piece, heroes[side]);
+        u.war.position.y = DISC_H; u.war.visible = shown; u.war.scale.setScalar(scale);
+        u.root.add(u.war);
+      }
+    }
+  }
+  // the hero rises from the general's piece, raises their weapon and goes back (the menu's preview)
+  let showing = 0, homeTheta = null;     // camera angle to return to after a preview (kept across quick re-picks)
+  async function showHero(side) {
+    const u = [...units.values()].find(x => x.piece === side * XQ.K);
+    if (!u || busy) return;
+    const id = ++showing, j = u.war.userData.j, a = u.war.scale.x;
+    u.war.visible = true;
+    // the camera comes round in front of them and moves in (Red faces -z, Black faces +z)
+    const front = side > 0 ? Math.PI : 0, turn = ((front - cam.theta) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+    if (homeTheta === null) homeTheta = cam.tTheta;
+    cam.tTheta = cam.theta + turn; cam.tPhi = 0.42;
+    tFocus.copy(u.root.position).setY(0.7); cam.tZoom = 0.26;
+    await tween(300, k => u.war.scale.setScalar(Math.max(0.001, lerp(a, 1.8, backOut(k)))));
+    if (id !== showing) return;
+    SFX.drum();
+    await tween(900, k => { if (j.armR) j.armR.rotation.x = (j.restArm || 0) - 2.6 * Math.sin(k * Math.PI); });
+    await wait(1100);
+    if (id !== showing || busy) return;
+    tFocus.copy(HOME); cam.tZoom = 1; cam.tPhi = portrait() ? 1.2 : 0.98;
+    if (!menu && homeTheta !== null) cam.tTheta = homeTheta;   // in a game, back to the player's own view
+    homeTheta = null;
+    await tween(260, k => u.war.scale.setScalar(Math.max(0.001, lerp(1.8, REST(), k))));
+    if (!armyOn) u.war.visible = false;
+  }
+  // a hero's silhouette, drawn once into a texture: white figure on black, weapon raised
+  const shadowTex = new Map();
+  function silhouette(id, side) {
+    const key = id + side;
+    if (shadowTex.has(key)) return shadowTex.get(key);
+    const war = MODELS.warrior(side * XQ.K, id), j = war.userData.j;
+    war.userData.flag.visible = false; war.rotation.y = 0.45;
+    if (j.armR) j.armR.rotation.x = -2.5;
+    const s = new THREE.Scene(); s.add(war);
+    s.overrideMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
+    war.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(war), c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
+    const half = Math.max(size.y / 2, size.x) * 1.04;   // a 1:2 frame around the figure
+    const cam = new THREE.OrthographicCamera(c.x - half / 2, c.x + half / 2, c.y + half, c.y - half, -10, 10);
+    cam.position.set(0, 0, 5); cam.lookAt(0, 0, 0);
+    const rt = new THREE.WebGLRenderTarget(256, 512);
+    const clear = renderer.getClearColor(new THREE.Color()), alpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(rt); renderer.setClearColor('#000000', 1); renderer.clear(); renderer.render(s, cam);
+    renderer.setRenderTarget(null); renderer.setClearColor(clear, alpha);
+    shadowTex.set(key, rt.texture);
+    return rt.texture;
+  }
+  // the hero's shadow falls across the board from their own edge: when they give check, and longer when they win
+  const SHADOW_L = 9, SHADOW_W = 4.5;
+  function heroShadow(side, win) {
+    if (!renderer) return;
+    const pivot = new THREE.Group(); pivot.rotation.y = side > 0 ? 0 : Math.PI; scene.add(pivot);
+    const m = new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: silhouette(heroes[side], side), transparent: true, opacity: 0, depthWrite: false });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(SHADOW_W, SHADOW_L), m);
+    plane.rotation.x = -Math.PI / 2; plane.renderOrder = 1; pivot.add(plane);
+    const peak = win ? 0.62 : 0.48, ms = win ? 3200 : 1900;
+    return tween(ms, k => {
+      const grow = 0.82 + 0.22 * out(Math.min(1, k * 2));            // the shadow lengthens as the hero rises
+      plane.scale.set(grow, grow, 1);
+      plane.position.set(0, 0.006, 5.4 - (SHADOW_L * grow) / 2);    // feet at the hero's own edge of the board
+      m.opacity = peak * Math.min(1, k * 4) * Math.min(1, (1 - k) * 3);
+    }).then(() => { scene.remove(pivot); plane.geometry.dispose(); m.dispose(); });
   }
 
   // ---------- frame ----------
@@ -479,7 +560,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera,
+    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow,
     setMenu(on) { menu = on; if (!on) { dragged = false; resetCamera(); } },
     setInset(px) { if (px === inset) return; inset = px; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },

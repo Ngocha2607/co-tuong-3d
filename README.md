@@ -6,6 +6,7 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
 - **Đánh với máy:** chọn cầm quân Đỏ hoặc Đen, ba mức Dễ / Thường / Khó. Máy tính nước trong Web Worker nên hình không bị giật. Có Đi lại và Gợi ý.
 - **Chơi online:** tạo phòng, gửi link `…/?room=ABCD` cho bạn bè. Máy chủ kiểm tra từng nước đi, lưu ván cờ (đóng tab rồi mở lại vẫn vào đúng ván), người thứ ba vào được để xem. Hết ván bấm Đấu lại thì hai bên đổi màu quân. Người tạo phòng chọn thời gian: không giới hạn, 10 phút + 5 giây hoặc 5 phút + 3 giây.
 - **Đăng nhập Google và xếp hạng:** đăng nhập để có tên hiển thị (đổi được) và điểm Elo, bắt đầu từ 1200. **Tìm trận xếp hạng** ghép bạn với người có điểm gần nhất (lúc đầu chênh tối đa 100 điểm, nới thêm 20 điểm cho mỗi giây chờ), màu quân bốc ngẫu nhiên, mỗi bên 10 phút + 5 giây. Chơi đủ 10 ván xếp hạng thì có tên trên **Bảng xếp hạng** (top 100). Hồ sơ mỗi người có số ván thắng/hòa/thua và 20 ván gần nhất. Không đăng nhập vẫn đánh với máy và chơi phòng bạn bè bình thường.
+- **Chủ tướng:** chọn một trong 8 danh tướng (Quan Vũ, Trương Phi, Triệu Vân, Gia Cát Lượng, Lưu Bị, Tào Tháo, Tôn Quyền, Lữ Bố). Quân Tướng của bạn hóa thành người đó: dáng hình, mũ, râu và binh khí riêng, cờ hiệu mang chữ họ (關, 曹…). Khi bạn chiếu tướng, bóng chủ tướng đổ dài trên bàn cờ, và đậm hơn khi bạn thắng. Quân lính vẫn theo màu phe. Đánh với máy thì máy bốc ngẫu nhiên một chủ tướng khác; chơi online thì đối thủ thấy chủ tướng của bạn, và lựa chọn được giữ nguyên đến hết ván.
 - **Chiến binh:** khi đi quân, chiến binh trồi lên từ quân cờ và hành quân. Khi ăn quân, camera lia cận cảnh pha giao chiến; Pháo là máy bắn đá, bắn đá qua ngòi. Nút ⚔ ở góc trên bật chế độ đội quân: mọi quân luôn hiện chiến binh, chữ Hán in trên cờ hiệu.
 
 | Quân | Chữ (Đỏ / Đen) | Chiến binh |
@@ -91,7 +92,8 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 |---|---|
 | `src/xiangqi.js` | Luật, ký hiệu nước đi, máy chơi (alpha-beta, bảng chuyển vị, nước sát thủ). Dùng chung cho trang web, Web Worker và Cloudflare Worker |
 | `src/ai-worker.js` | Chạy máy chơi trong Web Worker |
-| `src/models.js` | Bàn cờ, quân cờ, chiến binh, đèn lồng (dựng bằng code) |
+| `src/models.js` | Bàn cờ, quân cờ, chiến binh, các chủ tướng, đèn lồng (dựng bằng code) |
+| `src/heroes.js` | Danh sách chủ tướng, dùng chung cho trang web và server |
 | `src/scene.js` | Cảnh 3D: camera, chọn quân, hiệu ứng, hoạt cảnh giao chiến |
 | `src/audio.js` | Âm thanh và nhạc nền ngũ cung, tổng hợp bằng Web Audio |
 | `src/game.js` | Ván cờ, menu, chế độ online, đồng hồ, tìm trận xếp hạng, biên bản |

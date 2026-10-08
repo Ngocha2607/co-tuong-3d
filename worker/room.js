@@ -5,6 +5,7 @@
 // Ranked rooms are set up by the Lobby with two signed-in players; the result goes into D1 and moves both ratings.
 import { DurableObject } from 'cloudflare:workers';
 import XQ from '../src/xiangqi.js';
+import HEROES from '../src/heroes.js';
 import * as C from './clock.js';
 import { rate } from './elo.js';
 
@@ -14,6 +15,7 @@ const fresh = () => ({
   tc: null, left: null, turnAt: 0, away: { 1: 0, '-1': 0 },  // clocks; when each ranked player lost their connection
   recorded: false, retryAt: 0,                                // ranked result written to D1 / when to try again
   drawOffer: 0, offeredAt: { 1: -99, '-1': -99 },             // side offering a draw now / ply of each side's last offer
+  heroes: { 1: '', '-1': '' },                                // hero leading each side (heroes.js id, '' = the plain general)
 });
 
 // the signed-in user the router attached to the request (it strips anything a client sent under that name)
@@ -66,8 +68,8 @@ export class Room extends DurableObject {
     };
   }
   stateFor(ws, extra = {}) {
-    const { moves, over, rematch, rated, info, tc, drawOffer } = this.st;
-    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, players: this.presence(), ...this.timing(), ...extra };
+    const { moves, over, rematch, rated, info, tc, drawOffer, heroes } = this.st;
+    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, players: this.presence(), ...this.timing(), ...extra };
   }
   // the game so far, replayed: position, earlier position keys, plies without a capture
   replay() {
@@ -152,10 +154,13 @@ export class Room extends DurableObject {
         if (side === 1 && !st.moves.length && !st.tc && C.CONTROLS[m.tc]) { st.tc = C.CONTROLS[m.tc]; st.left = C.fullClock(st.tc); dirty = true; }
       }
       if (side && st.away[side]) { st.away[side] = 0; dirty = true; }
+      // each player brings their hero; once the game is under way it stays the one they started with
+      const hero = HEROES.valid(m.hero) ? m.hero : '';
+      if (side && st.heroes[side] !== hero && (!st.moves.length || !st.heroes[side])) { st.heroes = { ...st.heroes, [side]: hero }; dirty = true; }
       ws.serializeAttachment({ ...a, side });
       if (dirty) { await this.save(); await this.schedule(); }
       this.send(ws, this.stateFor(ws));
-      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, ...this.timing() }, ws);
+      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, ...this.timing() }, ws);
       return;
     }
     const side = this.sideOf(ws);
@@ -212,8 +217,8 @@ export class Room extends DurableObject {
       st.rematch[side] = true;
       if (st.rematch[1] && st.rematch[-1]) {
         // new game, the players swap colours and keep the time control
-        const seats = { 1: st.seats[-1], '-1': st.seats[1] }, info = { 1: st.info[-1], '-1': st.info[1] };
-        this.st = { ...fresh(), seats, info, game: st.game + 1, tc: st.tc, left: C.fullClock(st.tc), turnAt: now };
+        const seats = { 1: st.seats[-1], '-1': st.seats[1] }, info = { 1: st.info[-1], '-1': st.info[1] }, heroes = { 1: st.heroes[-1], '-1': st.heroes[1] };
+        this.st = { ...fresh(), seats, info, heroes, game: st.game + 1, tc: st.tc, left: C.fullClock(st.tc), turnAt: now };
         for (const w of this.ctx.getWebSockets()) { const a = w.deserializeAttachment(); if (a && a.side) w.serializeAttachment({ ...a, side: -a.side }); }
         await this.save(); await this.schedule();
         for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, { fresh: true }));
