@@ -3,6 +3,21 @@
 Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trận mỗi quân hoá thành một chiến binh thời Tam Quốc:
 Đỏ là quân Thục (đỏ – vàng), Đen là quân Ngụy (xanh đen – bạc). Mọi mô hình, bàn cờ và âm thanh đều được tạo bằng code (Three.js, Web Audio).
 
+- **Chiến dịch "Chinh chiến Tam Quốc":** 5 chương theo dòng lịch sử, mỗi chương 3 trận, đánh trên bối cảnh của trận đó:
+  - **Đào viên kết nghĩa** (184), **Hổ Lao quan** (190), **Trường Bản** (208), **Xích Bích** (208), **Ngũ Trượng Nguyên** (234).
+  - Ba kiểu trận:
+    - **Cờ thế**: chiếu bí trong N nước. Máy phòng thủ hết sức.
+    - **Thủ thành**: cầm cự N nước trước thế tấn công áp đảo.
+    - **Chấp quân**: đánh trọn ván khi một bên thiếu quân.
+  - Mỗi trận tối đa 3 sao: một sao cho chiến thắng, một sao nếu không dùng Đi lại hay Gợi ý, một sao cho mục tiêu riêng của trận (chiếu bí đúng N nước, thắng trong số nước quy định, hay giữ lại đủ quân). Tổng cộng 45 sao.
+  - Thắng trận trước mới mở trận sau.
+  - **Phần thưởng:**
+    - Mỗi chương xong cho một danh hiệu, hiện trên bảng xếp hạng và hồ sơ.
+    - Chương 1 mở bối cảnh **Đào viên**; chương 4 mở chủ tướng **Chu Du**; chương 5 mở **Tư Mã Ý**.
+    - 15 sao mở **Hoàng Trung**, 30 sao mở **Mã Siêu**, đủ 45 sao được danh hiệu "Thiên hạ vô song".
+    - Chủ tướng và bối cảnh đã có từ trước vẫn miễn phí.
+  - Tiến độ của khách lưu trong trình duyệt. Đăng nhập thì đồng bộ lên server, đổi máy không mất, và những trận đã thắng lúc chưa đăng nhập được gửi lên. Server đi lại từng ván để xác minh trước khi ghi sao.
+  - Khi đăng nhập, chủ tướng và bối cảnh đang chọn cũng lưu theo tài khoản: sang máy khác đăng nhập là có lại. Lần đăng nhập đầu tiên, lựa chọn trên máy đang dùng được gửi lên làm mặc định.
 - **Đánh với máy:** chọn cầm quân Đỏ hoặc Đen, ba mức Dễ / Thường / Khó. Máy tính nước trong Web Worker nên hình không bị giật. Có Đi lại và Gợi ý.
 - **Chơi online:** tạo phòng, gửi link `…/?room=ABCD` cho bạn bè. Máy chủ kiểm tra từng nước đi, lưu ván cờ (đóng tab rồi mở lại vẫn vào đúng ván), người thứ ba vào được để xem. Hết ván bấm Đấu lại thì hai bên đổi màu quân. Người tạo phòng chọn thời gian: không giới hạn, 10 phút + 5 giây hoặc 5 phút + 3 giây.
 - **Đăng nhập Google và xếp hạng:** đăng nhập để có tên hiển thị (đổi được) và điểm Elo, bắt đầu từ 1200. **Tìm trận xếp hạng** ghép bạn với người có điểm gần nhất (lúc đầu chênh tối đa 100 điểm, nới thêm 20 điểm cho mỗi giây chờ), màu quân bốc ngẫu nhiên, mỗi bên 10 phút + 5 giây. Chơi đủ 10 ván xếp hạng thì có tên trên **Bảng xếp hạng** (top 100). Hồ sơ mỗi người có số ván thắng/hòa/thua và 20 ván gần nhất. Không đăng nhập vẫn đánh với máy và chơi phòng bạn bè bình thường.
@@ -32,7 +47,8 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
 ```bash
 npm install
 npm start          # wrangler dev, mở http://localhost:8787
-npm test           # kiểm tra luật cờ (perft), máy chơi, Elo, đồng hồ và đăng nhập
+npm test           # luật cờ (perft), máy chơi, Elo, đồng hồ, đăng nhập, và chứng minh mọi thế cờ của chiến dịch
+npm run verify:campaign   # (chậm, vài phút) cho máy đánh các trận thủ thành, chấp quân để xem độ khó
 ```
 
 `npm start` chạy cả chế độ online trên máy (không cần đăng nhập Cloudflare). Mở bằng một web server tĩnh bất kỳ thì vẫn đánh với máy được, chỉ thiếu chế độ online.
@@ -65,6 +81,8 @@ Lần deploy đầu tiên wrangler tự tạo cơ sở dữ liệu D1 `co-tuong-
 2. Dán Client ID vào `GOOGLE_CLIENT_ID` trong `wrangler.toml`. Client ID không phải bí mật.
 3. Tạo khóa ký phiên: `npx wrangler secret put SESSION_SECRET` rồi nhập một chuỗi ngẫu nhiên dài, ví dụ lấy từ `openssl rand -base64 32`. Đổi khóa này thì mọi người bị đăng xuất.
 4. Tạo bảng: `npm run db:remote`, rồi `npm run deploy` lại.
+
+Khi có migration mới trong `migrations/` (ví dụ `0002_campaign.sql` cho chiến dịch và danh hiệu), chạy `npm run db:remote` **trước** khi deploy code mới.
 
 Máy chủ chỉ lưu mã tài khoản Google (`sub`) và tên hiển thị. Không lưu email hay ảnh đại diện.
 
@@ -102,6 +120,9 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 | `src/ai-worker.js` | Chạy máy chơi trong Web Worker |
 | `src/models.js` | Bàn cờ, quân cờ, chiến binh, các chủ tướng, đèn lồng (dựng bằng code) |
 | `src/heroes.js` | Danh sách chủ tướng, dùng chung cho trang web và server |
+| `src/campaign.js` | Các chương, trận và thế cờ của chiến dịch; luật chấm thắng thua, sao và mở khóa. Dùng chung cho trang web và server |
+| `src/campaign-ui.js` | Bản đồ chiến dịch, bảng nhiệm vụ, phần thưởng, danh hiệu; lưu và đồng bộ tiến độ |
+| `src/stage-list.js` | Danh sách bối cảnh (tên, chữ Hán, phần thưởng), dùng chung cho trang web và server |
 | `src/stages.js` | Các bối cảnh quanh bàn cờ: bầu trời, mặt đất, cảnh xa, ánh sáng, sương mù, chuyển động |
 | `src/scene.js` | Cảnh 3D: camera, chọn quân, hiệu ứng, hoạt cảnh giao chiến |
 | `src/audio.js` | Âm thanh, nhạc nền ngũ cung và âm thanh nền của từng bối cảnh, tổng hợp bằng Web Audio |
@@ -113,6 +134,9 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 | `worker/api.js` | Đăng nhập, người chơi hiện tại, đổi tên, bảng xếp hạng, hồ sơ |
 | `worker/auth.js` | Kiểm tra ID token của Google bằng WebCrypto, cookie phiên ký HMAC |
 | `worker/clock.js`, `worker/elo.js` | Luật thời gian và cách tính điểm, không phụ thuộc Cloudflare nên test được bằng Node |
-| `migrations/` | Cấu trúc bảng D1 (`users`, `games`) |
+| `migrations/` | Cấu trúc bảng D1 (`users`, `games`, `campaign`) |
 | `test/rules.test.js` | Kiểm tra luật bằng perft và vài thế cờ đặc biệt |
 | `test/server.test.mjs` | Kiểm tra Elo, đồng hồ, xác thực token Google và cookie phiên |
+| `test/mate.js` | Bộ giải chiếu bí vét cạn, dùng để chứng minh các thế cờ (chỉ dùng khi kiểm tra) |
+| `test/campaign.test.js` | Mỗi thế cờ: chiếu bí đúng N nước trước mọi cách phòng thủ, không có cách thắng ngắn hơn, nước đầu duy nhất. Kèm luật chấm và mở khóa |
+| `test/campaign-sim.js` | Mô phỏng máy đánh với máy cho các trận thủ thành, chấp quân |

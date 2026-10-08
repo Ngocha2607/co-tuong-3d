@@ -2,17 +2,11 @@
 // around it (sky, ground, distant scenery, its own light and fog, moving details). Built from code like the rest.
 // Each stage: build(ctx) -> { group, sky, fog, fogSpan, light, ambience, update(t, dt, camera) }; scene.js adds the
 // group and applies the light. ctx: { glowTex, low } (low = fewer particles on small or weak devices).
+// Scenery the camera may pass through (trees, tents) carries userData.clear, a radius: scene.js hides it while it
+// stands between the camera and the board.
 'use strict';
 const STAGES = (() => {
-  // in the order of history; han: the character on the picker
-  const list = [
-    { id: 'room', name: 'Quân trướng', han: '帳', note: 'Đêm trong trướng, đèn lồng đỏ, bụi bay trong ánh đèn.' },
-    { id: 'ho-lao', name: 'Hổ Lao quan', han: '虎', note: 'Năm 190, trước cửa ải Hổ Lao: Lưu Bị, Quan Vũ, Trương Phi đại chiến Lữ Bố.' },
-    { id: 'truong-ban', name: 'Trường Bản', han: '橋', note: 'Năm 208, bên cầu Trường Bản: Trương Phi một mình chặn đại quân Tào Tháo.' },
-    { id: 'xich-bich', name: 'Xích Bích', han: '赤', note: 'Năm 208, trên sông Trường Giang: hỏa công đốt chiến thuyền Tào Tháo dưới vách đá đỏ.' },
-    { id: 'ngu-truong', name: 'Ngũ Trượng Nguyên', han: '星', note: 'Năm 234, đêm thu trong doanh trại Thục, một ngôi sao lớn rơi xuống.' },
-  ];
-  const byId = Object.assign(Object.create(null), Object.fromEntries(list.map(s => [s.id, s])));
+  const { list, byId } = STAGE_LIST;                // which stages there are: stage-list.js
 
   // ---------- helpers ----------
   const flat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? 0.9, metalness: o.metal || 0, flatShading: true, emissive: o.emissive || '#000000', emissiveIntensity: o.glow || 1 });
@@ -201,7 +195,7 @@ const STAGES = (() => {
     for (let i = 0; i < tents; i++) {
       const a = (i / tents) * Math.PI * 2 + rnd(-0.1, 0.1), r = i % 2 ? rnd(30, 36) : rnd(20, 25);
       const T = tent(i % 3 ? '#6e6452' : '#5c5444'); T.g.position.set(Math.cos(a) * r, -1.4, Math.sin(a) * r); T.g.lookAt(0, -1.4, 0);
-      group.add(T.g); flags.push({ f: T.flag, ph: Math.random() * 6 });
+      T.g.userData.clear = 3.2; group.add(T.g); flags.push({ f: T.flag, ph: Math.random() * 6 });
     }
     // mountains far away, blue in the haze
     for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2, m = add(group, new THREE.ConeGeometry(rnd(10, 18), rnd(10, 22), 5), flat('#1a2236'), Math.cos(a) * rnd(70, 82), 2, Math.sin(a) * rnd(70, 82)); m.rotation.y = rnd(0, 3); }
@@ -302,7 +296,7 @@ const STAGES = (() => {
     }
   }
   function tree(parent, x, z, s) {
-    const g = new THREE.Group(); g.position.set(x, -1.4, z); g.scale.setScalar(s); parent.add(g);
+    const g = new THREE.Group(); g.position.set(x, -1.4, z); g.scale.setScalar(s); g.userData.clear = 1.6 * s; parent.add(g);
     add(g, new THREE.CylinderGeometry(0.18, 0.25, 1.6, 5), flat('#2a1c10'), 0, 0.8, 0);
     add(g, new THREE.ConeGeometry(1.4, 2.4, 6), flat('#3a4424'), 0, 2.3, 0);
     add(g, new THREE.ConeGeometry(1.0, 1.9, 6), flat('#44502a'), 0, 3.4, 0);
@@ -424,6 +418,71 @@ const STAGES = (() => {
     };
   }
 
-  const BUILD = { room, 'ho-lao': hoLao, 'truong-ban': truongBan, 'xich-bich': xichBich, 'ngu-truong': nguTruong };
+  // ---------- the Peach Garden: spring, blossoms falling, the altar of the oath ----------
+  function peachTree(parent, x, z, s) {
+    const g = new THREE.Group(); g.position.set(x, -1.4, z); g.scale.setScalar(s); g.rotation.y = rnd(0, 6); g.userData.clear = 1.9 * s; parent.add(g);
+    const bark = flat('#3a2418');
+    const trunk = add(g, new THREE.CylinderGeometry(0.14, 0.22, 1.8, 5), bark, 0, 0.9, 0); trunk.rotation.z = rnd(-0.15, 0.15);
+    for (let i = 0; i < 3; i++) { const b = add(g, new THREE.CylinderGeometry(0.05, 0.09, 1.1, 4), bark, rnd(-0.4, 0.4), 1.9, rnd(-0.4, 0.4)); b.rotation.set(rnd(-0.7, 0.7), 0, rnd(-0.7, 0.7)); }
+    const pinks = ['#f4b6c6', '#eea0b6', '#f8cad6', '#e88aa6'];
+    for (let i = 0; i < 6; i++) {
+      const c = add(g, new THREE.IcosahedronGeometry(rnd(0.55, 0.9), 0), flat(pinks[i % 4], { emissive: '#3a1820', glow: 0.25 }), rnd(-0.9, 0.9), rnd(2.1, 3.1), rnd(-0.9, 0.9));
+      c.rotation.set(rnd(0, 3), rnd(0, 3), 0);
+    }
+  }
+  function daoVien(ctx) {
+    const group = new THREE.Group();
+    const stone = stoneTexture('#8a8478'); stone.repeat.set(3, 3);
+    const dais = add(group, new THREE.CylinderGeometry(9, 9.3, 0.5, 8), new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95 }), 0, -1.15, 0);
+    dais.rotation.y = Math.PI / 8;
+    const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#5a7a3a'), 0, -1.4, 0); ground.rotation.x = -Math.PI / 2;
+    for (let i = 0; i < (ctx.low ? 14 : 26); i++) {
+      const a = rnd(0, Math.PI * 2), r = rnd(13, 42);
+      peachTree(group, Math.cos(a) * r, Math.sin(a) * r, rnd(1.6, 2.6));
+    }
+    // the altar of the oath, with incense smoke, and Zhang Fei's thatched house beyond the trees
+    const altar = new THREE.Group(); altar.position.set(0, -1.4, -15); group.add(altar);
+    add(altar, new THREE.BoxGeometry(3.4, 1.1, 1.5), flat('#5a2a14'), 0, 0.55, 0);
+    add(altar, new THREE.BoxGeometry(3.6, 0.12, 1.7), flat('#7a3a1c'), 0, 1.15, 0);
+    add(altar, new THREE.CylinderGeometry(0.28, 0.22, 0.35, 8), flat('#8a6a3a', { metal: 0.5, rough: 0.5 }), 0, 1.38, 0);
+    for (let i = -1; i <= 1; i++) add(altar, new THREE.CylinderGeometry(0.015, 0.015, 0.5, 3), flat('#c0302a'), i * 0.08, 1.75, 0);
+    const smoke = [];
+    for (let i = 0; i < 6; i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color: '#e8e4e0', transparent: true, opacity: 0.3, depthWrite: false }));
+      altar.add(m); smoke.push({ m, k: i / 6 });
+    }
+    const house = new THREE.Group(); house.position.set(16, -1.4, -36); house.rotation.y = -0.5; group.add(house);
+    add(house, new THREE.BoxGeometry(8, 3.2, 5), flat('#c8b48a'), 0, 1.6, 0);
+    const thatch = add(house, new THREE.ConeGeometry(6.6, 3, 4), flat('#8a7040'), 0, 4.6, 0); thatch.rotation.y = Math.PI / 4; thatch.scale.set(1.3, 1, 0.85);
+    add(house, new THREE.BoxGeometry(1.4, 2.2, 0.1), flat('#3a2414'), 0, 1.1, 2.52);
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, m = add(group, new THREE.ConeGeometry(rnd(14, 22), rnd(6, 12), 6), flat('#6a8a6a'), Math.cos(a) * 82, 0, Math.sin(a) * 82); m.rotation.y = rnd(0, 3); }
+    // petals drifting down on the breeze
+    const n = ctx.low ? 120 : 280, pg = new THREE.BufferGeometry(), pa = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { pa[i * 3] = rnd(-30, 30); pa[i * 3 + 1] = rnd(-1, 9); pa[i * 3 + 2] = rnd(-30, 30); }
+    pg.setAttribute('position', new THREE.BufferAttribute(pa, 3));
+    const petals = new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.16, color: '#f6b8c8', transparent: true, opacity: 0.95, depthWrite: false }));
+    group.add(petals);
+    const pp = pg.attributes.position;
+    return {
+      group, sky: skyDome('#7aa4d6', '#f2e4d6', '#5a7a3a'), fog: '#d6d8d4', fogSpan: 70, ambience: 'spring',
+      light: { hemi: ['#fff4e8', '#4a5a30', 1.0], key: ['#fff2dc', 1.7], rim: ['#ffd6e0', 0.4] },
+      update(t, dt) {
+        for (let i = 0; i < n; i++) {
+          let y = pp.getY(i) - dt * (0.5 + (i % 4) * 0.15);
+          let x = pp.getX(i) + dt * (0.6 + Math.sin(t / 1300 + i) * 0.5);
+          if (y < -1.3) { y = 9; x = rnd(-34, 26); pp.setZ(i, rnd(-30, 30)); }
+          if (x > 32) x = -32;
+          pp.setX(i, x); pp.setY(i, y);
+        }
+        pp.needsUpdate = true;
+        for (const S of smoke) {
+          S.k = (S.k + dt * 0.12) % 1;
+          S.m.position.set(Math.sin(S.k * 5) * 0.3, 1.9 + S.k * 4, 0); S.m.scale.setScalar(0.5 + S.k * 2.2); S.m.material.opacity = 0.32 * Math.min(1, S.k * 5) * (1 - S.k);
+        }
+      },
+    };
+  }
+
+  const BUILD = { room, 'dao-vien': daoVien, 'ho-lao': hoLao, 'truong-ban': truongBan, 'xich-bich': xichBich, 'ngu-truong': nguTruong };
   return { list, byId, valid: id => typeof id === 'string' && id in byId, build: (id, ctx) => (BUILD[id] || room)(ctx) };
 })();
