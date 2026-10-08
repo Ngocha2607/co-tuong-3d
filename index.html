@@ -50,6 +50,19 @@
   .icon.off { color: var(--dim); }
   .icon.off svg .wave { display: none; }
   .icon:focus-visible, .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  /* the music button's little panel: on/off switch and volume */
+  .pop-wrap { position: relative; }
+  .pop { position: absolute; top: calc(100% + 8px); right: 0; width: 230px; padding: 12px 14px; display: grid; gap: 10px; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+  .pop-head { display: flex; align-items: center; justify-content: space-between; }
+  .sw { position: relative; width: 40px; height: 22px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.4); cursor: pointer; transition: background 150ms, border-color 150ms; }
+  .sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--dim); transition: transform 150ms, background 150ms; }
+  .sw[aria-checked="true"] { background: var(--gold); border-color: var(--gold); }
+  .sw[aria-checked="true"] i { transform: translateX(18px); background: #2a1408; }
+  .sw:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .vol { display: flex; align-items: center; gap: 10px; }
+  .vol input { flex: 1; min-width: 0; accent-color: var(--gold); cursor: pointer; }
+  .vol span { width: 28px; text-align: right; color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .pop.off .vol { opacity: 0.45; }
 
   /* ---------- side panel ---------- */
   #panel { position: fixed; right: 16px; top: 64px; bottom: 16px; width: 300px; display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); z-index: 4; }
@@ -327,7 +340,13 @@
   <div class="tools">
     <button class="icon" id="bArmy" type="button" title="Hiện chiến binh trên mọi quân" aria-label="Hiện chiến binh"><svg viewBox="0 0 24 24"><path d="M4 4l10 10M14 14l2.5-.5L20 17l-3 3-3.5-3.5L14 14zM20 4L10 14M10 14l-2.5-.5L4 17l3 3 3.5-3.5L10 14z"/></svg></button>
     <button class="icon" id="bCam" type="button" title="Đặt lại góc nhìn" aria-label="Đặt lại góc nhìn"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg></button>
-    <button class="icon" id="bMusic" type="button" title="Nhạc nền" aria-label="Nhạc nền"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
+    <div class="pop-wrap">
+      <button class="icon" id="bMusic" type="button" title="Nhạc nền" aria-label="Nhạc nền" aria-expanded="false" aria-controls="musicPop"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
+      <div class="pop" id="musicPop" hidden>
+        <div class="pop-head"><b>Nhạc nền</b><button class="sw" id="bMusicOn" type="button" role="switch" aria-checked="true" aria-label="Bật nhạc nền"><i></i></button></div>
+        <div class="vol"><input id="musicVol" type="range" min="0" max="100" step="1" aria-label="Âm lượng nhạc nền"><span id="musicVolTxt"></span></div>
+      </div>
+    </div>
     <button class="icon" id="bSound" type="button" title="Âm thanh" aria-label="Âm thanh"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
     <button class="icon" id="bMenu" type="button" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>

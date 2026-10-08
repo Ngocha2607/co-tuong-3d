@@ -1,19 +1,33 @@
 // audio.js — every sound is synthesised with Web Audio: wood clicks, steel clashes, the catapult's boom,
 // war drums for a check, a gong to open the battle, a quiet pentatonic zither in the background, and the
-// ambience of the battlefield the game is played on (river and fire, night wind and crickets).
+// ambience of the battlefield the game is played on (river and fire, night wind and crickets). The one
+// recording: a battlefield's own music track, when music/<stage id>.mp3 exists.
 'use strict';
 const SFX = (() => {
-  let ac = null, master = null, musicGain = null, on = true, musicOn = true, musicT = null;
-  try { on = localStorage.getItem('cotuong_sound') !== '0'; musicOn = localStorage.getItem('cotuong_music') !== '0'; } catch (e) { }
+  let ac = null, master = null, musicGain = null, on = true, musicOn = true, musicVol = 0.6, musicT = null;
+  try {
+    on = localStorage.getItem('cotuong_sound') !== '0'; musicOn = localStorage.getItem('cotuong_music') !== '0';
+    const v = parseFloat(localStorage.getItem('cotuong_music_vol')); if (v >= 0 && v <= 1) musicVol = v;
+  } catch (e) { }
+  // the music's volume slider (0..1) on a square curve, so its lower half stays usable; 0.6 is the old fixed level
+  const musicLevel = () => musicOn ? 0.6 * musicVol * musicVol : 0;
+  const musicHeard = () => on && musicOn && musicVol > 0;
+  function applyMusic(glide) {
+    if (!musicGain) return;
+    const g = musicGain.gain, t = ac.currentTime;
+    g.cancelScheduledValues(t);
+    if (glide) g.setTargetAtTime(musicLevel(), t, 0.05); else g.setValueAtTime(musicLevel(), t);
+  }
 
   function init() {
     if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
     try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
     master = ac.createGain(); master.gain.value = on ? 0.8 : 0; master.connect(ac.destination);
-    musicGain = ac.createGain(); musicGain.gain.value = musicOn ? 0.22 : 0; musicGain.connect(master);
+    musicGain = ac.createGain(); musicGain.gain.value = musicLevel(); musicGain.connect(master);
     ambGain = ac.createGain(); ambGain.gain.value = 1.6; ambGain.connect(musicGain);     // the music switch mutes it too
     startMusic();
     if (ambWant) ambience(ambWant);
+    if (trackWant) music(trackWant);
   }
   const now = () => ac.currentTime;
   function env(g, t, a, d, peak) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + a + d); }
@@ -47,7 +61,7 @@ const SFX = (() => {
   // details scattered in time: fn(t) every min..max ms while this ambience lasts
   function scatter(min, max, fn) {
     const run = ambRun;
-    const tick = () => { if (run !== ambRun) return; if (musicOn && on) fn(now() + 0.02); ambTimer = setTimeout(tick, min + Math.random() * (max - min)); };
+    const tick = () => { if (run !== ambRun) return; if (musicHeard()) fn(now() + 0.02); ambTimer = setTimeout(tick, min + Math.random() * (max - min)); };
     tick();
   }
   function ambience(id) {
@@ -81,10 +95,15 @@ const SFX = (() => {
   }
 
   const S = {
-    init, ambience,
-    get on() { return on; }, get musicOn() { return musicOn; },
-    toggle() { on = !on; try { localStorage.setItem('cotuong_sound', on ? '1' : '0'); } catch (e) { } if (master) master.gain.value = on ? 0.8 : 0; return on; },
-    toggleMusic() { musicOn = !musicOn; try { localStorage.setItem('cotuong_music', musicOn ? '1' : '0'); } catch (e) { } if (musicGain) musicGain.gain.value = musicOn ? 0.22 : 0; return musicOn; },
+    init, ambience, music,
+    get on() { return on; }, get musicOn() { return musicOn; }, get musicVol() { return musicVol; },
+    toggle() { on = !on; try { localStorage.setItem('cotuong_sound', on ? '1' : '0'); } catch (e) { } if (master) master.gain.value = on ? 0.8 : 0; playTrack(); return on; },
+    toggleMusic() { musicOn = !musicOn; try { localStorage.setItem('cotuong_music', musicOn ? '1' : '0'); } catch (e) { } applyMusic(); playTrack(); return musicOn; },
+    setMusicVol(v) {
+      musicVol = Math.max(0, Math.min(1, v)); try { localStorage.setItem('cotuong_music_vol', String(musicVol)); } catch (e) { }
+      applyMusic(true);                                     // glides, so dragging the slider doesn't crackle
+      playTrack(); return musicVol;
+    },
     pick: () => play(t => { tone(900, 'triangle', t, 0.002, 0.05, 0.12); noise(t, 0.03, 0.08, 'bandpass', 2500, 2); }),
     place: () => play(t => { tone(180, 'sine', t, 0.002, 0.12, 0.5, master, 120); noise(t, 0.06, 0.25, 'bandpass', 1400, 1.5); }),
     step: () => play(t => { noise(t, 0.05, 0.08, 'lowpass', 500); }),
@@ -117,7 +136,7 @@ const SFX = (() => {
   function startMusic() {
     if (musicT) return;
     const tick = () => {
-      if (ac && musicOn && on) {
+      if (ac && musicHeard() && !trackOk && !trackLoading) {
         const t = now() + 0.05;
         idx = Math.max(0, Math.min(SCALE.length - 1, idx + [-2, -1, -1, 1, 1, 2, 0][Math.floor(Math.random() * 7)]));
         pluck(SCALE[idx], t, 0.5);
@@ -128,5 +147,49 @@ const SFX = (() => {
     };
     tick();
   }
+
+  // ---------- recorded music ----------
+  // each battlefield can have its own track, music/<stage id>.mp3; one without a file keeps the zither above.
+  // An <audio> element streams it (a whole decoded track would weigh tens of MB) through the music volume,
+  // and a change of stage fades the old track out before the new one fades in.
+  let trackEl = null, trackGain = null, trackWant = '', trackUrl = '', trackOk = false, trackLoading = false, trackRun = 0;
+  const noTrack = new Set();                                // stages whose file is missing: asked for once
+  function fadeTrack(to, secs) {
+    const g = trackGain.gain, t = now();
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(to, t + secs);
+  }
+  function music(id) {
+    trackWant = id || '';
+    if (!ac) return;                                        // starts once the page is allowed to play sound
+    const url = trackWant && !noTrack.has(trackWant) ? `music/${trackWant}.mp3` : '';
+    if (url === trackUrl) return;
+    if (!trackEl) {
+      trackEl = new Audio(); trackEl.loop = true; trackEl.preload = 'auto';
+      trackGain = ac.createGain(); trackGain.gain.value = 0;
+      ac.createMediaElementSource(trackEl).connect(trackGain); trackGain.connect(musicGain);
+      trackEl.addEventListener('playing', () => { trackOk = true; trackLoading = false; fadeTrack(TRACK_LEVEL, 1.5); });
+      trackEl.addEventListener('error', () => {
+        if (!trackEl.getAttribute('src')) return;           // emptied on purpose
+        noTrack.add(trackEl.dataset.stage); trackUrl = ''; trackOk = trackLoading = false;
+      });
+    }
+    const run = ++trackRun, fade = trackOk ? 0.8 : 0;
+    trackUrl = url;
+    fadeTrack(0, fade || 0.01);
+    setTimeout(() => {
+      if (run !== trackRun) return;
+      trackOk = false; trackLoading = !!url;
+      if (!url) { trackEl.pause(); trackEl.removeAttribute('src'); trackEl.load(); return; }
+      trackEl.dataset.stage = trackWant; trackEl.src = url;
+      playTrack();
+    }, fade * 1000);
+  }
+  // the element only runs while music is heard; a refused play() leaves the zither to fill in
+  function playTrack() {
+    if (!trackEl || !trackEl.getAttribute('src')) return;
+    if (musicHeard()) trackEl.play().catch(() => { trackLoading = false; });
+    else trackEl.pause();
+  }
+  const TRACK_LEVEL = 0.9;
   return S;
 })();

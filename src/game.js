@@ -606,6 +606,7 @@
   renderAINote();
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; SFX.init(); SFX.pick(); menuView(b.dataset.go); });
   addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !$('#musicPop').hidden) { musicPop(false); $('#bMusic').focus(); return; }
     if (e.key !== 'Escape' || $('#menu').hidden || !$('#campaign').hidden || !$('#ranks').hidden || !$('#seek').hidden) return;
     if ($('#menu .view[data-view="home"]').hidden) menuView('home');
     else if (G.mode !== 'menu') showMenu(false);
@@ -719,9 +720,22 @@
   $('#bCopy').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(roomLink()).then(() => toast('Đã sao chép link mời')); });
   $('#bArmy').addEventListener('click', () => { pref.army = !VIEW.army; savePref(); VIEW.setArmy(pref.army); $('#bArmy').classList.toggle('on', pref.army); SFX.init(); SFX.pick(); toast(pref.army ? 'Đội quân: mọi quân hiện chiến binh' : 'Quân cờ: chiến binh chỉ hiện khi ra trận'); });
   $('#bCam').addEventListener('click', () => VIEW.resetCamera());
-  const soundIcon = () => { $('#bSound').classList.toggle('off', !SFX.on); $('#bMusic').classList.toggle('off', !SFX.musicOn); };
+  const soundIcon = () => {
+    $('#bSound').classList.toggle('off', !SFX.on); $('#bMusic').classList.toggle('off', !SFX.musicOn || !SFX.musicVol);
+    $('#bMusicOn').setAttribute('aria-checked', SFX.musicOn); $('#musicPop').classList.toggle('off', !SFX.musicOn);
+    $('#musicVol').value = Math.round(SFX.musicVol * 100); $('#musicVolTxt').textContent = $('#musicVol').value;
+  };
   $('#bSound').addEventListener('click', () => { SFX.init(); SFX.toggle(); soundIcon(); });
-  $('#bMusic').addEventListener('click', () => { SFX.init(); SFX.toggleMusic(); soundIcon(); });
+  // the music button opens its panel: the switch, and a volume slider that also switches the music back on
+  const musicPop = open => { $('#musicPop').hidden = !open; $('#bMusic').setAttribute('aria-expanded', open); };
+  $('#bMusic').addEventListener('click', () => { SFX.init(); musicPop($('#musicPop').hidden); });
+  $('#bMusicOn').addEventListener('click', () => { SFX.toggleMusic(); soundIcon(); });
+  $('#musicVol').addEventListener('input', e => {
+    const v = +e.target.value / 100;
+    if (v > 0 && !SFX.musicOn) SFX.toggleMusic();
+    SFX.setMusicVol(v); soundIcon();
+  });
+  addEventListener('pointerdown', e => { if (!$('#musicPop').hidden && !e.target.closest('.pop-wrap')) musicPop(false); });
   $('#bMoves').addEventListener('click', () => document.body.classList.toggle('show-moves'));
   addEventListener('pointerdown', () => SFX.init(), { once: true });
   addEventListener('resize', () => VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0));

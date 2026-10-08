@@ -446,7 +446,7 @@ const VIEW = (() => {
     rimLight.color.set(L.rim[0]); rimLight.intensity = L.rim[1];
     scene.background = new THREE.Color(stage.background || stage.fog);
     scene.fog.color.set(stage.fog);
-    SFX.ambience(stage.ambience);
+    SFX.ambience(stage.ambience); SFX.music(stageId);
     if (!menu) showcase();
   }
   // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
