@@ -53,8 +53,12 @@ const ACCOUNT = (() => {
     if (!enabled) return;
     try { user = (await call('api/me')).user; emit(); } catch (e) { }
   }
+  // saves fields of the signed-in player (name, title, hero, stage); throws with the server's message if refused
+  async function save(fields) { user = (await call('api/me', fields)).user; emit(); return user; }
 
   // ---------- the account box in the menu ----------
+  // a campaign title (CAMPAIGN.TITLES), shown with the player's name
+  const titleOf = u => (u && u.title && CAMPAIGN.TITLES[u.title]) || '';
   function statLine(u) {
     if (u.games >= provisional) return `${u.rating} điểm · hạng ${u.rank} · ${u.games} ván`;
     return `${u.rating} điểm · còn ${provisional - u.games} ván để có tên trên bảng`;
@@ -64,7 +68,7 @@ const ACCOUNT = (() => {
     if (!user) return;
     $('#meAv').textContent = user.name.slice(0, 1).toUpperCase();
     $('#meName').textContent = user.name;
-    $('#meStat').textContent = statLine(user);
+    $('#meStat').textContent = (titleOf(user) ? titleOf(user) + ' · ' : '') + statLine(user);
   }
   function startRename() {
     const f = $('#renameForm');
@@ -100,7 +104,7 @@ const ACCOUNT = (() => {
     else {
       h = '<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Điểm</th><th>Ván</th><th>Thắng</th></tr></thead><tbody>';
       top.forEach((u, i) => {
-        h += `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${esc(u.name)}</td><td><b>${u.rating}</b></td><td>${u.games}</td><td>${Math.round(100 * u.wins / u.games)}%</td></tr>`;
+        h += `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${esc(u.name)}${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}</td><td><b>${u.rating}</b></td><td>${u.games}</td><td>${Math.round(100 * u.wins / u.games)}%</td></tr>`;
       });
       h += '</tbody></table>';
     }
@@ -110,7 +114,7 @@ const ACCOUNT = (() => {
   }
   async function profile(id) {
     const { user: u, games } = await call('api/user/' + id);
-    let h = `<div class="phead"><span class="av big">${esc(u.name.slice(0, 1).toUpperCase())}</span><div><h3>${esc(u.name)}</h3><small>${esc(statLine(u))}</small></div></div>
+    let h = `<div class="phead"><span class="av big">${esc(u.name.slice(0, 1).toUpperCase())}</span><div><h3>${esc(u.name)}</h3>${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}<small>${esc(statLine(u))}</small></div></div>
       <div class="stats"><div><b>${u.games}</b>Ván</div><div><b>${u.wins}</b>Thắng</div><div><b>${u.draws}</b>Hòa</div><div><b>${u.losses}</b>Thua</div></div>
       <h4>Ván gần đây</h4>`;
     if (!games.length) h += '<p class="note">Chưa có ván xếp hạng nào.</p>';
@@ -138,7 +142,7 @@ const ACCOUNT = (() => {
   $('#bRanksClose').addEventListener('click', () => { $('#ranks').hidden = true; });
 
   return {
-    init, refresh, openRanks, esc, sign,
+    init, refresh, save, openRanks, esc, sign,
     onChange(f) { subs.push(f); },
     get user() { return user; },
     get enabled() { return enabled; },

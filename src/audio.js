@@ -68,6 +68,12 @@ const SFX = (() => {
       bed('bandpass', 380, 0.8, 0.18, 0.09, 0.12);          // wind through the pass
       bed('bandpass', 2200, 1, 0.015, 7, 0.012);            // banners flapping on the wall
       scatter(3500, 6500, t => { for (let i = 0; i < 3; i++) { tone(65, 'sine', t + i * 0.45, 0.004, 0.5, 0.22, ambGain, 45); noise(t + i * 0.45, 0.12, 0.06, 'lowpass', 220, 1, ambGain); } });
+    } else if (id === 'spring') {
+      bed('bandpass', 700, 0.6, 0.06, 0.07, 0.04);          // a light breeze through the blossoms
+      scatter(700, 2400, t => {                             // birdsong: a few quick whistles
+        const f = 2400 + Math.random() * 1600, k = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < k; i++) tone(f * (1 + i * 0.06), 'sine', t + i * 0.11, 0.005, 0.07, 0.03, ambGain, f * (1.25 + i * 0.06));
+      });
     } else if (id === 'dust-wind') {
       bed('bandpass', 600, 0.7, 0.16, 0.11, 0.1);           // dry wind over the field
       scatter(240, 420, t => { tone(110, 'sine', t, 0.003, 0.08, 0.05, ambGain, 70); noise(t, 0.05, 0.035, 'lowpass', 420, 1, ambGain); });   // hooves far off

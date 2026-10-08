@@ -12,6 +12,11 @@ const HEROES = (() => {
     { id: 'tao-thao', name: 'Tào Tháo', han: '曹', kingdom: 'Ngụy', look: 'Áo tía, mũ quan, Ỷ Thiên kiếm' },
     { id: 'ton-quyen', name: 'Tôn Quyền', han: '孫', kingdom: 'Ngô', look: 'Râu tím, giáp xanh ngọc, mũ vàng' },
     { id: 'lu-bo', name: 'Lữ Bố', han: '呂', kingdom: '', look: 'Hai lông trĩ thật dài, Phương Thiên họa kích' },
+    // earned in the campaign (campaign.js says how)
+    { id: 'hoang-trung', name: 'Hoàng Trung', han: '黃', kingdom: 'Thục', look: 'Lão tướng tóc bạc râu trắng, đại đao và cung', campaign: true },
+    { id: 'ma-sieu', name: 'Mã Siêu', han: '馬', kingdom: 'Thục', look: 'Giáp bạc, mũ đầu sư tử, thương dài', campaign: true },
+    { id: 'chu-du', name: 'Chu Du', han: '周', kingdom: 'Ngô', look: 'Đô đốc trẻ, giáp đỏ sẫm, mũ cắm lông đỏ', campaign: true },
+    { id: 'tu-ma-y', name: 'Tư Mã Ý', han: '懿', kingdom: 'Ngụy', look: 'Áo đen, mũ quan cao, râu bạc, kiếm', campaign: true },
   ];
   const byId = Object.assign(Object.create(null), Object.fromEntries(list.map(h => [h.id, h])));
   return { list, byId, valid: id => typeof id === 'string' && id in byId };

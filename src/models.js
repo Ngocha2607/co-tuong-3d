@@ -453,6 +453,44 @@ const MODELS = (() => {
       cape(h, side); sword(j.armR, pal);
       return h;
     },
+    // ---- earned in the campaign ----
+    'hoang-trung'(pal, side) {                 // the old general: white hair and beard, a broad sabre, a bow on his back
+      const [h, j] = hero(pal, { armour: '#8a6a2a', skin: '#d9a87e', beard: 'long', hair: '#e8e4dc' });
+      cyl(0.062, 0.068, 0.06, '#c9b27a', j.head, 0, 0.12, 0, 8, GOLD);
+      box(0.1, 0.03, 0.08, '#e8e4dc', j.head, 0, 0.1, -0.03);                   // white hair under the helmet
+      const bow = mesh(geo('bow', () => new THREE.TorusGeometry(0.17, 0.008, 4, 12, Math.PI)), mat('#4a2a12'), h, 0.04, 0.33, -0.08);
+      bow.rotation.z = -1.2;
+      cape(h, side);
+      const len = 0.72, w = pole(j.armR, len, '#4a2a12'), y = top(len);
+      const b = box(0.075, 0.22, 0.014, '#e8eef4', w, 0.045, y + 0.05, 0, STEEL); b.rotation.z = -0.12;
+      tassel(w, y - 0.08);
+      return h;
+    },
+    'ma-sieu'(pal, side) {                     // silver armour, a lion-head helmet with a golden mane, a long spear
+      const [h, j] = hero(pal, { armour: '#d8dde4' });
+      cyl(0.064, 0.07, 0.07, '#e6eaef', j.head, 0, 0.12, 0, 8, { metal: 0.8, rough: 0.25 });
+      box(0.07, 0.04, 0.05, '#d4a017', j.head, 0, 0.15, 0.05, GOLD);           // the lion's face over the brow
+      for (let i = 0; i < 5; i++) { const m = box(0.02, 0.08, 0.02, '#e3b448', j.head, (i - 2) * 0.025, 0.17, -0.04); m.rotation.x = -0.6; }
+      cape(h, side);
+      const sp = spear(j.armR, pal, 0.86);
+      cyl(0, 0.026, 0.1, '#d4a017', sp, 0, 0.86 * 0.35 + 0.43 + 0.05, 0, 5, GOLD);
+      return h;
+    },
+    'chu-du'(pal, side) {                      // the young admiral of Wu: dark red armour, a red plume, a sword
+      const [h, j] = hero(pal, { armour: '#7a1f2a' });
+      cyl(0.06, 0.066, 0.06, '#d9b65a', j.head, 0, 0.12, 0, 8, GOLD);
+      const plume = group(j.head, 0, 0.16, -0.02); plume.rotation.x = -0.4;
+      box(0.028, 0.16, 0.028, '#d8282a', plume, 0, 0.08, 0);
+      cape(h, side); sword(j.armR, pal);
+      return h;
+    },
+    'tu-ma-y'(pal, side) {                     // the strategist of Wei: a black robe, a tall official's hat, a grey beard
+      const [h, j] = hero(pal, { robe: '#20222c', beard: 'long', hair: '#8e8e94' });
+      box(0.1, 0.16, 0.1, '#0e0e12', j.head, 0, 0.17, -0.005);
+      box(0.12, 0.02, 0.12, '#c9a23a', j.head, 0, 0.1, 0, GOLD);
+      cape(h, side); sword(j.armR, pal);
+      return h;
+    },
     'lu-bo'(pal, side) {
       const [h, j] = hero(pal, { armour: '#8e2219' }, 1.26);
       cyl(0.062, 0.068, 0.07, '#d9b65a', j.head, 0, 0.12, 0, 8, GOLD);

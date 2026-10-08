@@ -147,7 +147,7 @@ export class Room extends DurableObject {
         else if (token && !st.seats[1]) { st.seats[1] = token; side = 1; dirty = true; }
         else if (token && !st.seats[-1]) { st.seats[-1] = token; side = -1; dirty = true; }
         if (side) {
-          const info = user ? { id: user.id, name: user.name } : null;
+          const info = user ? { id: user.id, name: user.name, title: user.title || '' } : null;
           if (JSON.stringify(info) !== JSON.stringify(st.info[side])) { st.info[side] = info; dirty = true; }
         }
         // the player who opened the room picks the time control, before the first move

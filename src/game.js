@@ -1,5 +1,6 @@
-// game.js — the match: menu, playing against the computer (search in a Web Worker), online rooms over a
-// WebSocket to the Cloudflare Worker, the move list, banners and the end screen. VIEW draws, XQ rules.
+// game.js — the match: menu, playing against the computer (search in a Web Worker), the campaign's battles,
+// online rooms over a WebSocket to the Cloudflare Worker, the move list, banners and the end screen.
+// VIEW draws, XQ rules, CAMPAIGN judges the battles and CAMPAIGN_UI keeps their progress.
 'use strict';
 (() => {
   const $ = s => document.querySelector(s);
@@ -18,7 +19,17 @@
     room: '', ws: null, you: 0, players: { 1: false, '-1': false }, rematch: { 1: false, '-1': false }, online: false,
     rated: false, info: { 1: null, '-1': null }, tc: null, clock: null, deadline: null, wantTc: '',
     heroes: { 1: '', '-1': '' },              // hero leading each side (heroes.js), '' = the plain general
+    fen0: XQ.START,                           // where this game started (a campaign battle has its own position)
+    lv: null, help: false,                    // campaign: the battle, and whether undo or a hint was used
   };
+  const vsAI = () => G.mode === 'ai' || G.mode === 'campaign';
+  // heroes and stages given by the campaign can be used once earned (the others are always free)
+  const heroAllowed = id => !id || (HEROES.valid(id) && (!HEROES.byId[id].campaign || CAMPAIGN_UI.unlocked().heroes.has(id)));
+  const stageAllowed = id => STAGES.valid(id) && (!STAGES.byId[id].campaign || CAMPAIGN_UI.unlocked().stages.has(id));
+  const myHero = () => heroAllowed(pref.hero) ? pref.hero : '';
+  const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
+  // a signed-in player's hero and stage follow them: each pick is saved to the account
+  const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
   let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room' };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!HEROES.valid(pref.hero)) pref.hero = '';
@@ -26,7 +37,7 @@
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
 
   // ---------- game record ----------
-  function reset() { G.pos = XQ.Pos.fromFen(XQ.START); G.moves = []; G.keys = []; G.log = []; G.quiet = 0; G.captured = []; G.over = null; }
+  function reset() { G.pos = XQ.Pos.fromFen(G.fen0); G.moves = []; G.keys = []; G.log = []; G.quiet = 0; G.captured = []; G.over = null; }
   function record(m) {
     const pos = G.pos, text = XQ.notation(pos, m), side = Math.sign(pos.b[XQ.from(m)]);
     G.keys.push(pos.key());
@@ -59,10 +70,11 @@
       await VIEW.play(m, opts);
       if (gen !== G.gen) return;
       VIEW.check(-1);
+      if (G.mode === 'campaign') { const r = CAMPAIGN.judge(G.lv, G.moves); if (r.over) { endCampaign(r); return; } }
       if (st.over) { endGame(st); return; }
       if (st.check) { VIEW.check(king); VIEW.alarm(king); VIEW.heroShadow(mover); SFX.drum(); banner('Chiếu tướng!', 'check'); }
       if (st.repeat === 1) toast('Thế cờ lặp lại lần 2. Lần 3: bên chiếu dai hoặc đuổi dai bị xử thua, không thì hòa');
-      if (G.mode === 'ai' && G.pos.turn !== G.me && !G.over && G.animating <= 1) aiMove();
+      if (vsAI() && G.pos.turn !== G.me && !G.over && G.animating <= 1) aiMove();
     });
     G.lastMover = mover; updateStatus();
   }
@@ -89,12 +101,12 @@
     });
   }
   function aiMove() {
-    const id = ++aiId, L = LEVELS[G.level], t0 = Date.now();
+    const id = ++aiId, L = G.mode === 'campaign' ? CAMPAIGN.AI[G.lv.ai] : LEVELS[G.level], t0 = Date.now();
     G.thinking = true; updateStatus();
-    ask({ fen: XQ.START, moves: G.moves.slice(), time: L.time, depth: L.depth, noise: L.noise ? (Math.random() * 1e9) | 1 : 0 }).then(r => {
-      if (id !== aiId || G.mode !== 'ai' || G.over) return;
+    ask({ fen: G.fen0, moves: G.moves.slice(), time: L.time, depth: L.depth, noise: L.noise ? (Math.random() * 1e9) | 1 : 0 }).then(r => {
+      if (id !== aiId || !vsAI() || G.over) return;
       setTimeout(() => {
-        if (id !== aiId || G.mode !== 'ai') return;
+        if (id !== aiId || !vsAI()) return;
         G.thinking = false;
         if (r.move) commit(r.move);
       }, Math.max(0, 500 - (Date.now() - t0)));
@@ -105,8 +117,9 @@
   function startAI() {
     disconnect(); stopSeek(); resetOnline();
     G.mode = 'ai'; G.me = pref.side; G.level = pref.level; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
-    const rivals = HEROES.list.filter(h => h.id !== pref.hero);
-    G.heroes = { [G.me]: pref.hero, [-G.me]: rivals[(Math.random() * rivals.length) | 0].id };
+    G.fen0 = XQ.START; G.lv = null; VIEW.setStage(myStage());
+    const rivals = HEROES.list.filter(h => h.id !== pref.hero);  // the computer may lead with a hero still to earn
+    G.heroes = { [G.me]: myHero(), [-G.me]: rivals[(Math.random() * rivals.length) | 0].id };
     VIEW.setHeroes(G.heroes);
     reset(); clearSel();
     VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
@@ -115,9 +128,45 @@
     updateStatus();
     if (G.me < 0) setTimeout(() => { if (G.mode === 'ai' && !G.moves.length) aiMove(); }, 900);
   }
-  function undo() {
-    if (G.mode !== 'ai' || G.animating) return;
+  // a campaign battle: its own position, side, opponent hero, stage and computer strength
+  function startCampaign(id) {
+    const lv = CAMPAIGN.level(id);
+    if (!lv || !CAMPAIGN_UI.unlocked().levels.has(id)) return;
+    const ch = CAMPAIGN.chapter(lv.chapter);
+    disconnect(); stopSeek(); resetOnline();
+    G.mode = 'campaign'; G.lv = lv; G.fen0 = lv.fen; G.me = lv.side; G.help = false;
+    G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
+    G.heroes = { [G.me]: myHero(), [-G.me]: ch.foe };
+    VIEW.setHeroes(G.heroes); VIEW.setStage(ch.stage);
+    reset(); clearSel();
+    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    showMenu(false); showEnd(false); CAMPAIGN_UI.close(); renderMoves(); layoutMode();
+    SFX.init(); SFX.gong(); banner(lv.name, 'open');
+    toast(CAMPAIGN.goal(lv));
+    updateStatus();
+    if (G.pos.turn !== G.me) setTimeout(() => { if (G.mode === 'campaign' && G.lv === lv && !G.moves.length) aiMove(); }, 900);
+  }
+  // a battle is decided (CAMPAIGN.judge): stars, progress, what it opened
+  function endCampaign(r) {
+    if (G.over && G.over.shown) return;
+    const lv = G.lv, winner = r.win ? G.me : -G.me;
     aiId++; G.thinking = false;
+    G.over = { winner: r.reason === 'held' || r.reason === 'limit' || (lv.type === 'survive' && r.win) ? 0 : winner, reason: r.reason, shown: true, camp: r, stars: CAMPAIGN.stars(lv, r, G.help), lv };
+    VIEW.check(-1); clearSel();
+    const onBoard = r.reason === 'checkmate' || r.reason === 'stalemate';
+    if (onBoard) VIEW.defeat(kingOf(-winner));
+    if (r.win) { VIEW.heroShadow(G.me, true); SFX.win(); } else SFX.lose();
+    updateStatus();
+    const lvNow = lv;
+    (r.win ? CAMPAIGN_UI.record(lv, G.moves.slice(), G.help) : Promise.resolve(null)).then(res => {
+      if (G.over && G.over.lv === lvNow) { G.over.saved = res; if (!$('#end').hidden) renderEnd(); }
+    });
+    setTimeout(() => showEnd(true), onBoard ? 1300 : 300);
+  }
+  function undo() {
+    if (!vsAI() || G.animating) return;
+    aiId++; G.thinking = false;
+    if (G.mode === 'campaign') G.help = true;
     let n = G.pos.turn === G.me ? 2 : 1;
     if (G.over && G.over.reason === 'resign') n = 0;
     n = Math.min(n, G.moves.length);
@@ -132,9 +181,10 @@
     if (G.pos.turn !== G.me) aiMove();
   }
   function hint() {
-    if (G.mode !== 'ai' || G.over || G.pos.turn !== G.me || G.thinking || G.animating) return;
+    if (!vsAI() || G.over || G.pos.turn !== G.me || G.thinking || G.animating) return;
+    if (G.mode === 'campaign') { G.help = true; updateStatus(); }
     const b = $('#bHint'); b.disabled = true; b.textContent = 'Đang tìm…';
-    ask({ fen: XQ.START, moves: G.moves.slice(), time: 900 }).then(r => {
+    ask({ fen: G.fen0, moves: G.moves.slice(), time: G.mode === 'campaign' ? 1500 : 900 }).then(r => {
       b.disabled = false; b.textContent = 'Gợi ý';
       if (!r.move || G.pos.turn !== G.me) return;
       VIEW.hint(XQ.from(r.move), XQ.to(r.move));
@@ -149,6 +199,7 @@
     resignArm = 0; b.textContent = 'Xin thua'; b.classList.remove('warn');
     if (G.mode === 'online') { send({ t: 'resign' }); return; }
     aiId++; G.thinking = false;
+    if (G.mode === 'campaign') { endCampaign({ over: true, win: false, reason: 'resign' }); return; }
     endGame({ over: true, winner: -G.me, reason: 'resign' });
   }
 
@@ -181,6 +232,16 @@
   function endText() {
     const st = G.over, viewer = G.mode === 'online' ? G.you : G.me;
     if (!st) return ['', ''];
+    if (st.camp) {
+      const r = st.camp, lv = st.lv;
+      const why = {
+        held: `Đã cầm cự đủ ${lv.n} nước`, limit: lv.type === 'mate' ? `Chưa chiếu bí được sau ${lv.n + 2} nước` : 'Ván cờ kéo quá dài',
+        resign: 'Bạn đã rút quân', checkmate: r.win ? 'Chiếu bí' : 'Bạn bị chiếu bí', stalemate: r.win ? 'Đối phương hết nước đi' : 'Bạn hết nước đi',
+        repetition: 'Lặp lại thế cờ ba lần', quiet: '60 nước liền không ăn quân',
+        'perpetual-check': r.win ? 'Đối phương chiếu dai, phạm luật' : 'Bạn chiếu dai, phạm luật', 'perpetual-chase': r.win ? 'Đối phương đuổi dai, phạm luật' : 'Bạn đuổi dai, phạm luật',
+      }[r.reason] || '';
+      return [r.win ? 'Đại thắng!' : 'Thất bại', `${lv.name} · ${why}`];
+    }
     if (st.reason === 'aborted') return ['Ván bị hủy', 'Một bên không đi nước đầu trong 30 giây'];
     let title;
     if (!st.winner) title = 'Hòa cờ';
@@ -245,6 +306,7 @@
   function goOnline(room, tc = '') {
     disconnect(); stopSeek(); resetOnline();
     G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++;
+    G.fen0 = XQ.START; G.lv = null; VIEW.setStage(myStage());
     G.players = { 1: false, '-1': false }; G.rematch = { 1: false, '-1': false };
     history.replaceState(null, '', roomLink());
     reset(); clearSel(); VIEW.setMenu(false); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
@@ -262,7 +324,7 @@
     clearTimeout(retryT);
     const ws = new WebSocket(`${wsBase()}/ws?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: pref.hero })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero() })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -391,9 +453,9 @@
     let text = '';
     if (G.mode === 'menu') text = '';
     else if (G.over) text = endText()[0];
-    else if (G.animating && !G.thinking) text = G.mode === 'ai' ? (G.lastMover === G.me ? 'Máy chuẩn bị đi…' : 'Máy đang đi quân…')
+    else if (G.animating && !G.thinking) text = vsAI() ? (G.lastMover === G.me ? 'Máy chuẩn bị đi…' : 'Máy đang đi quân…')
       : G.lastMover === G.you ? 'Đã đi, chờ đối thủ…' : G.you ? 'Đối thủ đang đi quân…' : `${SIDE[G.lastMover]} đang đi quân…`;
-    else if (G.mode === 'ai') text = G.thinking ? 'Máy đang tính nước…' : turn === G.me ? `Lượt bạn · ${SIDE[G.me]}` : 'Máy chuẩn bị đi…';
+    else if (vsAI()) text = G.thinking ? 'Máy đang tính nước…' : turn === G.me ? `Lượt bạn · ${SIDE[G.me]}` : 'Máy chuẩn bị đi…';
     else if (G.mode === 'online') {
       if (G.netState === 'connecting') text = 'Đang kết nối phòng…';
       else if (G.netState === 'lost') text = 'Mất kết nối, đang nối lại…';
@@ -408,16 +470,20 @@
       const el = $(side > 0 ? '#plRed' : '#plBlack'), hero = HEROES.byId[G.mode === 'menu' ? '' : G.heroes[side]];
       const chip = el.querySelector('.chip');
       chip.textContent = hero ? hero.han : side > 0 ? '帥' : '將'; chip.title = hero ? hero.name : '';
-      el.querySelector('.nm small').textContent = hero ? hero.name : ARMY[side];
+      const foe = G.mode === 'campaign' && side !== G.me && CAMPAIGN.chapter(G.lv.chapter).foeName;
+      el.querySelector('.nm small').textContent = hero ? hero.name : foe || ARMY[side];
       let who = '';
       if (G.mode === 'ai') who = side === G.me ? 'Bạn' : `Máy · ${LEVELS[G.level].name}`;
+      else if (G.mode === 'campaign') who = side === G.me ? 'Bạn' : 'Máy';
       else if (G.mode === 'online') who = whoOnline(side);
       el.querySelector('.who').innerHTML = who;
+      const ttl = G.mode === 'online' && G.info[side] && CAMPAIGN.TITLES[G.info[side].title];
+      el.querySelector('.who').title = ttl ? `Danh hiệu: ${ttl}` : '';
       el.classList.toggle('turn', !G.over && G.mode !== 'menu' && (G.animating ? -G.lastMover : turn) === side);
       el.classList.toggle('away', G.mode === 'online' && !G.players[side]);
     }
-    $('#bUndo').disabled = G.mode !== 'ai' || !G.moves.length;
-    $('#bHint').disabled = G.mode !== 'ai' || !!G.over;
+    $('#bUndo').disabled = !vsAI() || !G.moves.length;
+    $('#bHint').disabled = !vsAI() || !!G.over;
     $('#bResign').disabled = !!G.over || G.mode === 'menu' || (G.mode === 'online' && !G.you);
     // draw offers (online): mine pending, theirs waiting for an answer
     const canDraw = G.mode === 'online' && !!G.you && !G.over, mine = canDraw && G.drawOffer === G.you, theirs = canDraw && G.drawOffer === -G.you;
@@ -434,8 +500,22 @@
       $('#roomCode').textContent = G.room; $('#roomLink').textContent = roomLink();
       $('#roomCode').hidden = $('#roomLink').hidden = $('#bCopy').hidden = G.rated;
     }
-    $('#bNew').textContent = G.mode !== 'online' ? 'Ván mới' : G.rated ? 'Trận mới' : 'Đấu lại';
+    $('#bNew').textContent = G.mode === 'campaign' ? 'Đánh lại' : G.mode !== 'online' ? 'Ván mới' : G.rated ? 'Trận mới' : 'Đấu lại';
+    renderGoal();
     renderClocks();
+  }
+  // the battle's objective and how far along it is, in the side panel
+  function renderGoal() {
+    const box = $('#goal');
+    box.hidden = G.mode !== 'campaign';
+    if (G.mode !== 'campaign') return;
+    const lv = G.lv, r = CAMPAIGN.judge(lv, G.moves);
+    $('#goalName').textContent = `${lv.id} · ${lv.name}`;
+    $('#goalText').textContent = CAMPAIGN.goal(lv);
+    $('#goalCount').textContent = lv.type === 'mate' ? `Nước của bạn: ${r.mine}/${lv.n} (tối đa ${lv.n + 2})`
+      : lv.type === 'survive' ? `Đã cầm cự: ${Math.min(r.theirs, lv.n)}/${lv.n} nước · còn ${r.pieces} quân`
+      : `Nước của bạn: ${r.mine} · thắng trong ${lv.par} nước được thêm ★`;
+    $('#goalHelp').hidden = !G.help;
   }
   // a player's name (signed in) or role, with the rating in ranked games; names are escaped, this goes in as HTML
   function whoOnline(side) {
@@ -446,7 +526,7 @@
   function layoutMode() {
     document.body.dataset.mode = G.mode;
     VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0);
-    $('#bUndo').hidden = $('#bHint').hidden = G.mode !== 'ai';
+    $('#bUndo').hidden = $('#bHint').hidden = !vsAI();
   }
   function showMenu(on) {
     $('#menu').hidden = !on;
@@ -471,9 +551,37 @@
       $('#endNote').textContent = theirs && !mine ? 'Đối thủ muốn đấu lại.' : mine ? 'Đã gửi lời mời đấu lại.' : '';
     } else { again.textContent = 'Ván mới'; again.disabled = false; $('#endNote').textContent = ''; }
     $('#bEndUndo').hidden = G.mode !== 'ai';
+    renderEndCampaign();
+  }
+  function renderEndCampaign() {
+    const camp = G.mode === 'campaign' && G.over && G.over.camp, box = $('#endStars');
+    box.hidden = !camp; $('#bEndRetry').hidden = $('#bEndMap').hidden = !camp;
+    if (!camp) return;
+    const o = G.over, lv = o.lv, next = CAMPAIGN.next(lv.id), saved = o.saved;
+    $('#end').dataset.result = camp.win ? 'win' : 'lose';
+    $('#end .han').textContent = camp.win ? '勝' : '敗';
+    $('#endStarRow').textContent = CAMPAIGN_UI.starRow(o.stars);
+    const goals = CAMPAIGN.starGoals(lv), hit = [camp.win, camp.win && !G.help, camp.win && CAMPAIGN.extra(lv, camp)];
+    $('#endGoals').innerHTML = goals.map((g, i) => `<li class="${hit[i] ? 'got' : ''}"><span>${hit[i] ? '★' : '☆'}</span>${ACCOUNT.esc(g)}</li>`).join('');
+    const nextOpen = next && CAMPAIGN_UI.unlocked().levels.has(next.id);
+    const again = $('#bAgain');
+    again.hidden = false; again.disabled = false;
+    again.textContent = camp.win && nextOpen ? `Trận tiếp: ${next.name}` : 'Đánh lại';
+    $('#bEndRetry').hidden = !(camp.win && nextOpen);
+    $('#bEndUndo').hidden = camp.win;                     // a lost battle can be taken back a move (one star less)
+    $('#endNote').textContent = saved && saved.opened.length ? `Mở khóa: ${saved.opened.join(', ')}!`
+      : camp.win && saved && saved.best > o.stars ? `Thành tích tốt nhất của bạn: ${CAMPAIGN_UI.starRow(saved.best)}`
+      : camp.win ? ''
+      : lv.type === 'mate' ? 'Đánh lại để thử cách khác. Bí quá thì xem Gợi ý ở nước đầu, chỉ mất một sao.'
+      : 'Có thể Đi lại vài nước để gỡ, hoặc đánh lại từ đầu. Dùng Đi lại hay Gợi ý chỉ mất một sao.';
   }
   function showEnd(on) { if (on) renderEnd(); $('#end').hidden = !on; }
   function again() {
+    if (G.mode === 'campaign') {
+      const next = G.over && G.over.camp && G.over.camp.win && CAMPAIGN.next(G.lv.id);
+      startCampaign(next && CAMPAIGN_UI.unlocked().levels.has(next.id) ? next.id : G.lv.id);
+      return;
+    }
     if (G.mode === 'online' && G.rated) { seek(); return; }
     if (G.mode === 'online') { send({ t: 'rematch' }); G.rematch[G.you] = true; renderEnd(); return; }
     startAI();
@@ -492,37 +600,76 @@
 
   // hero picker: the general piece of the player's side becomes this hero
   function renderHeroes() {
+    const cur = myHero();
     $('#heroes').innerHTML = [{ id: '', name: 'Tướng quân', han: '帥' }, ...HEROES.list]
-      .map(h => `<button type="button" data-id="${h.id}" class="${h.id === pref.hero ? 'on' : ''}" aria-pressed="${h.id === pref.hero}"><span class="hz">${h.han}</span><span>${h.name}</span></button>`).join('');
-    const h = HEROES.byId[pref.hero];
+      .map(h => {
+        const ok = heroAllowed(h.id);
+        return `<button type="button" data-id="${h.id}" class="${h.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${h.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('hero', h.id)}"`}><span class="hz">${ok ? h.han : '鎖'}</span><span>${h.name}</span></button>`;
+      }).join('');
+    const h = HEROES.byId[cur];
     $('#heroNote').textContent = h ? `${h.name}${h.kingdom ? ' · nhà ' + h.kingdom : ''}: ${h.look}.`
       : 'Chọn một danh tướng: quân Tướng của bạn sẽ hóa thành người đó, và bóng của họ phủ lên bàn cờ khi bạn chiếu tướng.';
   }
   $('#heroes').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    pref.hero = b.dataset.id; savePref(); renderHeroes();
+    if (!heroAllowed(b.dataset.id)) { SFX.init(); SFX.error(); toast(`${HEROES.byId[b.dataset.id].name}: ${CAMPAIGN.requirement('hero', b.dataset.id)}`); return; }
+    pref.hero = b.dataset.id; savePref(); renderHeroes(); savePick({ hero: pref.hero });
     SFX.init(); SFX.pick();
     if (G.mode === 'online') { toast('Chủ tướng mới sẽ ra trận từ phòng online tiếp theo'); return; }
-    const side = G.mode === 'ai' ? G.me : 1;
-    G.heroes[side] = pref.hero; VIEW.setHeroes({ [side]: pref.hero }); VIEW.showHero(side); updateStatus();
+    const side = vsAI() ? G.me : 1;
+    G.heroes[side] = myHero(); VIEW.setHeroes({ [side]: myHero() }); VIEW.showHero(side); updateStatus();
   });
   renderHeroes();
 
   // stage picker: where the board stands; applies at once, in or out of a game
   function renderStages() {
-    $('#segStage').innerHTML = STAGES.list.map(s => `<button type="button" data-id="${s.id}" class="${s.id === pref.stage ? 'on' : ''}" aria-pressed="${s.id === pref.stage}"><span class="hz">${s.han}</span><span>${s.name}</span></button>`).join('');
-    $('#stageNote').textContent = STAGES.byId[pref.stage].note;
+    const cur = myStage();
+    $('#segStage').innerHTML = STAGES.list.map(s => {
+      const ok = stageAllowed(s.id);
+      return `<button type="button" data-id="${s.id}" class="${s.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('stage', s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
+    }).join('');
+    $('#stageNote').textContent = STAGES.byId[cur].note;
   }
   $('#segStage').addEventListener('click', e => {
-    const b = e.target.closest('button'); if (!b || b.dataset.id === pref.stage) return;
-    pref.stage = b.dataset.id; savePref(); renderStages();
-    SFX.init(); SFX.pick(); VIEW.setStage(pref.stage);
+    const b = e.target.closest('button'); if (!b || b.dataset.id === myStage()) return;
+    SFX.init();
+    if (!stageAllowed(b.dataset.id)) { SFX.error(); toast(`${STAGES.byId[b.dataset.id].name}: ${CAMPAIGN.requirement('stage', b.dataset.id)}`); return; }
+    pref.stage = b.dataset.id; savePref(); renderStages(); savePick({ stage: pref.stage });
+    SFX.pick(); if (G.mode !== 'campaign') VIEW.setStage(pref.stage);   // a battle keeps its own battlefield
   });
   renderStages();
+  // the campaign: its pages live in campaign-ui.js; battles start here
+  function renderCampaignEntry() {
+    const u = CAMPAIGN_UI.unlocked(), done = CAMPAIGN_UI.progress(), next = CAMPAIGN.LEVELS.find(l => u.levels.has(l.id) && !done[l.id]);
+    $('#campNote').textContent = `${u.total}/${CAMPAIGN.MAX_STARS} sao · ` + (next ? `Trận kế tiếp: ${next.name}` : 'Đã thắng mọi trận, hãy săn đủ sao!');
+  }
+  CAMPAIGN_UI.init({ toast, onStart: startCampaign });
+  CAMPAIGN_UI.onChange(() => { renderHeroes(); renderStages(); renderCampaignEntry(); });
+  renderCampaignEntry();
+  $('#bCampaign').addEventListener('click', () => { SFX.init(); SFX.pick(); CAMPAIGN_UI.open(); });
+  $('#bEndRetry').addEventListener('click', () => { if (G.lv) startCampaign(G.lv.id); });
+  $('#bEndMap').addEventListener('click', () => { showEnd(false); CAMPAIGN_UI.open(); });
   $('#bRanked').addEventListener('click', seek);
   $('#bSeekCancel').addEventListener('click', stopSeek);
   $('#bRanks').addEventListener('click', () => ACCOUNT.openRanks(0));
+  // on signing in: first the campaign progress (it decides what may be picked), then the account's hero and stage;
+  // an account that never saved them takes this browser's instead. Renames and the like don't sync again.
+  let syncedFor = 0;
+  function adoptPicks(u) {
+    const send = {};
+    if (u.hero == null) send.hero = myHero(); else if (heroAllowed(u.hero)) pref.hero = u.hero;
+    if (u.stage == null) send.stage = myStage(); else if (stageAllowed(u.stage)) pref.stage = u.stage;
+    savePref(); renderHeroes(); renderStages();
+    if (G.mode === 'menu' || G.mode === 'ai') { const side = G.mode === 'ai' ? G.me : 1; G.heroes[side] = myHero(); VIEW.setHeroes({ [side]: myHero() }); updateStatus(); }
+    if (G.mode !== 'campaign') VIEW.setStage(myStage());   // a battle keeps its own battlefield
+    if (Object.keys(send).length) savePick(send);
+  }
   ACCOUNT.onChange(u => {
+    const id = u ? u.id : 0;
+    if (id !== syncedFor) {
+      syncedFor = id;
+      CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
+    }
     $('#bRanked').disabled = !u;
     $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở trên để chơi xếp hạng.';
   });
@@ -544,7 +691,7 @@
   });
   $('#bDrawYes').addEventListener('click', () => send({ t: 'draw' }));
   $('#bDrawNo').addEventListener('click', () => { send({ t: 'draw-no' }); G.drawOffer = 0; updateStatus(); });
-  $('#bNew').addEventListener('click', () => { if (G.mode === 'online') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
+  $('#bNew').addEventListener('click', () => { if (G.mode === 'campaign') startCampaign(G.lv.id); else if (G.mode === 'online') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
   $('#bAgain').addEventListener('click', again);
   $('#bEndMenu').addEventListener('click', () => { showEnd(false); showMenu(true); });
   $('#bEndClose').addEventListener('click', () => showEnd(false));
@@ -560,7 +707,7 @@
 
   // test hook (only with #debug in the URL): the engine plays both sides
   if (location.hash === '#debug') window.__ct = {
-    G, commit, endGame,
+    G, commit, endGame, startCampaign,
     selfPlay() { G.mode = 'debug'; const r = XQ.think(G.pos, { time: 120, history: G.keys.slice() }); if (r.move) commit(r.move); return r.move; },
   };
 
@@ -568,9 +715,9 @@
   async function boot() {
     // the brush font has to be in before the characters are painted on the pieces
     try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢赤壁呂董虎牢關' + HEROES.list.map(h => h.han).join('') + STAGES.list.map(s => s.han).join('')), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
-    VIEW.setStage(pref.stage);
+    VIEW.setStage(myStage());
     VIEW.init($('#view'));
-    G.heroes[1] = pref.hero; VIEW.setHeroes(G.heroes);
+    G.heroes[1] = myHero(); VIEW.setHeroes(G.heroes);
     VIEW.setBoard(G.pos.b, []);
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();

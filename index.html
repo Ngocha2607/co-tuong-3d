@@ -88,6 +88,65 @@
   .btn.warn { background: #7a1712; border-color: var(--red-ink); }
   .btn.wide { width: 100%; }
   #rankedBox { display: grid; gap: 8px; }
+
+  /* ---------- campaign ---------- */
+  #campBox .btn.primary { font: 700 16px/1.2 var(--serif); padding: 13px 12px; letter-spacing: 0.02em; }
+  #goal { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--gold-soft); background: rgba(227, 180, 72, 0.08); display: grid; gap: 3px; }
+  #goal b { font: 700 15px/1.25 var(--serif); color: var(--gold); }
+  #goal p { margin: 0; font-weight: 600; }
+  #goal small { color: var(--dim); }
+  #goal #goalHelp { color: #ffb38a; }
+  #campaign .card.camp { width: min(760px, 100%); position: relative; }
+  #bCampClose { position: absolute; top: 18px; right: 18px; }
+  .camp-head { display: flex; align-items: center; gap: 14px; margin: 0 46px 16px 0; }
+  .camp-head .seal, .chead .seal { width: 52px; height: 52px; flex: none; display: grid; place-items: center; background: var(--red); border-radius: 10px; color: #fff3dc; font: 700 28px/1 var(--han); box-shadow: inset 0 0 0 2px rgba(255, 230, 190, 0.35); }
+  #campaign .camp-head h2 { margin: 0; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  .camp-head p { margin: 4px 0 0; color: var(--gold); font-weight: 700; }
+  .chapters { display: grid; gap: 12px; }
+  .chap { padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.22); }
+  .chap.done { border-color: var(--gold-soft); }
+  .chap.closed { opacity: 0.6; }
+  .chead { display: flex; align-items: center; gap: 12px; }
+  .chead .seal { width: 42px; height: 42px; font-size: 22px; }
+  .chead small { color: var(--dim); font-weight: 600; }
+  .chead h3 { margin: 0; font: 700 19px/1.2 var(--serif); }
+  .chap .intro { margin: 8px 0 10px; color: var(--dim); font-size: 13.5px; }
+  .lvs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .lv { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 2px 8px; align-items: center; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.05); color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+  .lv:hover { border-color: var(--gold); }
+  .lv:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .lv .hz { grid-row: span 2; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 2px currentColor; font: 700 17px/1 var(--han); }
+  .lv .lvt b { display: block; font-size: 13px; line-height: 1.25; }
+  .lv .lvt small { color: var(--dim); font-size: 12px; }
+  .lv .st { grid-column: 2; color: var(--gold); letter-spacing: 0.08em; font-size: 14px; }
+  .lv.locked { cursor: default; opacity: 0.5; border-style: dashed; }
+  .lv.locked .hz { background: #3a2c22; color: var(--dim); }
+  .lv.won { border-color: var(--gold-soft); }
+  #campaign h4.sub { margin: 18px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+  .rewards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .rewards li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(245, 233, 212, 0.04); border: 1px dashed var(--line); color: var(--dim); }
+  .rewards li.got { border-style: solid; border-color: var(--gold-soft); color: var(--ink); }
+  .rewards .hz { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #3a2c22; color: var(--dim); font: 700 16px/1 var(--han); }
+  .rewards li.got .hz { background: var(--gold); color: #2a1408; }
+  .rewards b { display: block; font-size: 13px; }
+  .rewards small { font-size: 12px; color: var(--dim); }
+  #campTitleBox { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+  #campTitleBox label { color: var(--dim); font-weight: 600; }
+  #campTitle { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: #24160f; color: var(--ink); font: 600 14px/1.2 var(--ui); }
+  #brief { z-index: 11; }
+  #brief .card { position: relative; }
+  #brief small#briefHead { color: var(--gold); font-weight: 700; letter-spacing: 0.04em; }
+  #brief h2 { margin: 4px 0 6px; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: rgba(227, 180, 72, 0.16); color: var(--gold); font-weight: 700; font-size: 12px; }
+  #briefStory { margin: 12px 0; line-height: 1.6; }
+  .goalline { margin: 0 0 8px; }
+  .goals { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; text-align: left; }
+  .goals li { display: flex; gap: 8px; color: var(--dim); }
+  .goals li span { color: var(--dim); width: 16px; }
+  .goals li.got { color: var(--ink); }
+  .goals li.got span { color: var(--gold); }
+  #endStars .stars { font-size: 34px; letter-spacing: 0.15em; color: var(--gold); margin: 2px 0 8px; }
+  #endStars .goals { max-width: 340px; margin: 0 auto 6px; }
   #bMoves { display: none; }
   #drawAsk { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); font-weight: 700; }
   #drawAsk .btn { padding: 7px 12px; }
@@ -146,6 +205,8 @@
   .picks button:hover { border-color: var(--gold-soft); color: var(--ink); }
   .picks button.on { color: var(--ink); border-color: var(--gold); background: rgba(227, 180, 72, 0.14); }
   .picks button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .picks button.locked { opacity: 0.55; border-style: dashed; }
+  .picks button.locked .hz { background: #3a2c22; color: var(--dim); box-shadow: inset 0 0 0 2px rgba(227, 180, 72, 0.35); }
   .picks .hz { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 2px currentColor; font: 700 16px/1 var(--han); }
   .linkish { background: none; border: 0; padding: 0; color: var(--gold); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; justify-self: start; }
   #ranks .card { width: min(560px, 100%); position: relative; }
@@ -158,6 +219,8 @@
   .lb tbody tr { cursor: pointer; }
   .lb tbody tr:hover td { background: rgba(245, 233, 212, 0.05); }
   .lb tr.me td { background: rgba(227, 180, 72, 0.13); }
+  .ttl { display: block; color: var(--gold); font-size: 11.5px; font-weight: 600; }
+  .phead .ttl { font-size: 13px; }
   .lb td.nm { font-weight: 700; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lb td:first-child { color: var(--dim); width: 32px; }
   .lb tbody tr:nth-child(-n+3) td:first-child { color: var(--gold); font-weight: 700; }
@@ -213,6 +276,11 @@
     #bMoves { display: block; }
     #room { padding: 8px 10px; }
     #room .mhead { display: flex; }
+    #goal { padding: 7px 10px; }
+    #goal p, #goal #goalHelp { display: none; }
+    .lvs { grid-template-columns: 1fr; }
+    .rewards { grid-template-columns: 1fr; }
+    #campaign .camp-head h2, #brief h2 { font-size: 22px; }
     #room .link { display: none; }
     #menu { background: rgba(14, 8, 6, 0.8); justify-content: center; }
     #menu .card { margin: 0; }
@@ -247,6 +315,13 @@
     <div class="link" id="roomLink"></div>
     <button class="btn" id="bCopy" type="button">Sao chép link mời</button>
   </div>
+  <div id="goal" hidden>
+    <div class="mhead"><span>Nhiệm vụ</span></div>
+    <b id="goalName"></b>
+    <p id="goalText"></p>
+    <small id="goalCount"></small>
+    <small id="goalHelp" hidden>Đã dùng Đi lại hoặc Gợi ý: tối đa 2 sao</small>
+  </div>
   <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
   <ol id="moves"></ol>
   <div id="drawAsk" hidden><span>Đối thủ cầu hòa</span><button class="btn gold" id="bDrawYes" type="button">Đồng ý</button><button class="btn" id="bDrawNo" type="button">Từ chối</button></div>
@@ -266,6 +341,11 @@
 <div id="menu" class="overlay" hidden>
   <div class="card">
     <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục – Ngụy tranh hùng trên bàn cờ</p></div></div>
+    <section id="campBox">
+      <h2>Chiến dịch</h2>
+      <button class="btn primary wide" id="bCampaign" type="button">Chinh chiến Tam Quốc</button>
+      <p class="note" id="campNote"></p>
+    </section>
     <section id="heroBox">
       <h2>Chủ tướng</h2>
       <div class="picks" id="heroes"></div>
@@ -318,10 +398,13 @@
     <div class="han">勝</div>
     <h2 id="endTitle"></h2>
     <p id="endSub"></p>
+    <div id="endStars" hidden><div class="stars" id="endStarRow"></div><ul class="goals" id="endGoals"></ul></div>
     <p id="endNote"></p>
     <div class="row">
       <button class="btn primary" id="bAgain" type="button">Ván mới</button>
+      <button class="btn" id="bEndRetry" type="button" hidden>Đánh lại</button>
       <button class="btn" id="bEndUndo" type="button">Đi lại</button>
+      <button class="btn" id="bEndMap" type="button" hidden>Bản đồ chiến dịch</button>
       <button class="btn" id="bEndMenu" type="button">Về menu</button>
     </div>
   </div>
@@ -334,6 +417,31 @@
     <p class="note" id="seekInfo">Đang vào hàng chờ…</p>
     <div id="seekTime">0:00</div>
     <button class="btn wide" id="bSeekCancel" type="button">Hủy tìm trận</button>
+  </div>
+</div>
+
+<div id="campaign" class="overlay dialog" hidden>
+  <div class="card camp">
+    <button class="icon" id="bCampClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="camp-head"><span class="seal">戰</span><div><h2>Chinh chiến Tam Quốc</h2><p id="campSum"></p></div></div>
+    <div class="chapters" id="campMap"></div>
+    <h4 class="sub">Phần thưởng</h4>
+    <ul class="rewards" id="campRewards"></ul>
+    <div id="campTitleBox" hidden><label for="campTitle">Danh hiệu</label><select id="campTitle"></select></div>
+    <p class="note" id="campTitleNote"></p>
+  </div>
+</div>
+
+<div id="brief" class="overlay dialog" hidden>
+  <div class="card">
+    <small id="briefHead"></small>
+    <h2 id="briefTitle"></h2>
+    <span class="badge" id="briefType"></span>
+    <p id="briefStory"></p>
+    <p class="goalline">Mục tiêu: <b id="briefGoal"></b></p>
+    <ul class="goals" id="briefStars"></ul>
+    <p class="note" id="briefFoe"></p>
+    <div class="row2" style="margin-top:14px"><button class="btn" id="bBriefBack" type="button">Quay lại</button><button class="btn primary" id="bBriefGo" type="button">Xuất trận</button></div>
   </div>
 </div>
 
@@ -352,9 +460,12 @@
 <script src="src/audio.js"></script>
 <script src="src/heroes.js"></script>
 <script src="src/models.js"></script>
+<script src="src/stage-list.js"></script>
 <script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
+<script src="src/campaign.js"></script>
 <script src="src/account.js"></script>
+<script src="src/campaign-ui.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>

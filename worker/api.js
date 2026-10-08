@@ -1,11 +1,15 @@
-// worker/api.js — HTTP side of accounts: Google sign-in, the signed-in player, nicknames, leaderboard, profiles.
+// worker/api.js — HTTP side of accounts: Google sign-in, the signed-in player (nickname, title, the hero and stage
+// they picked), leaderboard, profiles, and campaign progress (each battle won is replayed here before it is saved).
 // Accounts need three things configured (see README): the D1 database DB, GOOGLE_CLIENT_ID and the SESSION_SECRET
 // secret. Without them the site still works, just without sign-in and ranked play.
 import { verifyGoogle, makeSession, readSession, cookieOf, setCookie } from './auth.js';
 import { PROVISIONAL } from './elo.js';
+import CAMPAIGN from '../src/campaign.js';
+import HEROES from '../src/heroes.js';
+import STAGE_LIST from '../src/stage-list.js';
 
 export const authReady = env => !!(env.DB && env.GOOGLE_CLIENT_ID && env.SESSION_SECRET);
-const USER_COLS = 'id, name, rating, games, wins, draws, losses';
+const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage';
 
 const json = (body, init = {}) => Response.json(body, { ...init, headers: { 'cache-control': 'no-store', ...init.headers } });
 const fail = (status, error) => json({ error }, { status });
@@ -29,6 +33,12 @@ const rankOf = async (env, u) => u.games >= PROVISIONAL
 // state-changing requests must come from our own page (the cookie is SameSite=Lax; this closes the rest)
 const sameOrigin = (req, url) => req.headers.get('origin') === url.origin && (req.headers.get('content-type') || '').startsWith('application/json');
 const body = async req => { try { return await req.json(); } catch (e) { return {}; } };
+
+// campaign stars of a player: { [battle id]: stars }
+async function progressOf(env, uid) {
+  const { results } = await env.DB.prepare('SELECT level, stars FROM campaign WHERE user_id = ?').bind(uid).all();
+  return Object.fromEntries(results.map(r => [r.level, r.stars]));
+}
 
 export async function api(req, env, url) {
   const p = url.pathname, post = req.method === 'POST';
@@ -55,10 +65,50 @@ export async function api(req, env, url) {
     const user = await currentUser(req, env);
     if (!post) return json({ user: user && { ...user, rank: await rankOf(env, user) } });
     if (!user) return fail(401, 'not signed in');
-    const name = cleanName((await body(req)).name);
-    if (!name) return fail(400, 'Tên dài 2–20 ký tự, chỉ gồm chữ, số, dấu cách và . _ -');
-    await env.DB.prepare('UPDATE users SET name = ? WHERE id = ?').bind(name, user.id).run();
-    return json({ user: { ...user, name, rank: await rankOf(env, user) } });
+    const b = await body(req), next = { ...user };
+    let won = null;                                            // what the campaign has given this player, when needed
+    const earned = async () => won || (won = CAMPAIGN.unlocked(await progressOf(env, user.id)));
+    if ('name' in b) {
+      next.name = cleanName(b.name);
+      if (!next.name) return fail(400, 'Tên dài 2–20 ký tự, chỉ gồm chữ, số, dấu cách và . _ -');
+    }
+    if ('title' in b) {                                        // '' takes the title off
+      next.title = typeof b.title === 'string' ? b.title : '';
+      if (next.title && !(await earned()).titles.includes(next.title)) return fail(403, 'Danh hiệu này chưa đạt được');
+    }
+    if ('hero' in b) {                                         // '' = the plain general
+      if (b.hero !== '' && !HEROES.valid(b.hero)) return fail(400, 'no such hero');
+      if (b.hero && HEROES.byId[b.hero].campaign && !(await earned()).heroes.has(b.hero)) return fail(403, 'Chủ tướng này chưa mở khóa');
+      next.hero = b.hero;
+    }
+    if ('stage' in b) {
+      if (!STAGE_LIST.valid(b.stage)) return fail(400, 'no such stage');
+      if (STAGE_LIST.byId[b.stage].campaign && !(await earned()).stages.has(b.stage)) return fail(403, 'Bối cảnh này chưa mở khóa');
+      next.stage = b.stage;
+    }
+    await env.DB.prepare('UPDATE users SET name = ?, title = ?, hero = ?, stage = ? WHERE id = ?').bind(next.name, next.title, next.hero, next.stage, user.id).run();
+    return json({ user: { ...next, rank: await rankOf(env, next) } });
+  }
+  if (p === '/api/campaign') {
+    const user = await currentUser(req, env);
+    if (!user) return fail(401, 'not signed in');
+    const progress = await progressOf(env, user.id);
+    if (!post) return json({ levels: progress });
+    // a battle won: replay it, then keep it if it earns more stars than before
+    const b = await body(req), lv = CAMPAIGN.level(b.level);
+    if (!lv) return fail(404, 'no such battle');
+    if (!Array.isArray(b.moves) || b.moves.length > 400) return fail(400, 'bad moves');
+    if (!CAMPAIGN.unlocked(progress).levels.has(lv.id)) return fail(403, 'Trận này chưa mở');
+    const r = CAMPAIGN.judge(lv, b.moves);
+    if (!r.over || !r.win) return fail(400, 'Ván cờ không phải một trận thắng');
+    const stars = CAMPAIGN.stars(lv, r, !!b.help), before = progress[lv.id] | 0;
+    if (stars > before) {
+      await env.DB.prepare(`INSERT INTO campaign (user_id, level, stars, moves, help, updated_at) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT (user_id, level) DO UPDATE SET stars = excluded.stars, moves = excluded.moves, help = excluded.help, updated_at = excluded.updated_at
+        WHERE excluded.stars > campaign.stars`).bind(user.id, lv.id, stars, b.moves.join(','), b.help ? 1 : 0, Date.now()).run();
+      progress[lv.id] = stars;
+    }
+    return json({ stars, levels: progress });
   }
   if (p === '/api/leaderboard') {
     const { results } = await env.DB.prepare(`SELECT ${USER_COLS} FROM users WHERE games >= 10 ORDER BY rating DESC, games DESC LIMIT 100`).all();

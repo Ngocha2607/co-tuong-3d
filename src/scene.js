@@ -50,6 +50,7 @@ const VIEW = (() => {
   // ---------- setup ----------
   let keyLight, hemiLight, rimLight, checkRing, checkLight, selRing, hintRings = [], dots = [], capRings = [], lastMarks = [];
   let stage = null, stageId = '';          // what surrounds the table (stages.js)
+  let occluders = [];                      // its scenery that may come between the camera and the board
   const glowTex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -437,6 +438,7 @@ const VIEW = (() => {
     stage = STAGES.build(wantStage, { glowTex, low }); stageId = wantStage;
     if (stage.sky) stage.group.add(stage.sky);
     scene.add(stage.group);
+    occluders = []; stage.group.traverse(o => { if (o.userData.clear) occluders.push(o); });
     stage.group.traverse(o => { if (o.isMesh && !o.material.transparent) o.receiveShadow = true; });
     const L = stage.light;
     hemiLight.color.set(L.hemi[0]); hemiLight.groundColor.set(L.hemi[1]); hemiLight.intensity = L.hemi[2];
@@ -557,6 +559,12 @@ const VIEW = (() => {
     // lifted selection, lantern sway, check pulse
     for (const u of units.values()) { const y = (u.lift || 0) * 0.22; if (!busy || u.lift) u.root.position.y += (y - u.root.position.y) * Math.min(1, dt * 12); }
     if (stage) stage.update(t, dt, camera);
+    // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
+    for (const o of occluders) {
+      const ax = camera.position.x, az = camera.position.z, bx = focus.x - ax, bz = focus.z - az, px = o.position.x - ax, pz = o.position.z - az;
+      const k = Math.max(0, Math.min(1, (px * bx + pz * bz) / (bx * bx + bz * bz || 1)));
+      o.visible = Math.hypot(px - bx * k, pz - bz * k) > o.userData.clear;
+    }
     if (checkRing.visible) { const k = 0.5 + 0.5 * Math.sin(t / 160); checkRing.material.opacity = 0.5 + 0.45 * k; checkLight.intensity = 1.5 + k * 1.5; } else checkLight.intensity = 0;
     if (selRing.visible) selRing.scale.setScalar(1 + Math.sin(t / 200) * 0.04);
     // banners turn towards the camera so the characters on them always read the right way round

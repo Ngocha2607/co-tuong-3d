@@ -71,7 +71,7 @@ export class Lobby extends DurableObject {
     const since = [x.a.since, y.a.since];
     this.mark(x, 0); this.mark(y, 0);
     const [red, black] = Math.random() < 0.5 ? [x, y] : [y, x];
-    const seat = s => ({ id: s.a.user.id, name: s.a.user.name, rating: s.a.user.rating });
+    const seat = s => ({ id: s.a.user.id, name: s.a.user.name, rating: s.a.user.rating, title: s.a.user.title || '' });
     for (let i = 0; i < 4; i++) {
       const room = code();
       const r = await this.env.ROOMS.get(this.env.ROOMS.idFromName(room)).fetch('https://room/setup', {

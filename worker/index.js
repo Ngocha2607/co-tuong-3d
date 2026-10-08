@@ -11,7 +11,7 @@ const ROOM_RE = /^[A-Z0-9]{4,8}$/;
 function withUser(req, user) {
   const h = new Headers(req.headers);
   h.delete('x-user');
-  if (user) h.set('x-user', encodeURIComponent(JSON.stringify({ id: user.id, name: user.name, rating: user.rating })));
+  if (user) h.set('x-user', encodeURIComponent(JSON.stringify({ id: user.id, name: user.name, rating: user.rating, title: user.title || '' })));
   return new Request(req, { headers: h });
 }
 
