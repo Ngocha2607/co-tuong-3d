@@ -1,0 +1,429 @@
+// stages.js — where the game is played: the board always sits on its table in the middle, the stage is everything
+// around it (sky, ground, distant scenery, its own light and fog, moving details). Built from code like the rest.
+// Each stage: build(ctx) -> { group, sky, fog, fogSpan, light, ambience, update(t, dt, camera) }; scene.js adds the
+// group and applies the light. ctx: { glowTex, low } (low = fewer particles on small or weak devices).
+'use strict';
+const STAGES = (() => {
+  // in the order of history; han: the character on the picker
+  const list = [
+    { id: 'room', name: 'Quân trướng', han: '帳', note: 'Đêm trong trướng, đèn lồng đỏ, bụi bay trong ánh đèn.' },
+    { id: 'ho-lao', name: 'Hổ Lao quan', han: '虎', note: 'Năm 190, trước cửa ải Hổ Lao: Lưu Bị, Quan Vũ, Trương Phi đại chiến Lữ Bố.' },
+    { id: 'truong-ban', name: 'Trường Bản', han: '橋', note: 'Năm 208, bên cầu Trường Bản: Trương Phi một mình chặn đại quân Tào Tháo.' },
+    { id: 'xich-bich', name: 'Xích Bích', han: '赤', note: 'Năm 208, trên sông Trường Giang: hỏa công đốt chiến thuyền Tào Tháo dưới vách đá đỏ.' },
+    { id: 'ngu-truong', name: 'Ngũ Trượng Nguyên', han: '星', note: 'Năm 234, đêm thu trong doanh trại Thục, một ngôi sao lớn rơi xuống.' },
+  ];
+  const byId = Object.assign(Object.create(null), Object.fromEntries(list.map(s => [s.id, s])));
+
+  // ---------- helpers ----------
+  const flat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: o.rough ?? 0.9, metalness: o.metal || 0, flatShading: true, emissive: o.emissive || '#000000', emissiveIntensity: o.glow || 1 });
+  function add(parent, geo, mat, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; }
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  // a dome coloured from the zenith down to the horizon and below it
+  function skyDome(top, horizon, below) {
+    const r = 95, g = new THREE.SphereGeometry(r, 32, 16), p = g.attributes.position, col = [], c = new THREE.Color();
+    const T = new THREE.Color(top), H = new THREE.Color(horizon), B = new THREE.Color(below);
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i) / r;
+      if (y >= 0) c.copy(H).lerp(T, Math.pow(y, 0.55)); else c.copy(H).lerp(B, Math.min(1, -y * 5));
+      col.push(c.r, c.g, c.b);
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+    m.renderOrder = -1;
+    return m;
+  }
+  function glow(ctx, color, size, opacity = 1) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
+    s.scale.setScalar(size);
+    return s;
+  }
+  // floating specks (dust, embers, fireflies): box of size w x h x w around a centre, drifting by vel(i, t)
+  function specks(ctx, n, color, size, box, opacity = 0.8) {
+    const g = new THREE.BufferGeometry(), a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { a[i * 3] = rnd(-box[0], box[0]); a[i * 3 + 1] = rnd(box[1], box[2]); a[i * 3 + 2] = rnd(-box[0], box[0]); }
+    g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    return new THREE.Points(g, new THREE.PointsMaterial({ size, map: ctx.glowTex, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
+  }
+  function woodTexture(base, planks) {
+    const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+    g.fillStyle = base; g.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < planks; i++) {
+      const y = (i * 512) / planks;
+      g.fillStyle = `rgba(0, 0, 0, ${0.12 + Math.random() * 0.12})`; g.fillRect(0, y, 512, 3);
+      for (let k = 0; k < 14; k++) { g.strokeStyle = `rgba(40, 20, 8, ${0.06 + Math.random() * 0.08})`; g.beginPath(); const yy = y + rnd(4, 512 / planks - 2); g.moveTo(0, yy); g.lineTo(512, yy + rnd(-3, 3)); g.stroke(); }
+    }
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+
+  // ---------- the lantern-lit room (the original setting) ----------
+  function room(ctx) {
+    const group = new THREE.Group();
+    group.add(MODELS.table());
+    const lanterns = [];
+    for (const [x, z, y] of [[-11.5, -7, 7.4], [11.5, -7, 6.8], [-11.5, 7, 7], [11.5, 7, 7.6]]) {
+      const l = MODELS.lantern(); l.position.set(x, y, z); group.add(l);
+      const pl = new THREE.PointLight('#ff7a3a', 1.6, 30, 2); pl.position.set(x, y, z); group.add(pl);
+      lanterns.push({ l, pl, ph: Math.random() * 6 });
+    }
+    const motes = specks(ctx, ctx.low ? 80 : 160, '#ffb36a', 0.09, [12, 0, 8], 0.55);   // dust in the lantern light
+    group.add(motes);
+    return {
+      group, sky: null, background: '#140d0a', fog: '#140d0a', fogSpan: 26, ambience: '',
+      light: { hemi: ['#ffe2c0', '#2a1408', 0.8], key: ['#ffe9cc', 1.9], rim: ['#7fa4ff', 0.45] },
+      update(t, dt) {
+        for (const L of lanterns) { L.l.rotation.z = Math.sin(t / 1300 + L.ph) * 0.06; L.pl.intensity = 1.55 + Math.sin(t / 170 + L.ph) * 0.08 + Math.sin(t / 53 + L.ph) * 0.05; }
+        motes.rotation.y += dt * 0.01; motes.position.y = Math.sin(t / 4000) * 0.3;
+      },
+    };
+  }
+
+  // ---------- Red Cliffs: on a deck on the river, the enemy fleet burning ----------
+  function cliffTexture() {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 512; const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 512); gr.addColorStop(0, '#3a1810'); gr.addColorStop(1, '#1e0c08');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 512);
+    for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(0, 0, 0, ${rnd(0.08, 0.25)})`; g.fillRect(rnd(0, 256), rnd(0, 512), rnd(10, 60), rnd(2, 6)); }
+    g.fillStyle = '#b3261e'; g.font = `bold 120px ${MODELS.BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('赤', 128, 170); g.fillText('壁', 128, 310);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  function ship(ctx, burning) {
+    const s = new THREE.Group(), wood = flat('#24140c'), dark = flat('#160c08');
+    add(s, new THREE.BoxGeometry(2.2, 1.1, 8), wood, 0, 0.2, 0);
+    const bow = add(s, new THREE.BoxGeometry(1.6, 1.0, 2.2), wood, 0, 0.35, 4.6); bow.rotation.x = -0.35;
+    add(s, new THREE.BoxGeometry(2.0, 1.2, 2.4), dark, 0, 1.2, -2.4);              // stern castle
+    const flames = [], smoke = [];
+    for (const [z, h] of [[1.2, 6], [-0.8, 5]]) {
+      add(s, new THREE.CylinderGeometry(0.08, 0.1, h, 5), dark, 0, 0.8 + h / 2, z);
+      const sail = add(s, new THREE.PlaneGeometry(2.6, h * 0.55), new THREE.MeshStandardMaterial({ color: burning ? '#3a1408' : '#3a2a20', side: THREE.DoubleSide, roughness: 1, flatShading: true }), 0, 1.3 + h * 0.45, z + 0.05);
+      sail.rotation.y = Math.PI / 2 + rnd(-0.2, 0.2);
+    }
+    let pool = null;
+    if (burning) {
+      for (let i = 0; i < 9; i++) {
+        const f = glow(ctx, i % 3 ? '#ff5a14' : '#ffb050', rnd(3, 5.5), 0.7);
+        f.position.set(rnd(-1, 1), rnd(1.5, 6.5), rnd(-3.5, 3.5)); s.add(f);
+        flames.push({ f, base: f.scale.x, y: f.position.y, ph: Math.random() * 10 });
+      }
+      pool = add(s, new THREE.CircleGeometry(8, 24), new THREE.MeshBasicMaterial({ map: ctx.glowTex, color: '#ff5a1a', transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }), 0, -0.05, 0);
+      pool.rotation.x = -Math.PI / 2;
+      for (let i = 0; i < (ctx.low ? 2 : 4); i++) {
+        const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color: '#2a1a14', transparent: true, opacity: 0.5, depthWrite: false }));
+        s.add(m); smoke.push({ m, k: i / 4 });
+      }
+    }
+    return { s, flames, smoke, pool };
+  }
+  function xichBich(ctx) {
+    const group = new THREE.Group();
+    // the deck the board stands on, with a railing
+    const deckTex = woodTexture('#2e1c10', 8); deckTex.repeat.set(3, 4);
+    const deck = add(group, new THREE.BoxGeometry(17, 0.4, 22), new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }), 0, -1.1, 0);
+    deck.receiveShadow = true;
+    const rail = flat('#2a160c');
+    for (const sx of [-1, 1]) { add(group, new THREE.BoxGeometry(0.25, 0.9, 22), rail, sx * 8.4, -0.5, 0); add(group, new THREE.BoxGeometry(17, 0.9, 0.25), rail, 0, -0.5, sx * 10.9); }
+    for (let z = -10; z <= 10; z += 2.5) for (const sx of [-1, 1]) add(group, new THREE.BoxGeometry(0.3, 1.2, 0.3), rail, sx * 8.4, -0.4, z);
+    // the river: dark and glossy, so the fires shine on it
+    const water = add(group, new THREE.CircleGeometry(95, 48), new THREE.MeshStandardMaterial({ color: '#2a1210', roughness: 0.35, metalness: 0.25 }), 0, -1.8, 0);
+    water.rotation.x = -Math.PI / 2;
+    // the cliffs with the carved characters, and a far shore
+    const rock = flat('#2a120c');
+    const cliff = new THREE.Group(); cliff.position.set(-18, -1.8, -50); cliff.rotation.y = 0.35; group.add(cliff);
+    add(cliff, new THREE.BoxGeometry(26, 24, 6), rock, 0, 12, -3);
+    add(cliff, new THREE.PlaneGeometry(9, 18), new THREE.MeshBasicMaterial({ map: cliffTexture(), color: '#c8c8c8' }), 2, 9, 0.02);
+    for (let i = 0; i < 9; i++) { const r = add(cliff, new THREE.DodecahedronGeometry(rnd(3, 6), 0), rock, rnd(-16, 18), rnd(2, 20), rnd(-6, 1)); r.rotation.set(rnd(0, 3), rnd(0, 3), 0); }
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 + 0.3, r = add(group, new THREE.ConeGeometry(rnd(6, 11), rnd(5, 12), 5), rock, Math.cos(a) * 78, 1, Math.sin(a) * 78); r.rotation.y = rnd(0, 3); }
+    // the burning fleet, all around
+    const fleet = [];
+    const spots = [[-0.6, 28], [0.15, 34], [0.7, 26], [1.7, 30], [2.6, 27], [3.3, 36], [4.1, 29], [5.0, 33], [5.7, 25]];
+    for (const [a, r] of ctx.low ? spots.filter((_, i) => i % 2 === 0) : spots) {
+      const sh = ship(ctx, true); sh.s.position.set(Math.cos(a) * r, -1.7, Math.sin(a) * r); sh.s.rotation.y = rnd(0, Math.PI * 2);
+      group.add(sh.s); fleet.push(sh);
+    }
+    // the fires light the scene from far off, so the deck around the board stays dim
+    const fires = [new THREE.PointLight('#ff6a2a', 2.4, 95, 1.6), new THREE.PointLight('#ff8a3a', 2, 95, 1.6)];
+    fires[0].position.set(-26, 5, -30); fires[1].position.set(28, 5, 22); fires.forEach(l => group.add(l));
+    const embers = specks(ctx, ctx.low ? 90 : 220, '#ff9a4a', 0.18, [40, -1, 14], 0.9);
+    group.add(embers);
+    const ep = embers.geometry.attributes.position;
+    return {
+      group, sky: skyDome('#12060a', '#8a2a12', '#1a0808'), fog: '#2a0e0a', fogSpan: 60, ambience: 'river-fire',
+      light: { hemi: ['#ff9a6a', '#1a0606', 0.55], key: ['#ffc9a0', 1.35], rim: ['#ff6a3a', 0.6] },
+      update(t, dt) {
+        fires[0].intensity = 2.4 + Math.sin(t / 90) * 0.35 + Math.sin(t / 37) * 0.25;
+        fires[1].intensity = 2 + Math.sin(t / 110 + 2) * 0.35 + Math.sin(t / 41) * 0.2;
+        for (const sh of fleet) {
+          for (const F of sh.flames) { const k = 0.75 + 0.25 * Math.sin(t / 80 + F.ph) + 0.15 * Math.sin(t / 23 + F.ph * 3); F.f.scale.setScalar(F.base * k); F.f.position.y = F.y + Math.sin(t / 200 + F.ph) * 0.2; }
+          if (sh.pool) sh.pool.material.opacity = 0.24 + 0.06 * Math.sin(t / 70 + sh.s.id);
+          for (const S of sh.smoke) {
+            S.k = (S.k + dt * 0.06) % 1;
+            S.m.position.set(Math.sin(S.k * 4) * 1.5 + S.k * 6, 4 + S.k * 22, 0); S.m.scale.setScalar(4 + S.k * 14); S.m.material.opacity = 0.55 * Math.min(1, S.k * 5) * (1 - S.k);
+          }
+        }
+        for (let i = 0; i < ep.count; i++) {
+          let y = ep.getY(i) + dt * (1.2 + (i % 5) * 0.4);
+          if (y > 14) y = -1;
+          ep.setY(i, y); ep.setX(i, ep.getX(i) + Math.sin(t / 900 + i) * dt * 0.6);
+        }
+        ep.needsUpdate = true;
+      },
+    };
+  }
+
+  // ---------- Wuzhang Plains: an autumn night in the Shu camp, a great star falls ----------
+  function tent(color) {
+    const g = new THREE.Group(), cloth = flat(color);
+    const body = add(g, new THREE.ConeGeometry(2.6, 3.2, 4), cloth, 0, 1.6, 0); body.rotation.y = Math.PI / 4;
+    add(g, new THREE.BoxGeometry(0.9, 1.3, 0.1), new THREE.MeshStandardMaterial({ color: '#2a1408', emissive: '#ff8a3a', emissiveIntensity: Math.random() < 0.6 ? 0.9 : 0 }), 0, 0.65, 1.3);
+    add(g, new THREE.CylinderGeometry(0.04, 0.04, 2, 4), flat('#2a160a'), 0, 4, 0);
+    const flag = add(g, new THREE.PlaneGeometry(0.9, 0.6), new THREE.MeshStandardMaterial({ color: '#a8231b', side: THREE.DoubleSide, roughness: 1 }), 0.45, 4.6, 0);
+    return { g, flag };
+  }
+  function brazier(ctx, group, x, z) {
+    const b = new THREE.Group(); b.position.set(x, -1.4, z); group.add(b);
+    add(b, new THREE.CylinderGeometry(0.06, 0.08, 1.6, 5), flat('#1a1210'), 0, 0.8, 0);
+    add(b, new THREE.CylinderGeometry(0.45, 0.25, 0.4, 8), flat('#3a2a20', { metal: 0.4, rough: 0.6 }), 0, 1.7, 0);
+    const f = glow(ctx, '#ffa04a', 1.8); f.position.y = 2.2; b.add(f);
+    return f;
+  }
+  function nguTruong(ctx) {
+    const group = new THREE.Group();
+    // a wooden dais in the open, on the dark plain
+    const plankTex = woodTexture('#3a2414', 6); plankTex.repeat.set(2, 2);
+    const dais = add(group, new THREE.CylinderGeometry(9, 9.4, 0.5, 8), new THREE.MeshStandardMaterial({ map: plankTex, roughness: 0.85 }), 0, -1.15, 0);
+    dais.receiveShadow = true; dais.rotation.y = Math.PI / 8;
+    const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#141c18'), 0, -1.4, 0); ground.rotation.x = -Math.PI / 2;
+    // camp: rings of tents with Shu banners, some lit from inside
+    const flags = [];
+    const tents = ctx.low ? 9 : 16;
+    for (let i = 0; i < tents; i++) {
+      const a = (i / tents) * Math.PI * 2 + rnd(-0.1, 0.1), r = i % 2 ? rnd(30, 36) : rnd(20, 25);
+      const T = tent(i % 3 ? '#6e6452' : '#5c5444'); T.g.position.set(Math.cos(a) * r, -1.4, Math.sin(a) * r); T.g.lookAt(0, -1.4, 0);
+      group.add(T.g); flags.push({ f: T.flag, ph: Math.random() * 6 });
+    }
+    // mountains far away, blue in the haze
+    for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2, m = add(group, new THREE.ConeGeometry(rnd(10, 18), rnd(10, 22), 5), flat('#1a2236'), Math.cos(a) * rnd(70, 82), 2, Math.sin(a) * rnd(70, 82)); m.rotation.y = rnd(0, 3); }
+    // braziers on the ground around the dais, outside the frame of play
+    const fires = [];
+    for (const [x, z] of [[-10.5, -10.5], [10.5, -10.5], [-10.5, 10.5], [10.5, 10.5]]) fires.push(brazier(ctx, group, x, z));
+    const torch = [new THREE.PointLight('#ff9a4a', 1.8, 30, 2), new THREE.PointLight('#ff9a4a', 1.6, 30, 2)];
+    torch[0].position.set(-10.5, 1.2, -10.5); torch[1].position.set(10.5, 1.2, 10.5); torch.forEach(l => group.add(l));
+    // stars on the upper sky, and fireflies over the grass
+    const sg = new THREE.BufferGeometry(), n = ctx.low ? 300 : 700, sa = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const az = Math.random() * Math.PI * 2, el = Math.asin(rnd(0.02, 1)), r = 88;
+      sa[i * 3] = Math.cos(az) * Math.cos(el) * r; sa[i * 3 + 1] = Math.sin(el) * r; sa[i * 3 + 2] = Math.sin(az) * Math.cos(el) * r;
+    }
+    sg.setAttribute('position', new THREE.BufferAttribute(sa, 3));
+    const stars = new THREE.Points(sg, new THREE.PointsMaterial({ size: 0.95, map: ctx.glowTex, color: '#dfe8ff', transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    group.add(stars);
+    const flies = specks(ctx, ctx.low ? 30 : 70, '#d8ff8a', 0.22, [26, -1, 3], 0.9); group.add(flies);
+    const fp = flies.geometry.attributes.position, home = Float32Array.from(fp.array);
+    // the falling star: a bright head with a fading tail of sprites
+    const fall = new THREE.Group(); group.add(fall); fall.visible = false;
+    const trail = [];
+    for (let i = 0; i < 14; i++) { const s = glow(ctx, i ? '#ffd2b0' : '#ffffff', (i ? 1.6 : 2.6) * (1 - i / 16)); s.material.fog = false; fall.add(s); trail.push(s); }
+    let next = 4000, start = 0, from = new THREE.Vector3(), dir = new THREE.Vector3();
+    const look = new THREE.Vector3();
+    return {
+      group, sky: skyDome('#03050c', '#1f2c4c', '#070a10'), fog: '#0c1426', fogSpan: 58, ambience: 'night-wind',
+      light: { hemi: ['#5a6c9a', '#0a0c10', 0.75], key: ['#b8c8ff', 1.25], rim: ['#ff9a5a', 0.35] },
+      update(t, dt, camera) {
+        for (const f of fires) f.scale.setScalar(1.6 + Math.sin(t / 70 + f.id) * 0.25 + Math.sin(t / 29) * 0.12);
+        torch[0].intensity = 1.5 + Math.sin(t / 90) * 0.2; torch[1].intensity = 1.35 + Math.sin(t / 77 + 1) * 0.2;
+        for (const F of flags) F.f.rotation.y = Math.sin(t / 600 + F.ph) * 0.4;
+        for (let i = 0; i < fp.count; i++) {
+          fp.setX(i, home[i * 3] + Math.sin(t / 1700 + i) * 1.5); fp.setY(i, home[i * 3 + 1] + Math.sin(t / 900 + i * 2) * 0.6); fp.setZ(i, home[i * 3 + 2] + Math.cos(t / 1500 + i) * 1.5);
+        }
+        fp.needsUpdate = true;
+        flies.material.opacity = 0.55 + 0.35 * Math.sin(t / 400);
+        // a star falls every so often, in the part of the sky the camera faces
+        if (!start && t > next) {
+          start = t;
+          camera.getWorldDirection(look); look.y = 0; look.normalize();
+          const side = new THREE.Vector3(-look.z, 0, look.x).multiplyScalar(rnd(-1, 1) > 0 ? 1 : -1);
+          from.copy(look).multiplyScalar(70).addScaledVector(side, rnd(10, 30)).setY(rnd(16, 24));
+          dir.copy(side).multiplyScalar(-1).addScaledVector(look, rnd(-0.2, 0.2)).setY(-0.35).normalize().multiplyScalar(34);
+          fall.visible = true;
+        }
+        if (start) {
+          const k = (t - start) / 1400;
+          if (k >= 1) { start = 0; fall.visible = false; next = t + rnd(9000, 16000); }
+          else trail.forEach((s, i) => {
+            const kk = Math.max(0, k - i * 0.012);
+            s.position.copy(from).addScaledVector(dir, kk * 1.4);
+            s.material.opacity = Math.sin(Math.min(1, k * 1.2) * Math.PI) * (1 - i / 14);
+          });
+        }
+      },
+    };
+  }
+
+  // ---------- shared by the two battles below ----------
+  function stoneTexture(base) {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    g.fillStyle = base; g.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 32) for (let x = (y / 32) % 2 ? -32 : 0; x < 256; x += 64) {
+      g.fillStyle = `rgba(0, 0, 0, ${rnd(0.02, 0.12)})`; g.fillRect(x + 2, y + 2, 60, 28);
+      g.strokeStyle = 'rgba(0, 0, 0, 0.35)'; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, 62, 30);
+    }
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  function flagTexture(ch, cloth, ink) {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 160; const g = c.getContext('2d');
+    g.fillStyle = cloth; g.fillRect(0, 0, 128, 160);
+    g.fillStyle = ink; g.fillRect(0, 0, 128, 10); g.fillRect(0, 150, 128, 10);
+    g.font = `bold 92px ${MODELS.BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, 64, 82);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+    return t;
+  }
+  // a flag on a pole; waves with update(t)
+  function flagPole(parent, tex, x, y, z, h = 4) {
+    const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
+    add(g, new THREE.CylinderGeometry(0.06, 0.06, h, 4), flat('#2a1a10'), 0, h / 2, 0);
+    const geo = new THREE.PlaneGeometry(1.4, 1.75); geo.translate(0.7, 0, 0);
+    const f = add(g, geo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 1 }), 0, h - 0.95, 0);
+    return { f, ph: Math.random() * 6 };
+  }
+  // one of the heroes (heroes.js), larger than life, as part of the scenery
+  function figure(id, side, scale, x, y, z) {
+    const w = MODELS.warrior(side * XQ.K, id); w.scale.setScalar(scale); w.position.set(x, y, z);
+    return w;
+  }
+  // their banners turn to the camera, so the characters on them never read mirrored (as scene.js does for pieces)
+  const at = new THREE.Vector3();
+  function faceBanners(figs, camera) {
+    for (const w of figs) {
+      const f = w.userData.flag; f.getWorldPosition(at);
+      f.rotation.y = Math.atan2(camera.position.x - at.x, camera.position.z - at.z) - w.rotation.y;
+    }
+  }
+  function tree(parent, x, z, s) {
+    const g = new THREE.Group(); g.position.set(x, -1.4, z); g.scale.setScalar(s); parent.add(g);
+    add(g, new THREE.CylinderGeometry(0.18, 0.25, 1.6, 5), flat('#2a1c10'), 0, 0.8, 0);
+    add(g, new THREE.ConeGeometry(1.4, 2.4, 6), flat('#3a4424'), 0, 2.3, 0);
+    add(g, new THREE.ConeGeometry(1.0, 1.9, 6), flat('#44502a'), 0, 3.4, 0);
+  }
+
+  // ---------- Hulao Pass: the three brothers fight Lü Bu before the gate ----------
+  function hoLao(ctx) {
+    const group = new THREE.Group();
+    const stone = stoneTexture('#6a6258'); stone.repeat.set(3, 3);
+    add(group, new THREE.BoxGeometry(15, 0.5, 17), new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95 }), 0, -1.15, 0);
+    const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#3e3a32'), 0, -1.4, 0); ground.rotation.x = -Math.PI / 2;
+    // the pass: steep rock on both sides, a wall with a gate tower between them
+    const rock = flat('#45434a'), wallTex = stoneTexture('#5e5850'); wallTex.repeat.set(8, 2);
+    for (const sx of [-1, 1]) for (let i = 0; i < 7; i++) {
+      const r = add(group, new THREE.DodecahedronGeometry(rnd(7, 13), 0), rock, sx * rnd(36, 54), rnd(2, 16), rnd(-70, -24));
+      r.rotation.set(rnd(0, 3), rnd(0, 3), 0); r.scale.y = rnd(1.2, 1.8);
+    }
+    const gate = new THREE.Group(); gate.position.set(0, -1.4, -58); gate.scale.setScalar(0.55); group.add(gate);   // scaled to fit the low view
+    add(gate, new THREE.BoxGeometry(64, 11, 5), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 1 }), 0, 5.5, 0);
+    for (let x = -31; x <= 31; x += 2.6) add(gate, new THREE.BoxGeometry(1.4, 1.2, 5.2), flat('#575148'), x, 11.6, 0);   // battlements
+    add(gate, new THREE.BoxGeometry(6, 7, 5.4), flat('#120e0c'), 0, 3.5, 0.1);                                          // the gateway
+    add(gate, new THREE.BoxGeometry(5.2, 6.4, 0.3), flat('#3a2414'), 0, 3.2, 2.75);                                      // its doors
+    // the gate tower: two storeys with dark tiled roofs
+    const red = flat('#7a2418'), roof = flat('#24201e');
+    add(gate, new THREE.BoxGeometry(14, 4, 6), red, 0, 13, 0);
+    const r1 = add(gate, new THREE.ConeGeometry(11.5, 3, 4), roof, 0, 16.4, 0); r1.rotation.y = Math.PI / 4; r1.scale.set(1.25, 1, 0.6);
+    add(gate, new THREE.BoxGeometry(9, 3, 4.4), red, 0, 18.6, 0);
+    const r2 = add(gate, new THREE.ConeGeometry(8.5, 3.4, 4), roof, 0, 21.6, 0); r2.rotation.y = Math.PI / 4; r2.scale.set(1.25, 1, 0.6);
+    add(gate, new THREE.PlaneGeometry(4, 1.6), new THREE.MeshBasicMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = 256; c.height = 100; const g = c.getContext('2d'); g.fillStyle = '#1a1210'; g.fillRect(0, 0, 256, 100); g.strokeStyle = '#c9a23a'; g.lineWidth = 6; g.strokeRect(4, 4, 248, 92); g.fillStyle = '#e3b448'; g.font = `bold 66px ${MODELS.BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('虎牢關', 128, 54); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })() }), 0, 13.4, 3.05);
+    // Lü Bu's banners along the wall, braziers between them
+    const flags = [], lu = flagTexture('呂', '#1c2436', '#c9d3de'), dong = flagTexture('董', '#5c1310', '#e3b448');
+    for (let i = 0; i < (ctx.low ? 8 : 14); i++) {
+      const x = -29 + (i * 58) / ((ctx.low ? 8 : 14) - 1);
+      if (Math.abs(x) < 8) continue;
+      flags.push(flagPole(gate, i % 3 ? lu : dong, x, 12.2, 0.8, 4.2));
+    }
+    // the duel: Lü Bu before the gate, the three brothers facing him
+    const lv = figure('lu-bo', -1, 4.2, 0, -1.4, -38); group.add(lv);
+    const brothers = [figure('luu-bi', 1, 3.6, -5, -1.4, -26), figure('quan-vu', 1, 3.6, 0, -1.4, -27.5), figure('truong-phi', 1, 3.6, 5, -1.4, -26)];
+    brothers.forEach(b => group.add(b));
+    const fighters = [lv, ...brothers].map((w, i) => ({ j: w.userData.j, ph: i * 1.7 }));
+    // drifting morning mist
+    const mist = [];
+    for (let i = 0; i < (ctx.low ? 8 : 16); i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color: '#d8d4cc', transparent: true, opacity: 0.22, depthWrite: false }));
+      m.scale.set(rnd(18, 30), rnd(5, 8), 1); m.position.set(rnd(-50, 50), rnd(0, 4), rnd(-40, 40)); group.add(m);
+      mist.push({ m, v: rnd(0.6, 1.4) });
+    }
+    return {
+      group, sky: skyDome('#4e5664', '#c4b49c', '#3a3630'), fog: '#77706a', fogSpan: 55, ambience: 'pass-war',
+      light: { hemi: ['#b8c0cc', '#3a3428', 0.9], key: ['#fff0dc', 1.45], rim: ['#9ab0ff', 0.3] },
+      update(t, dt, camera) {
+        faceBanners([lv, ...brothers], camera);
+        for (const F of flags) F.f.rotation.y = Math.sin(t / 500 + F.ph) * 0.35;
+        for (const F of fighters) if (F.j.armR) F.j.armR.rotation.x = (F.j.restArm || 0) - 1.3 - 1.2 * Math.sin(t / 420 + F.ph);
+        for (const M of mist) { M.m.position.x += M.v * dt; if (M.m.position.x > 60) M.m.position.x = -60; }
+      },
+    };
+  }
+
+  // ---------- Changban: Zhang Fei alone on the bridge, Cao Cao's cavalry raising dust beyond the river ----------
+  function truongBan(ctx) {
+    const group = new THREE.Group();
+    const planks = woodTexture('#5a3e24', 7); planks.repeat.set(3, 3);
+    add(group, new THREE.BoxGeometry(14, 0.5, 16), new THREE.MeshStandardMaterial({ map: planks, roughness: 0.9 }), 0, -1.15, 0);
+    const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#4a3c26'), 0, -1.4, 0); ground.rotation.x = -Math.PI / 2;
+    // the river across the field, and the bridge over it
+    const river = add(group, new THREE.PlaneGeometry(190, 9), new THREE.MeshStandardMaterial({ color: '#3a5050', roughness: 0.3, metalness: 0.2 }), 0, -1.37, -22);
+    river.rotation.x = -Math.PI / 2;
+    const wood = flat('#3a2614'), bridge = new THREE.Group(); bridge.position.set(7, -1.4, -22); group.add(bridge);
+    add(bridge, new THREE.BoxGeometry(3.4, 0.3, 15), wood, 0, 1.1, 0);
+    for (const sx of [-1, 1]) {
+      add(bridge, new THREE.BoxGeometry(0.15, 0.15, 15), wood, sx * 1.6, 2.1, 0);
+      for (let z = -7; z <= 7; z += 2.3) { add(bridge, new THREE.BoxGeometry(0.2, 1.1, 0.2), wood, sx * 1.6, 1.7, z); add(bridge, new THREE.BoxGeometry(0.3, 1.2, 0.3), wood, sx * 1.5, 0.5, z); }
+    }
+    // Zhang Fei on the bridge, facing the enemy across the river
+    const zf = figure('truong-phi', 1, 4, 7, -0.15, -22); group.add(zf);
+    // woods on both banks (Zhang Fei's riders dragged branches through them to raise dust)
+    for (let i = 0; i < (ctx.low ? 18 : 34); i++) {
+      const a = rnd(0, Math.PI * 2), r = rnd(20, 55), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.abs(z + 22) < 7 || (Math.abs(x - 7) < 5 && z < -10)) continue;
+      tree(group, x, z, rnd(1.4, 2.6));
+    }
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, m = add(group, new THREE.ConeGeometry(rnd(12, 20), rnd(8, 16), 5), flat('#5a4c3a'), Math.cos(a) * 80, 1, Math.sin(a) * 80); m.rotation.y = rnd(0, 3); }
+    // Cao Cao's cavalry riding along the far bank, trailing dust
+    const riders = [], dust = [];
+    const n = ctx.low ? 4 : 7;
+    for (let i = 0; i < n; i++) {
+      const w = MODELS.warrior(-4); w.scale.setScalar(3.2); w.rotation.y = Math.PI / 2;
+      w.position.set(-60 + i * 7, -1.4, -36 - (i % 2) * 3); group.add(w);
+      riders.push({ w, j: w.userData.j, ph: i * 0.9 });
+    }
+    for (let i = 0; i < (ctx.low ? 10 : 22); i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color: '#b89a6a', transparent: true, opacity: 0.4, depthWrite: false }));
+      group.add(m); dust.push({ m, k: Math.random(), r: i % n });
+    }
+    const flies = specks(ctx, ctx.low ? 50 : 120, '#ffd890', 0.12, [30, -1, 6], 0.5); group.add(flies);   // dust motes in the low sun
+    return {
+      group, sky: skyDome('#5a6a86', '#e2b070', '#4a3c26'), fog: '#9a7c58', fogSpan: 62, ambience: 'dust-wind',
+      light: { hemi: ['#d8c098', '#3a2a18', 0.85], key: ['#ffd49a', 1.6], rim: ['#ffb070', 0.45] },
+      update(t, dt, camera) {
+        for (const R of riders) {
+          R.w.position.x += dt * 5.5; if (R.w.position.x > 62) R.w.position.x -= 124;
+          const ph = t / 110 + R.ph;
+          R.j.legs.forEach((L, i) => { L.rotation.x = Math.sin(ph + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * 0.8; });
+          if (R.j.body) R.j.body.rotation.x = Math.sin(ph) * 0.08;
+          R.w.position.y = -1.4 + Math.abs(Math.sin(ph)) * 0.35;
+        }
+        for (const D of dust) {
+          D.k = (D.k + dt * 0.35) % 1;
+          const w = riders[D.r].w;
+          D.m.position.set(w.position.x - 3 - D.k * 10, -0.5 + D.k * 4, w.position.z + Math.sin(D.k * 9 + D.r) * 1.5);
+          D.m.scale.setScalar(3 + D.k * 9); D.m.material.opacity = 0.42 * Math.min(1, D.k * 6) * (1 - D.k);
+        }
+        flies.rotation.y += dt * 0.02;
+        faceBanners([zf, ...riders.map(R => R.w)], camera);
+        if (zf.userData.j.armR) zf.userData.j.armR.rotation.x = -0.5 - 0.5 * Math.sin(t / 900);
+      },
+    };
+  }
+
+  const BUILD = { room, 'ho-lao': hoLao, 'truong-ban': truongBan, 'xich-bich': xichBich, 'ngu-truong': nguTruong };
+  return { list, byId, valid: id => typeof id === 'string' && id in byId, build: (id, ctx) => (BUILD[id] || room)(ctx) };
+})();

@@ -111,17 +111,18 @@ const MODELS = (() => {
   }
   // banner cloth for army view: the character in gold on the side's colour
   const bannerCache = new Map();
-  function bannerTexture(piece) {
-    if (bannerCache.has(piece)) return bannerCache.get(piece);
+  function bannerTexture(piece, ch = XQ.HAN[piece]) {
+    const key = piece + ch;
+    if (bannerCache.has(key)) return bannerCache.get(key);
     const pal = PAL[piece > 0 ? 1 : -1];
     const t = canvas(128, 176, (g, w, h) => {
       g.fillStyle = pal.banner; g.fillRect(0, 0, w, h);
       g.fillStyle = pal.trim; g.fillRect(0, 0, w, 10); g.fillRect(0, h - 22, w, 6);
       for (let x = 0; x < w; x += 16) { g.beginPath(); g.moveTo(x, h - 16); g.lineTo(x + 8, h); g.lineTo(x + 16, h - 16); g.fill(); }
       g.fillStyle = pal.trim; g.font = `bold 96px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(XQ.HAN[piece], w / 2, h / 2 - 4);
+      g.fillText(ch, w / 2, h / 2 - 4);
     });
-    bannerCache.set(piece, t);
+    bannerCache.set(key, t);
     return t;
   }
   function clearTextureCache() { for (const t of faceCache.values()) t.dispose(); faceCache.clear(); for (const t of bannerCache.values()) t.dispose(); bannerCache.clear(); }
@@ -189,11 +190,15 @@ const MODELS = (() => {
     box(0.21, 0.03, 0.13, pal.trim, g, 0, 0.255, 0, { metal: 0.6, rough: 0.35 });
     if (!o.robe) for (const sx of [-1, 1]) box(0.08, 0.05, 0.13, pal.trim, g, sx * 0.135, 0.405, 0, { metal: 0.5, rough: 0.4 });
     j.armL = group(g, -0.13, 0.4, 0); j.armR = group(g, 0.13, 0.4, 0);
-    for (const A of [j.armL, j.armR]) { box(0.055, 0.17, 0.065, o.robe || armour, A, 0, -0.085, 0); ball(0.032, SKIN, A, 0, -0.18, 0.01); }
+    const skin = o.skin || SKIN, hair = o.hair || '#1a1010';
+    for (const A of [j.armL, j.armR]) { box(0.055, 0.17, 0.065, o.robe || armour, A, 0, -0.085, 0); ball(0.032, skin, A, 0, -0.18, 0.01); }
     j.head = group(g, 0, 0.43, 0);
-    box(0.1, 0.1, 0.1, SKIN, j.head, 0, 0.06, 0);
+    box(0.1, 0.1, 0.1, skin, j.head, 0, 0.06, 0);
     for (const sx of [-1, 1]) box(0.018, 0.012, 0.005, '#1a1010', j.head, sx * 0.025, 0.07, 0.051);
-    if (o.beard) box(0.06, 0.05, 0.02, '#1a1010', j.head, 0, 0.015, 0.055);
+    // beard: true = short; 'long' falls to the chest; 'bushy' covers the jaw
+    if (o.beard === 'long') { box(0.06, 0.05, 0.02, hair, j.head, 0, 0.015, 0.055); box(0.05, 0.16, 0.018, hair, j.head, 0, -0.07, 0.06); }
+    else if (o.beard === 'bushy') { box(0.11, 0.07, 0.03, hair, j.head, 0, 0.02, 0.05); for (const sx of [-1, 1]) box(0.03, 0.04, 0.02, hair, j.head, sx * 0.05, -0.025, 0.05); }
+    else if (o.beard) box(0.06, 0.05, 0.02, hair, j.head, 0, 0.015, 0.055);
     g.userData.j = j;
     return g;
   }
@@ -218,22 +223,37 @@ const MODELS = (() => {
     return w;
   }
 
+  // two long pheasant feathers on a helmet, the mark of a famous general
+  function plumes(head, color, len = 1) {
+    for (const sx of [-1, 1]) {
+      const f = group(head, sx * 0.03, 0.2, -0.01);
+      f.rotation.z = -sx * 0.35; f.rotation.x = -0.35;
+      box(0.014, 0.22 * len, 0.014, color, f, 0, 0.11 * len, 0);
+      const tip = group(f, 0, 0.22 * len, 0); tip.rotation.x = -0.7; tip.rotation.z = -sx * 0.3;
+      box(0.012, 0.16 * len, 0.012, color, tip, 0, 0.08 * len, 0);
+    }
+  }
+  // generals wear a cape in their side's colour, which also tells the sides apart when a hero leads them
+  function cape(h, side) {
+    const c = group(h, 0, 0.42, -0.07); c.rotation.x = 0.18;
+    box(0.24, 0.36, 0.02, side > 0 ? '#7a0f0b' : '#101828', c, 0, -0.18, 0);
+    h.userData.j.cape = c;
+  }
+  // a white feather fan held up in front (j.restArm keeps the arm raised between moves)
+  function featherFan(h) {
+    const j = h.userData.j, fan = group(j.armR, 0, -0.18, 0.04);
+    cyl(0.008, 0.008, 0.1, WOOD, fan, 0, 0.04, 0, 4);
+    const leaf = mesh(geo('fan', () => new THREE.CircleGeometry(0.09, 7, 0, Math.PI)), new THREE.MeshStandardMaterial({ color: '#f4f1e8', side: THREE.DoubleSide, flatShading: true, roughness: 0.9 }), fan, 0, 0.1, 0);
+    leaf.rotation.z = -Math.PI / 2; leaf.rotation.y = Math.PI / 2;
+    j.armR.rotation.x = j.restArm = -0.6;
+  }
+
   function buildGeneral(pal, side) {
     const h = humanoid(pal, { armour: side > 0 ? '#c0392b' : '#2f4160', beard: true }), j = h.userData.j;
-    // gold helmet with the two long pheasant feathers of a famous general
     cyl(0.062, 0.068, 0.07, pal.trim, j.head, 0, 0.12, 0, 8, { metal: 0.7, rough: 0.3 });
     cyl(0.02, 0.03, 0.05, pal.trim, j.head, 0, 0.18, 0, 6, { metal: 0.7, rough: 0.3 });
-    for (const sx of [-1, 1]) {
-      const f = group(j.head, sx * 0.03, 0.2, -0.01);
-      f.rotation.z = -sx * 0.35; f.rotation.x = -0.35;
-      box(0.014, 0.22, 0.014, pal.plume, f, 0, 0.11, 0);
-      const tip = group(f, 0, 0.22, 0); tip.rotation.x = -0.7; tip.rotation.z = -sx * 0.3;
-      box(0.012, 0.16, 0.012, pal.plume, tip, 0, 0.08, 0);
-    }
-    // cape
-    const cape = group(h, 0, 0.42, -0.07); cape.rotation.x = 0.18;
-    box(0.24, 0.36, 0.02, side > 0 ? '#7a0f0b' : '#101828', cape, 0, -0.18, 0);
-    h.userData.j.cape = cape;
+    plumes(j.head, pal.plume);
+    cape(h, side);
     sword(j.armR, pal);
     h.scale.setScalar(1.18);
     return h;
@@ -243,12 +263,7 @@ const MODELS = (() => {
     // scholar's hat
     box(0.15, 0.025, 0.11, '#1a1010', j.head, 0, 0.125, 0);
     box(0.08, 0.06, 0.08, '#1a1010', j.head, 0, 0.16, 0);
-    // feather fan
-    const fan = group(j.armR, 0, -0.18, 0.04);
-    cyl(0.008, 0.008, 0.1, WOOD, fan, 0, 0.04, 0, 4);
-    const leaf = mesh(geo('fan', () => new THREE.CircleGeometry(0.09, 7, 0, Math.PI)), new THREE.MeshStandardMaterial({ color: '#f4f1e8', side: THREE.DoubleSide, flatShading: true, roughness: 0.9 }), fan, 0, 0.1, 0);
-    leaf.rotation.z = -Math.PI / 2; leaf.rotation.y = Math.PI / 2;
-    j.armR.rotation.x = -0.6;
+    featherFan(h);
     return h;
   }
   function buildSoldier(pal) {
@@ -360,12 +375,102 @@ const MODELS = (() => {
     return g;
   }
 
+  // ---------- heroes (heroes.js): a player's general, known by face, headgear and weapon ----------
+  const GOLD = { metal: 0.7, rough: 0.3 }, STEEL = { metal: 0.9, rough: 0.2 };
+  // pole arms are held in the right hand like the spear; top(len) is the height of the pole's end
+  function pole(p, len, color) { const w = group(p, 0, -0.18, 0.03); cyl(0.01, 0.01, len, color, w, 0, len * 0.35, 0, 5); return w; }
+  const top = len => len * 0.35 + len / 2;
+  const tassel = (w, y) => cyl(0.032, 0.012, 0.05, '#c0201a', w, 0, y, 0, 6);
+  function glaive(p) {                      // Green Dragon Crescent Blade: a broad curved blade
+    const len = 0.8, w = pole(p, len, '#24402a'), y = top(len);
+    const b = box(0.06, 0.2, 0.012, '#e8eef4', w, 0.035, y + 0.06, 0, STEEL); b.rotation.z = -0.2;
+    box(0.035, 0.03, 0.03, '#d4a017', w, 0, y - 0.05, 0, GOLD);
+    tassel(w, y - 0.1);
+  }
+  function serpentSpear(p) {                // Zhang Fei's spear: a long wavy blade
+    const len = 0.84, w = pole(p, len, '#1e1e22'), y = top(len);
+    for (let i = 0; i < 4; i++) { const s = box(0.016, 0.05, 0.01, '#d8dee6', w, i % 2 ? 0.012 : -0.012, y + 0.025 + i * 0.04, 0, STEEL); s.rotation.z = i % 2 ? 0.45 : -0.45; }
+    tassel(w, y - 0.02);
+  }
+  function skyPiercer(p) {                  // Lü Bu's halberd: a spear point with a crescent blade on each side
+    const len = 0.84, w = pole(p, len, '#3a1a0a'), y = top(len);
+    cyl(0, 0.02, 0.11, '#e8eef4', w, 0, y + 0.05, 0, 5, STEEL);
+    for (const sx of [-1, 1]) {
+      const c = mesh(geo('crescent', () => new THREE.TorusGeometry(0.055, 0.012, 4, 10, Math.PI)), mat('#e8eef4', STEEL), w, sx * 0.05, y - 0.03, 0);
+      c.rotation.z = -sx * Math.PI / 2;
+    }
+    tassel(w, y - 0.1);
+  }
+  const hero = (pal, o, scale = 1.18) => { const h = humanoid(pal, o); h.scale.setScalar(scale); return [h, h.userData.j]; };
+  const HERO_BUILD = {
+    'quan-vu'(pal, side) {
+      const [h, j] = hero(pal, { armour: '#2f6b3a', skin: '#b4503a', beard: 'long' });
+      box(0.11, 0.05, 0.11, '#24502c', j.head, 0, 0.12, 0); box(0.06, 0.05, 0.06, '#24502c', j.head, 0, 0.16, -0.01);   // green cloth cap
+      cape(h, side); glaive(j.armR);
+      return h;
+    },
+    'truong-phi'(pal, side) {
+      const [h, j] = hero(pal, { armour: '#2b2b30', skin: '#c28860', beard: 'bushy' }, 1.26);
+      cyl(0.064, 0.07, 0.07, '#3a3a40', j.head, 0, 0.12, 0, 8, { metal: 0.6, rough: 0.4 });
+      cyl(0.004, 0.004, 0.08, '#c0201a', j.head, 0, 0.19, 0, 3);
+      cape(h, side); serpentSpear(j.armR);
+      return h;
+    },
+    'trieu-van'(pal, side) {
+      const [h, j] = hero(pal, { armour: '#cfd5dc' });
+      cyl(0.062, 0.068, 0.07, '#e6eaef', j.head, 0, 0.12, 0, 8, { metal: 0.8, rough: 0.25 });
+      const tuft = group(j.head, 0, 0.17, -0.02); tuft.rotation.x = -0.5;
+      box(0.03, 0.15, 0.03, '#ffffff', tuft, 0, 0.075, 0);
+      cape(h, side); spear(j.armR, pal, 0.8);
+      return h;
+    },
+    'gia-cat-luong'(pal, side) {
+      const [h, j] = hero(pal, { robe: '#ece6d6', noLegs: true, beard: true });
+      box(0.1, 0.12, 0.09, '#1a1418', j.head, 0, 0.15, -0.005);                 // tall silk cap with two ribbons
+      for (const sx of [-1, 1]) { const r = box(0.012, 0.12, 0.004, '#1a1418', j.head, sx * 0.03, 0.08, -0.055); r.rotation.z = sx * 0.15; }
+      featherFan(h);
+      return h;
+    },
+    'luu-bi'(pal, side) {
+      const [h, j] = hero(pal, { armour: '#c9a23a', beard: true });
+      cyl(0.055, 0.06, 0.05, '#d9b65a', j.head, 0, 0.12, 0, 8, GOLD);            // crown: a flat board on a gold cap
+      box(0.16, 0.012, 0.09, '#1a1010', j.head, 0, 0.16, 0);
+      for (const x of [-0.06, -0.03, 0, 0.03, 0.06]) cyl(0.003, 0.003, 0.05, '#d9b65a', j.head, x, 0.13, 0.045, 3);
+      cape(h, side); sword(j.armR, pal); sword(j.armL, pal);
+      return h;
+    },
+    'tao-thao'(pal, side) {
+      const [h, j] = hero(pal, { robe: '#3b2244', beard: true });
+      box(0.1, 0.09, 0.1, '#141016', j.head, 0, 0.14, -0.005);                  // official's hat with two side wings
+      for (const sx of [-1, 1]) box(0.09, 0.02, 0.01, '#141016', j.head, sx * 0.09, 0.15, -0.05);
+      cape(h, side); sword(j.armR, pal);
+      return h;
+    },
+    'ton-quyen'(pal, side) {
+      const [h, j] = hero(pal, { armour: '#1f5f5a', beard: true, hair: '#6b2f7a' });
+      cyl(0.06, 0.066, 0.06, '#d9b65a', j.head, 0, 0.12, 0, 8, GOLD);
+      for (let i = 0; i < 3; i++) cyl(0, 0.014, 0.05, '#d9b65a', j.head, (i - 1) * 0.035, 0.17, 0.02, 4, GOLD);
+      cape(h, side); sword(j.armR, pal);
+      return h;
+    },
+    'lu-bo'(pal, side) {
+      const [h, j] = hero(pal, { armour: '#8e2219' }, 1.26);
+      cyl(0.062, 0.068, 0.07, '#d9b65a', j.head, 0, 0.12, 0, 8, GOLD);
+      cyl(0.02, 0.03, 0.05, '#d9b65a', j.head, 0, 0.18, 0, 6, GOLD);
+      plumes(j.head, '#ffcf4a', 1.7);
+      cape(h, side); skyPiercer(j.armR);
+      return h;
+    },
+  };
+
   const BUILD = { 1: buildGeneral, 2: buildAdvisor, 3: buildElephant, 4: buildHorse, 5: buildChariot, 6: buildCatapult, 7: buildSoldier };
-  // a warrior for a piece, facing the enemy; with a banner pole for the army view
-  function warrior(piece) {
+  // a warrior for a piece, facing the enemy; with a banner pole for the army view.
+  // hero: id from heroes.js for a general led by that hero (its banner then bears the hero's character)
+  function warrior(piece, hero) {
     const side = piece > 0 ? 1 : -1, type = Math.abs(piece), pal = PAL[side];
+    const led = type === XQ.K && HEROES.valid(hero) ? hero : '';
     const root = new THREE.Group();
-    const fig = BUILD[type](pal, side);
+    const fig = led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
     root.add(fig);
     root.rotation.y = side > 0 ? Math.PI : 0;                // Red sits at +z and faces -z
     // banner on a pole, shown in the army view so the character stays readable
@@ -374,9 +479,9 @@ const MODELS = (() => {
     cyl(0.01, 0.01, tall, '#2a160a', flag, 0, tall / 2, 0, 4);
     ball(0.025, pal.trim, flag, 0, tall + 0.01, 0, { metal: 0.6, rough: 0.3 });
     const cloth = new THREE.Mesh(geo('banner', () => { const p = new THREE.PlaneGeometry(0.3, 0.41); p.translate(0.15, 0, 0); return p; }),
-      new THREE.MeshStandardMaterial({ map: bannerTexture(piece), side: THREE.DoubleSide, roughness: 0.85 }));
+      new THREE.MeshStandardMaterial({ map: bannerTexture(piece, led ? HEROES.byId[led].han : XQ.HAN[piece]), side: THREE.DoubleSide, roughness: 0.85 }));
     cloth.position.y = tall - 0.24; cloth.castShadow = true; flag.add(cloth);
-    root.userData = { fig, j: fig.userData.j || {}, flag, cloth, type, side };
+    root.userData = { fig, j: fig.userData.j || {}, flag, cloth, type, side, hero: led };
     return root;
   }
 

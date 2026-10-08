@@ -59,10 +59,9 @@
   .pl .chip { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 700 17px/1 var(--han); background: #ecd6a8; box-shadow: inset 0 0 0 2px currentColor; }
   .pl.red .chip { color: #a3201a; } .pl.black .chip { color: #1b1b1b; }
   .pl .nm { font-weight: 700; }
-  .pl .nm small { color: var(--dim); font-weight: 500; }
+  .pl .nm small { display: block; color: var(--dim); font-weight: 500; font-size: 12px; white-space: nowrap; }
   .pl .who { margin-left: auto; color: var(--dim); font-size: 13px; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pl .who small { color: var(--gold); font-weight: 700; }
-  .pl.named .nm small { display: none; }
   .pl .clk { padding: 3px 8px; border-radius: 7px; background: rgba(0, 0, 0, 0.35); font: 700 15px/1.2 var(--ui); font-variant-numeric: tabular-nums; color: var(--dim); }
   .pl .clk:empty { display: none; }
   .pl .clk.run { color: var(--ink); box-shadow: inset 0 0 0 1px var(--gold); }
@@ -142,6 +141,12 @@
   .me b { display: block; font-size: 16px; }
   .me small, .phead small { color: var(--dim); }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .picks button { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px 7px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25); color: var(--dim); font: 600 12.5px/1.15 var(--ui); text-align: left; cursor: pointer; }
+  .picks button:hover { border-color: var(--gold-soft); color: var(--ink); }
+  .picks button.on { color: var(--ink); border-color: var(--gold); background: rgba(227, 180, 72, 0.14); }
+  .picks button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .picks .hz { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 2px currentColor; font: 700 16px/1 var(--han); }
   .linkish { background: none; border: 0; padding: 0; color: var(--gold); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; justify-self: start; }
   #ranks .card { width: min(560px, 100%); position: relative; }
   #ranks .seg { margin-right: 46px; }
@@ -233,8 +238,8 @@
 
 <aside id="panel">
   <div class="players">
-    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm">Đỏ <small>· Thục</small></span><span class="who"></span><span class="clk"></span></div>
-    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm">Đen <small>· Ngụy</small></span><span class="who"></span><span class="clk"></span></div>
+    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm">Đỏ <small>Thục</small></span><span class="who"></span><span class="clk"></span></div>
+    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm">Đen <small>Ngụy</small></span><span class="who"></span><span class="clk"></span></div>
   </div>
   <div id="room" hidden>
     <div class="mhead"><span id="roomKind">Phòng</span></div>
@@ -261,6 +266,16 @@
 <div id="menu" class="overlay" hidden>
   <div class="card">
     <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục – Ngụy tranh hùng trên bàn cờ</p></div></div>
+    <section id="heroBox">
+      <h2>Chủ tướng</h2>
+      <div class="picks" id="heroes"></div>
+      <p class="note" id="heroNote"></p>
+    </section>
+    <section id="stageBox">
+      <h2>Bối cảnh</h2>
+      <div class="picks" id="segStage"></div>
+      <p class="note" id="stageNote"></p>
+    </section>
     <section id="account" hidden>
       <h2>Kỳ thủ</h2>
       <div id="acOut">
@@ -335,7 +350,9 @@
 <script src="src/vendor/three.min.js"></script>
 <script src="src/xiangqi.js"></script>
 <script src="src/audio.js"></script>
+<script src="src/heroes.js"></script>
 <script src="src/models.js"></script>
+<script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
 <script src="src/account.js"></script>
 <script src="src/game.js"></script>

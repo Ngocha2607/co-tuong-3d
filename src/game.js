@@ -17,9 +17,12 @@
     me: 1, level: 1, over: null, sel: -1, targets: [], thinking: false, animating: 0,
     room: '', ws: null, you: 0, players: { 1: false, '-1': false }, rematch: { 1: false, '-1': false }, online: false,
     rated: false, info: { 1: null, '-1': null }, tc: null, clock: null, deadline: null, wantTc: '',
+    heroes: { 1: '', '-1': '' },              // hero leading each side (heroes.js), '' = the plain general
   };
-  let pref = { side: 1, level: 1, army: false, tc: 0 };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room' };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
+  if (!HEROES.valid(pref.hero)) pref.hero = '';
+  if (!STAGES.valid(pref.stage)) pref.stage = 'room';
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
 
   // ---------- game record ----------
@@ -57,7 +60,7 @@
       if (gen !== G.gen) return;
       VIEW.check(-1);
       if (st.over) { endGame(st); return; }
-      if (st.check) { VIEW.check(king); VIEW.alarm(king); SFX.drum(); banner('Chiếu tướng!', 'check'); }
+      if (st.check) { VIEW.check(king); VIEW.alarm(king); VIEW.heroShadow(mover); SFX.drum(); banner('Chiếu tướng!', 'check'); }
       if (st.repeat === 1) toast('Thế cờ lặp lại lần 2. Lần 3: bên chiếu dai hoặc đuổi dai bị xử thua, không thì hòa');
       if (G.mode === 'ai' && G.pos.turn !== G.me && !G.over && G.animating <= 1) aiMove();
     });
@@ -102,6 +105,9 @@
   function startAI() {
     disconnect(); stopSeek(); resetOnline();
     G.mode = 'ai'; G.me = pref.side; G.level = pref.level; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
+    const rivals = HEROES.list.filter(h => h.id !== pref.hero);
+    G.heroes = { [G.me]: pref.hero, [-G.me]: rivals[(Math.random() * rivals.length) | 0].id };
+    VIEW.setHeroes(G.heroes);
     reset(); clearSel();
     VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
@@ -153,6 +159,7 @@
     VIEW.check(-1); clearSel();
     const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     if (st.winner && onBoard) VIEW.defeat(kingOf(-st.winner));
+    if (st.winner) VIEW.heroShadow(st.winner, true);
     if (!st.winner) SFX.gong(); else if (!viewer || st.winner === viewer) SFX.win(); else SFX.lose();
     updateStatus();
     setTimeout(() => showEnd(true), onBoard ? 1300 : 200);
@@ -233,7 +240,7 @@
   const roomLink = () => `${location.origin}${location.pathname}?room=${G.room}`;
   const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
-  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; }
+  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
   // tc: time control asked for by the player opening a friendly room ('' = untimed)
   function goOnline(room, tc = '') {
     disconnect(); stopSeek(); resetOnline();
@@ -255,7 +262,7 @@
     clearTimeout(retryT);
     const ws = new WebSocket(`${wsBase()}/ws?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: pref.hero })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -273,6 +280,7 @@
         G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
         rebuild(m.moves || []);
+        G.heroes = m.heroes || { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes);
         VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
         const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
         const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(!m.over && st.check ? kingOf(G.pos.turn) : -1);
@@ -291,7 +299,10 @@
         if (m.ply === G.moves.length) { commit(m.m); }
         else if (m.ply > G.moves.length) send({ t: 'sync' });
         break;
-      case 'presence': G.players = m.players; if (m.info) G.info = m.info; setTiming(m); updateStatus(); break;
+      case 'presence':
+        G.players = m.players; if (m.info) G.info = m.info;
+        if (m.heroes) { G.heroes = m.heroes; VIEW.setHeroes(m.heroes); }
+        setTiming(m); updateStatus(); break;
       case 'over': setTiming(m); enqueue(async () => { endGame(m); rated(m); }); break;
       case 'rated': rated(m); break;
       case 'rematch': G.rematch = m.want; renderEnd(); break;
@@ -394,12 +405,14 @@
     st.textContent = text;
     st.classList.toggle('mine', !G.over && !G.animating && myTurn());
     for (const side of [1, -1]) {
-      const el = $(side > 0 ? '#plRed' : '#plBlack');
+      const el = $(side > 0 ? '#plRed' : '#plBlack'), hero = HEROES.byId[G.mode === 'menu' ? '' : G.heroes[side]];
+      const chip = el.querySelector('.chip');
+      chip.textContent = hero ? hero.han : side > 0 ? '帥' : '將'; chip.title = hero ? hero.name : '';
+      el.querySelector('.nm small').textContent = hero ? hero.name : ARMY[side];
       let who = '';
       if (G.mode === 'ai') who = side === G.me ? 'Bạn' : `Máy · ${LEVELS[G.level].name}`;
       else if (G.mode === 'online') who = whoOnline(side);
       el.querySelector('.who').innerHTML = who;
-      el.classList.toggle('named', G.mode === 'online' && !!G.info[side]);
       el.classList.toggle('turn', !G.over && G.mode !== 'menu' && (G.animating ? -G.lastMover : turn) === side);
       el.classList.toggle('away', G.mode === 'online' && !G.players[side]);
     }
@@ -476,6 +489,36 @@
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
+
+  // hero picker: the general piece of the player's side becomes this hero
+  function renderHeroes() {
+    $('#heroes').innerHTML = [{ id: '', name: 'Tướng quân', han: '帥' }, ...HEROES.list]
+      .map(h => `<button type="button" data-id="${h.id}" class="${h.id === pref.hero ? 'on' : ''}" aria-pressed="${h.id === pref.hero}"><span class="hz">${h.han}</span><span>${h.name}</span></button>`).join('');
+    const h = HEROES.byId[pref.hero];
+    $('#heroNote').textContent = h ? `${h.name}${h.kingdom ? ' · nhà ' + h.kingdom : ''}: ${h.look}.`
+      : 'Chọn một danh tướng: quân Tướng của bạn sẽ hóa thành người đó, và bóng của họ phủ lên bàn cờ khi bạn chiếu tướng.';
+  }
+  $('#heroes').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    pref.hero = b.dataset.id; savePref(); renderHeroes();
+    SFX.init(); SFX.pick();
+    if (G.mode === 'online') { toast('Chủ tướng mới sẽ ra trận từ phòng online tiếp theo'); return; }
+    const side = G.mode === 'ai' ? G.me : 1;
+    G.heroes[side] = pref.hero; VIEW.setHeroes({ [side]: pref.hero }); VIEW.showHero(side); updateStatus();
+  });
+  renderHeroes();
+
+  // stage picker: where the board stands; applies at once, in or out of a game
+  function renderStages() {
+    $('#segStage').innerHTML = STAGES.list.map(s => `<button type="button" data-id="${s.id}" class="${s.id === pref.stage ? 'on' : ''}" aria-pressed="${s.id === pref.stage}"><span class="hz">${s.han}</span><span>${s.name}</span></button>`).join('');
+    $('#stageNote').textContent = STAGES.byId[pref.stage].note;
+  }
+  $('#segStage').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.id === pref.stage) return;
+    pref.stage = b.dataset.id; savePref(); renderStages();
+    SFX.init(); SFX.pick(); VIEW.setStage(pref.stage);
+  });
+  renderStages();
   $('#bRanked').addEventListener('click', seek);
   $('#bSeekCancel').addEventListener('click', stopSeek);
   $('#bRanks').addEventListener('click', () => ACCOUNT.openRanks(0));
@@ -524,8 +567,10 @@
   // ---------- boot ----------
   async function boot() {
     // the brush font has to be in before the characters are painted on the pieces
-    try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢'), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
+    try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢赤壁呂董虎牢關' + HEROES.list.map(h => h.han).join('') + STAGES.list.map(s => s.han).join('')), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
+    VIEW.setStage(pref.stage);
     VIEW.init($('#view'));
+    G.heroes[1] = pref.hero; VIEW.setHeroes(G.heroes);
     VIEW.setBoard(G.pos.b, []);
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();

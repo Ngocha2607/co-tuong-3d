@@ -1,4 +1,4 @@
-// scene.js — the 3D view: renderer, lanterns and table, orbit camera, tapping on points, highlights and the
+// scene.js — the 3D view: renderer, the stage around the table (stages.js), orbit camera, tapping on points, highlights and the
 // battle animations (a warrior rises from the piece, marches, strikes, the defeated piece flies to the tray).
 // Holds no game rules: game.js tells it what to show.
 'use strict';
@@ -10,6 +10,7 @@ const VIEW = (() => {
   const units = new Map();                 // square -> unit { piece, root, disc, war, sq }
   const trays = { 1: [], '-1': [] };       // pieces captured by Red / by Black (meshes)
   let armyOn = false, viewer = 1, menu = false, busy = false;
+  const heroes = { 1: '', '-1': '' };      // hero leading each side (heroes.js id, '' = the plain general)
   let clock = performance.now(), last = clock;
   const tweens = [], parts = [];
   const pos = (s) => new THREE.Vector3(XQ.col(s) - 4, 0, XQ.row(s) - 4.5);
@@ -34,9 +35,11 @@ const VIEW = (() => {
   const portrait = () => W / H < 0.8;
   // on a portrait phone the controls cover the bottom of the screen: look more from above and aim below the
   // board's centre (towards the viewer) so the board sits higher, clear of the panel
+  const LOW = 0.3;                         // the low angle that shows the stage's horizon (menu, showcase)
   function resetCamera() {
-    cam.tTheta = viewer > 0 ? 0 : Math.PI; cam.tPhi = portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
-    HOME.set(0, -0.4, portrait() ? 1.5 * viewer : 0); if (cam.tZoom === 1) tFocus.copy(HOME);
+    // the menu circles low to show off the stage; in play the camera looks down on the board
+    cam.tTheta = viewer > 0 ? 0 : Math.PI; cam.tPhi = menu ? LOW : portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
+    HOME.set(0, menu ? 1.6 : -0.4, portrait() ? 1.5 * viewer : 0); if (cam.tZoom === 1) tFocus.copy(HOME);
   }
   function placeCamera() {
     const cp = Math.cos(cam.phi), d = cam.dist * cam.zoom;
@@ -45,7 +48,8 @@ const VIEW = (() => {
   }
 
   // ---------- setup ----------
-  let keyLight, checkRing, checkLight, selRing, hintRings = [], dots = [], capRings = [], lastMarks = [], lanterns = [], motes;
+  let keyLight, hemiLight, rimLight, checkRing, checkLight, selRing, hintRings = [], dots = [], capRings = [], lastMarks = [];
+  let stage = null, stageId = '';          // what surrounds the table (stages.js)
   const glowTex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -67,28 +71,17 @@ const VIEW = (() => {
     scene.fog = new THREE.Fog('#140d0a', 22, 46);
     camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
 
-    scene.add(new THREE.HemisphereLight('#ffe2c0', '#2a1408', 0.8));
+    hemiLight = new THREE.HemisphereLight('#ffe2c0', '#2a1408', 0.8); scene.add(hemiLight);
     keyLight = new THREE.DirectionalLight('#ffe9cc', 1.9);
     keyLight.position.set(-6, 14, 7); keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
     Object.assign(keyLight.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
     keyLight.shadow.bias = -0.0005; keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
-    const rim = new THREE.DirectionalLight('#7fa4ff', 0.45); rim.position.set(8, 6, -10); scene.add(rim);
+    rimLight = new THREE.DirectionalLight('#7fa4ff', 0.45); rimLight.position.set(8, 6, -10); scene.add(rimLight);
 
-    scene.add(MODELS.table());
     scene.add(MODELS.board());
-    for (const [x, z, y] of [[-11.5, -7, 7.4], [11.5, -7, 6.8], [-11.5, 7, 7], [11.5, 7, 7.6]]) {
-      const l = MODELS.lantern(); l.position.set(x, y, z); scene.add(l);
-      const pl = new THREE.PointLight('#ff7a3a', 1.6, 30, 2); pl.position.set(x, y, z); scene.add(pl);
-      lanterns.push({ l, pl, ph: Math.random() * 6 });
-    }
-    // dust in the lantern light
-    const n = 160, g = new THREE.BufferGeometry(), arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { arr[i * 3] = (Math.random() - 0.5) * 24; arr[i * 3 + 1] = Math.random() * 8; arr[i * 3 + 2] = (Math.random() - 0.5) * 24; }
-    g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    motes = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.09, map: glowTex, color: '#ffb36a', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
-    scene.add(motes);
+    setStage(wantStage);
 
     // highlight meshes
     selRing = ringMesh(0.47, 0.56, '#ffd24a', 0.95); selRing.visible = false; scene.add(selRing);
@@ -163,7 +156,7 @@ const VIEW = (() => {
 
   // ---------- units ----------
   function makeUnit(piece, s) {
-    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece);
+    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece, heroes[piece > 0 ? 1 : -1]);
     root.add(disc); war.position.y = DISC_H; root.add(war);
     disc.rotation.y = viewer > 0 ? 0 : Math.PI;
     war.visible = armyOn; war.scale.setScalar(armyOn ? 1 : 0.001);
@@ -198,6 +191,7 @@ const VIEW = (() => {
 
   function setViewer(side, instant) {
     viewer = side;
+    showing++; homeTheta = null; cam.tZoom = 1;          // a game starts: a hero preview still running must not move the camera
     for (const u of units.values()) u.disc.rotation.y = side > 0 ? 0 : Math.PI;
     for (const s of [1, -1]) for (const d of trays[s]) d.rotation.y = side > 0 ? 0 : Math.PI;
     dragged = false; resetCamera();
@@ -304,7 +298,7 @@ const VIEW = (() => {
     if (j.legL) { j.legL.rotation.x = 0; j.legR.rotation.x = 0; }
     if (j.legs) j.legs.forEach(L => { L.rotation.x = 0; });
     if (j.body) j.body.rotation.x = 0;
-    if (j.armR) j.armR.rotation.x = Math.abs(u.piece) === XQ.A ? -0.6 : 0;   // the advisor holds his fan up
+    if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
     u.war.position.y = DISC_H;
   }
   async function march(u, to, ms) {
@@ -421,7 +415,7 @@ const VIEW = (() => {
     const u = units.get(s); if (!u) return;
     const j = u.war.userData.j;
     if (!armyOn) { u.war.visible = true; tween(260, k => u.war.scale.setScalar(Math.max(0.001, 1.8 * backOut(k)))); }
-    tween(900, k => { if (j.armR) j.armR.rotation.x = -2.6 * Math.sin(k * Math.PI); })
+    tween(900, k => { if (j.armR) j.armR.rotation.x = (j.restArm || 0) - 2.6 * Math.sin(k * Math.PI); })
       .then(() => { if (!armyOn && !busy) return tween(220, k => u.war.scale.setScalar(Math.max(0.001, 1.8 * (1 - k)))).then(() => { if (!armyOn) u.war.visible = false; }); });
   }
   // the losing general falls
@@ -430,6 +424,114 @@ const VIEW = (() => {
     u.war.visible = true; u.war.scale.setScalar(1.8);
     tween(900, k => { u.war.rotation.x = -1.5 * out(k); });
     smoke(u.root.position.clone().setY(0.3), 8, '#4a3a2a', 1);
+  }
+
+  // ---------- stage ----------
+  // replace everything around the table, with its light, sky and haze; the board and pieces stay as they are
+  let wantStage = 'room';
+  function setStage(id) {
+    wantStage = STAGES.valid(id) ? id : 'room';
+    if (!scene || wantStage === stageId) return;          // before init() the wish is kept for it
+    if (stage) scene.remove(stage.group);
+    const low = Math.min(innerWidth, innerHeight) < 600 || (navigator.hardwareConcurrency || 8) <= 4;
+    stage = STAGES.build(wantStage, { glowTex, low }); stageId = wantStage;
+    if (stage.sky) stage.group.add(stage.sky);
+    scene.add(stage.group);
+    stage.group.traverse(o => { if (o.isMesh && !o.material.transparent) o.receiveShadow = true; });
+    const L = stage.light;
+    hemiLight.color.set(L.hemi[0]); hemiLight.groundColor.set(L.hemi[1]); hemiLight.intensity = L.hemi[2];
+    keyLight.color.set(L.key[0]); keyLight.intensity = L.key[1];
+    rimLight.color.set(L.rim[0]); rimLight.intensity = L.rim[1];
+    scene.background = new THREE.Color(stage.background || stage.fog);
+    scene.fog.color.set(stage.fog);
+    SFX.ambience(stage.ambience);
+    if (!menu) showcase();
+  }
+  // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
+  let showcaseRun = 0;
+  function showcase() {
+    const run = ++showcaseRun;
+    cam.tPhi = LOW; cam.tTheta += 0.7; cam.tDist = fitDist() * 1.1; tFocus.set(0, 1.6, 0);
+    wait(3200).then(() => { if (run === showcaseRun && !dragged && !menu) { cam.tZoom = 1; resetCamera(); } });
+  }
+
+  // ---------- heroes ----------
+  // the generals of both sides as led by these heroes ({ 1: id, '-1': id }); a side left out keeps its hero
+  function setHeroes(h) {
+    for (const side of [1, -1]) {
+      if (!(side in h) || heroes[side] === (h[side] || '')) continue;
+      heroes[side] = h[side] || '';
+      for (const u of units.values()) {
+        if (u.piece !== side * XQ.K) continue;
+        const shown = u.war.visible, scale = u.war.scale.x;
+        u.root.remove(u.war);
+        u.war = MODELS.warrior(u.piece, heroes[side]);
+        u.war.position.y = DISC_H; u.war.visible = shown; u.war.scale.setScalar(scale);
+        u.root.add(u.war);
+      }
+    }
+  }
+  // the hero rises from the general's piece, raises their weapon and goes back (the menu's preview)
+  let showing = 0, homeTheta = null;     // camera angle to return to after a preview (kept across quick re-picks)
+  async function showHero(side) {
+    const u = [...units.values()].find(x => x.piece === side * XQ.K);
+    if (!u || busy) return;
+    const id = ++showing, j = u.war.userData.j, a = u.war.scale.x;
+    u.war.visible = true;
+    // the camera comes round in front of them and moves in (Red faces -z, Black faces +z)
+    const front = side > 0 ? Math.PI : 0, turn = ((front - cam.theta) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+    if (homeTheta === null) homeTheta = cam.tTheta;
+    cam.tTheta = cam.theta + turn; cam.tPhi = 0.42;
+    tFocus.copy(u.root.position).setY(0.7); cam.tZoom = 0.26;
+    await tween(300, k => u.war.scale.setScalar(Math.max(0.001, lerp(a, 1.8, backOut(k)))));
+    if (id !== showing) return;
+    SFX.drum();
+    await tween(900, k => { if (j.armR) j.armR.rotation.x = (j.restArm || 0) - 2.6 * Math.sin(k * Math.PI); });
+    await wait(1100);
+    if (id !== showing || busy) return;
+    tFocus.copy(HOME); cam.tZoom = 1; cam.tPhi = portrait() ? 1.2 : 0.98;
+    if (!menu && homeTheta !== null) cam.tTheta = homeTheta;   // in a game, back to the player's own view
+    homeTheta = null;
+    await tween(260, k => u.war.scale.setScalar(Math.max(0.001, lerp(1.8, REST(), k))));
+    if (!armyOn) u.war.visible = false;
+  }
+  // a hero's silhouette, drawn once into a texture: white figure on black, weapon raised
+  const shadowTex = new Map();
+  function silhouette(id, side) {
+    const key = id + side;
+    if (shadowTex.has(key)) return shadowTex.get(key);
+    const war = MODELS.warrior(side * XQ.K, id), j = war.userData.j;
+    war.userData.flag.visible = false; war.rotation.y = 0.45;
+    if (j.armR) j.armR.rotation.x = -2.5;
+    const s = new THREE.Scene(); s.add(war);
+    s.overrideMaterial = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
+    war.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(war), c = b.getCenter(new THREE.Vector3()), size = b.getSize(new THREE.Vector3());
+    const half = Math.max(size.y / 2, size.x) * 1.04;   // a 1:2 frame around the figure
+    const cam = new THREE.OrthographicCamera(c.x - half / 2, c.x + half / 2, c.y + half, c.y - half, -10, 10);
+    cam.position.set(0, 0, 5); cam.lookAt(0, 0, 0);
+    const rt = new THREE.WebGLRenderTarget(256, 512);
+    const clear = renderer.getClearColor(new THREE.Color()), alpha = renderer.getClearAlpha();
+    renderer.setRenderTarget(rt); renderer.setClearColor('#000000', 1); renderer.clear(); renderer.render(s, cam);
+    renderer.setRenderTarget(null); renderer.setClearColor(clear, alpha);
+    shadowTex.set(key, rt.texture);
+    return rt.texture;
+  }
+  // the hero's shadow falls across the board from their own edge: when they give check, and longer when they win
+  const SHADOW_L = 9, SHADOW_W = 4.5;
+  function heroShadow(side, win) {
+    if (!renderer) return;
+    const pivot = new THREE.Group(); pivot.rotation.y = side > 0 ? 0 : Math.PI; scene.add(pivot);
+    const m = new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: silhouette(heroes[side], side), transparent: true, opacity: 0, depthWrite: false });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(SHADOW_W, SHADOW_L), m);
+    plane.rotation.x = -Math.PI / 2; plane.renderOrder = 1; pivot.add(plane);
+    const peak = win ? 0.62 : 0.48, ms = win ? 3200 : 1900;
+    return tween(ms, k => {
+      const grow = 0.82 + 0.22 * out(Math.min(1, k * 2));            // the shadow lengthens as the hero rises
+      plane.scale.set(grow, grow, 1);
+      plane.position.set(0, 0.006, 5.4 - (SHADOW_L * grow) / 2);    // feet at the hero's own edge of the board
+      m.opacity = peak * Math.min(1, k * 4) * Math.min(1, (1 - k) * 3);
+    }).then(() => { scene.remove(pivot); plane.geometry.dispose(); m.dispose(); });
   }
 
   // ---------- frame ----------
@@ -454,8 +556,7 @@ const VIEW = (() => {
     }
     // lifted selection, lantern sway, check pulse
     for (const u of units.values()) { const y = (u.lift || 0) * 0.22; if (!busy || u.lift) u.root.position.y += (y - u.root.position.y) * Math.min(1, dt * 12); }
-    for (const L of lanterns) { L.l.rotation.z = Math.sin(t / 1300 + L.ph) * 0.06; L.pl.intensity = 1.55 + Math.sin(t / 170 + L.ph) * 0.08 + Math.sin(t / 53 + L.ph) * 0.05; }
-    if (motes) { motes.rotation.y += dt * 0.01; motes.position.y = Math.sin(t / 4000) * 0.3; }
+    if (stage) stage.update(t, dt, camera);
     if (checkRing.visible) { const k = 0.5 + 0.5 * Math.sin(t / 160); checkRing.material.opacity = 0.5 + 0.45 * k; checkLight.intensity = 1.5 + k * 1.5; } else checkLight.intensity = 0;
     if (selRing.visible) selRing.scale.setScalar(1 + Math.sin(t / 200) * 0.04);
     // banners turn towards the camera so the characters on them always read the right way round
@@ -471,7 +572,7 @@ const VIEW = (() => {
     const kz = Math.min(1, dt * 3); cam.zoom += (cam.tZoom - cam.zoom) * kz; focus.lerp(tFocus, kz);
     placeCamera();
     // haze starts behind the board whatever the camera distance (portrait phones sit far back)
-    scene.fog.near = cam.dist * cam.zoom + 6; scene.fog.far = scene.fog.near + 26;
+    scene.fog.near = cam.dist * cam.zoom + 6; scene.fog.far = scene.fog.near + (stage ? stage.fogSpan : 26);
     if (shake > 0) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake = Math.max(0, shake - dt * 1.2); }
     renderer.render(scene, camera);
   }
@@ -479,8 +580,8 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera,
-    setMenu(on) { menu = on; if (!on) { dragged = false; resetCamera(); } },
+    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
+    setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px) { if (px === inset) return; inset = px; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },
   });
