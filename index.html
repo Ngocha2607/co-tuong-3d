@@ -50,6 +50,19 @@
   .icon.off { color: var(--dim); }
   .icon.off svg .wave { display: none; }
   .icon:focus-visible, .btn:focus-visible, .seg button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  /* the music button's little panel: on/off switch and volume */
+  .pop-wrap { position: relative; }
+  .pop { position: absolute; top: calc(100% + 8px); right: 0; width: 230px; padding: 12px 14px; display: grid; gap: 10px; background: var(--panel-solid); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+  .pop-head { display: flex; align-items: center; justify-content: space-between; }
+  .sw { position: relative; width: 40px; height: 22px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.4); cursor: pointer; transition: background 150ms, border-color 150ms; }
+  .sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--dim); transition: transform 150ms, background 150ms; }
+  .sw[aria-checked="true"] { background: var(--gold); border-color: var(--gold); }
+  .sw[aria-checked="true"] i { transform: translateX(18px); background: #2a1408; }
+  .sw:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .vol { display: flex; align-items: center; gap: 10px; }
+  .vol input { flex: 1; min-width: 0; accent-color: var(--gold); cursor: pointer; }
+  .vol span { width: 28px; text-align: right; color: var(--dim); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .pop.off .vol { opacity: 0.45; }
 
   /* ---------- side panel ---------- */
   #panel { position: fixed; right: 16px; top: 64px; bottom: 16px; width: 300px; display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); z-index: 4; }
@@ -90,7 +103,6 @@
   #rankedBox { display: grid; gap: 8px; }
 
   /* ---------- campaign ---------- */
-  #campBox .btn.primary { font: 700 16px/1.2 var(--serif); padding: 13px 12px; letter-spacing: 0.02em; }
   #goal { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--gold-soft); background: rgba(227, 180, 72, 0.08); display: grid; gap: 3px; }
   #goal b { font: 700 15px/1.25 var(--serif); color: var(--gold); }
   #goal p { margin: 0; font-weight: 600; }
@@ -103,9 +115,10 @@
   #campaign .camp-head h2 { margin: 0; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
   .camp-head p { margin: 4px 0 0; color: var(--gold); font-weight: 700; }
   .chapters { display: grid; gap: 12px; }
-  .chap { padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.22); }
-  .chap.done { border-color: var(--gold-soft); }
-  .chap.closed { opacity: 0.6; }
+  /* chapters are <section>s inside a .card: the id keeps .card section's menu spacing off them */
+  #campaign .chap { display: block; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.22); }
+  #campaign .chap.done { border-color: var(--gold-soft); }
+  #campaign .chap.closed { opacity: 0.6; }
   .chead { display: flex; align-items: center; gap: 12px; }
   .chead .seal { width: 42px; height: 42px; font-size: 22px; }
   .chead small { color: var(--dim); font-weight: 600; }
@@ -183,6 +196,35 @@
   #onlineBox.off .btn, #onlineBox.off .join { opacity: 0.4; pointer-events: none; }
   .foot { margin: 12px 0 0; color: var(--dim); font-size: 12px; }
   .foot a { color: var(--dim); }
+  details.foot summary { cursor: pointer; width: max-content; }
+  details.foot[open] summary { margin-bottom: 4px; color: var(--ink); }
+  /* menu pages: home lists the ways to play, each opens its own page with a back arrow */
+  .view { display: grid; gap: 10px; }
+  .view > section:first-of-type { border-top: 0; padding-top: 0; }
+  .view > .btn.primary { margin-top: 4px; }
+  .vhead { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .card .vhead h2 { font: 700 21px/1.2 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  .view > section .seg + h2 { margin-top: 6px; }
+  .modes { display: grid; gap: 8px; }
+  .mode { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.05); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 150ms, background 150ms; }
+  .mode:hover { border-color: var(--gold); background: rgba(245, 233, 212, 0.09); }
+  .mode:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .mode .hz { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 2px currentColor; font: 700 21px/1 var(--han); }
+  .mode b { display: block; font: 700 16px/1.25 var(--serif); }
+  .mode small { display: block; margin-top: 2px; color: var(--dim); font-size: 12.5px; }
+  .mode small:empty { display: none; }
+  .mode .chev { color: var(--dim); font-size: 24px; line-height: 1; padding-right: 2px; }
+  .mode.main { background: linear-gradient(180deg, #d63b2f, #a3201a); border-color: #e0574c; box-shadow: 0 6px 20px rgba(200, 49, 42, 0.35); }
+  .mode.main:hover { border-color: #ffb38a; }
+  .mode.main small, .mode.main .chev { color: #ffd9c9; }
+  .mode.main .hz { background: #fff3dc; }
+  #bResume { margin-bottom: 2px; }
+  #account { margin-top: 4px; padding: 14px 0 0; border-top: 1px solid var(--line); }
+  .me .meta { flex: 1; min-width: 0; }
+  .me .meta small { display: block; }
+  .me .acts { display: grid; gap: 4px; justify-items: end; font-size: 13px; }
+  #acIn { display: grid; gap: 12px; }
+  #renameForm input { font: 600 15px/1.2 var(--ui); letter-spacing: 0; text-transform: none; }
   #end, .dialog { justify-content: center; background: rgba(10, 6, 4, 0.55); }
   #end .card, #seek .card { text-align: center; }
   #end .han, #seek .han { font: 700 64px/1 var(--han); color: var(--gold); }
@@ -298,7 +340,13 @@
   <div class="tools">
     <button class="icon" id="bArmy" type="button" title="Hiện chiến binh trên mọi quân" aria-label="Hiện chiến binh"><svg viewBox="0 0 24 24"><path d="M4 4l10 10M14 14l2.5-.5L20 17l-3 3-3.5-3.5L14 14zM20 4L10 14M10 14l-2.5-.5L4 17l3 3 3.5-3.5L10 14z"/></svg></button>
     <button class="icon" id="bCam" type="button" title="Đặt lại góc nhìn" aria-label="Đặt lại góc nhìn"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg></button>
-    <button class="icon" id="bMusic" type="button" title="Nhạc nền" aria-label="Nhạc nền"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
+    <div class="pop-wrap">
+      <button class="icon" id="bMusic" type="button" title="Nhạc nền" aria-label="Nhạc nền" aria-expanded="false" aria-controls="musicPop"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg></button>
+      <div class="pop" id="musicPop" hidden>
+        <div class="pop-head"><b>Nhạc nền</b><button class="sw" id="bMusicOn" type="button" role="switch" aria-checked="true" aria-label="Bật nhạc nền"><i></i></button></div>
+        <div class="vol"><input id="musicVol" type="range" min="0" max="100" step="1" aria-label="Âm lượng nhạc nền"><span id="musicVolTxt"></span></div>
+      </div>
+    </div>
     <button class="icon" id="bSound" type="button" title="Âm thanh" aria-label="Âm thanh"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
     <button class="icon" id="bMenu" type="button" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
@@ -341,53 +389,71 @@
 <div id="menu" class="overlay" hidden>
   <div class="card">
     <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục – Ngụy tranh hùng trên bàn cờ</p></div></div>
-    <section id="campBox">
-      <h2>Chiến dịch</h2>
-      <button class="btn primary wide" id="bCampaign" type="button">Chinh chiến Tam Quốc</button>
-      <p class="note" id="campNote"></p>
-    </section>
-    <section id="heroBox">
-      <h2>Chủ tướng</h2>
-      <div class="picks" id="heroes"></div>
-      <p class="note" id="heroNote"></p>
-    </section>
-    <section id="stageBox">
-      <h2>Bối cảnh</h2>
-      <div class="picks" id="segStage"></div>
-      <p class="note" id="stageNote"></p>
-    </section>
-    <section id="account" hidden>
-      <h2>Kỳ thủ</h2>
-      <div id="acOut">
-        <div id="gBtn"></div>
-        <p class="note" id="gNote">Đăng nhập Google để chơi xếp hạng và lưu thành tích. Không đăng nhập vẫn chơi được bình thường.</p>
+
+    <!-- home: one line per way to play; each opens its own page -->
+    <div class="view" data-view="home">
+      <button class="btn gold wide" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
+      <div class="modes">
+        <button class="mode main" id="bCampaign" type="button"><span class="hz">戰</span><span><b>Chinh chiến Tam Quốc</b><small id="campNote"></small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="ai"><span class="hz">弈</span><span><b>Đánh với máy</b><small id="aiNote"></small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="online"><span class="hz">友</span><span><b>Chơi online</b><small id="onlineSum">Phòng chơi với bạn bè</small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="army"><span class="hz" id="armyHz">帥</span><span><b>Chủ tướng &amp; bối cảnh</b><small id="armyNote"></small></span><span class="chev">›</span></button>
       </div>
-      <div id="acIn" hidden>
-        <div class="me"><span class="av" id="meAv"></span><div><b id="meName"></b><small id="meStat"></small></div></div>
-        <form class="join" id="renameForm" hidden><input id="inName" type="text" maxlength="20" placeholder="Tên hiển thị" autocomplete="nickname" spellcheck="false" aria-label="Tên hiển thị"><button class="btn gold" type="submit">Lưu</button></form>
-        <div class="row2"><button class="btn" id="bRename" type="button">Đổi tên</button><button class="btn" id="bLogout" type="button">Đăng xuất</button></div>
-      </div>
-    </section>
-    <section>
-      <h2>Đánh với máy</h2>
-      <div class="seg" id="segSide"><button type="button" data-v="1">Cầm quân Đỏ (đi trước)</button><button type="button" data-v="-1">Cầm quân Đen</button></div>
-      <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
-      <button class="btn primary" id="bPlayAI" type="button">Vào trận</button>
-    </section>
-    <section id="onlineBox">
-      <h2>Chơi online</h2>
-      <div id="rankedBox" hidden>
-        <button class="btn primary wide" id="bRanked" type="button">Tìm trận xếp hạng · 10 phút</button>
+      <section id="account" hidden>
+        <div id="acOut">
+          <div id="gBtn"></div>
+          <p class="note" id="gNote">Đăng nhập để chơi xếp hạng và giữ thành tích trên mọi thiết bị.</p>
+        </div>
+        <div id="acIn" hidden>
+          <div class="me"><span class="av" id="meAv"></span><div class="meta"><b id="meName"></b><small id="meStat"></small></div><span class="acts"><button class="linkish" id="bRename" type="button">Đổi tên</button><button class="linkish" id="bLogout" type="button">Đăng xuất</button></span></div>
+          <form class="join" id="renameForm" hidden><input id="inName" type="text" maxlength="20" placeholder="Tên hiển thị" autocomplete="nickname" spellcheck="false" aria-label="Tên hiển thị"><button class="btn gold" type="submit">Lưu</button></form>
+        </div>
+      </section>
+    </div>
+
+    <div class="view" data-view="ai" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đánh với máy</h2></div>
+      <section>
+        <h2>Cầm quân</h2>
+        <div class="seg" id="segSide"><button type="button" data-v="1">Đỏ (đi trước)</button><button type="button" data-v="-1">Đen</button></div>
+        <h2>Độ khó</h2>
+        <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+      </section>
+      <button class="btn primary wide" id="bPlayAI" type="button">Vào trận</button>
+    </div>
+
+    <div class="view" data-view="online" id="onlineBox" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Chơi online</h2></div>
+      <section id="rankedBox" hidden>
+        <h2>Xếp hạng</h2>
+        <button class="btn primary wide" id="bRanked" type="button">Tìm trận · 10 phút</button>
         <p class="note" id="rankedNote"></p>
-      </div>
-      <div class="seg" id="segTc" title="Thời gian cho phòng chơi với bạn bè"><button type="button" data-v="0">Không giới hạn</button><button type="button" data-v="1">10 phút + 5s</button><button type="button" data-v="2">5 phút + 3s</button></div>
-      <button class="btn gold" id="bCreate" type="button">Tạo phòng với bạn bè</button>
-      <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
-      <p class="note" id="onlineNote"></p>
-      <button class="linkish" id="bRanks" type="button" hidden>Bảng xếp hạng</button>
-    </section>
-    <button class="btn" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
-    <p class="foot">Chạm một quân để xem nước đi, chạm điểm sáng để đi. Kéo để xoay bàn, cuộn chuột hoặc chụm hai ngón để phóng to, nhấp đúp để đặt lại góc nhìn.</p>
+        <button class="linkish" id="bRanks" type="button" hidden>Xem bảng xếp hạng</button>
+      </section>
+      <section>
+        <h2>Với bạn bè</h2>
+        <div class="seg" id="segTc" title="Thời gian mỗi bên"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
+        <button class="btn gold" id="bCreate" type="button">Tạo phòng mới</button>
+        <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
+        <p class="note" id="onlineNote"></p>
+      </section>
+    </div>
+
+    <div class="view" data-view="army" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Chủ tướng &amp; bối cảnh</h2></div>
+      <section>
+        <h2>Chủ tướng</h2>
+        <div class="picks" id="heroes"></div>
+        <p class="note" id="heroNote"></p>
+      </section>
+      <section>
+        <h2>Bối cảnh</h2>
+        <div class="picks" id="segStage"></div>
+        <p class="note" id="stageNote"></p>
+      </section>
+    </div>
+
+    <details class="foot"><summary>Cách điều khiển</summary>Chạm một quân để xem nước đi, chạm điểm sáng để đi. Kéo để xoay bàn, cuộn chuột hoặc chụm hai ngón để phóng to, nhấp đúp để đặt lại góc nhìn.</details>
     <p class="foot"><a href="privacy" target="_blank">Chính sách bảo mật</a> · <a href="terms" target="_blank">Điều khoản sử dụng</a></p>
   </div>
 </div>

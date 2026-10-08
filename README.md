@@ -86,6 +86,21 @@ Khi có migration mới trong `migrations/` (ví dụ `0002_campaign.sql` cho ch
 
 Máy chủ chỉ lưu mã tài khoản Google (`sub`) và tên hiển thị. Không lưu email hay ảnh đại diện.
 
+## Nhạc nền
+
+Mỗi bối cảnh có thể có nhạc riêng: đặt file vào thư mục `music/` (tạo nếu chưa có), đặt tên theo mã bối cảnh:
+
+| Bối cảnh | File |
+|---|---|
+| Quân trướng | `music/room.mp3` |
+| Đào viên | `music/dao-vien.mp3` |
+| Hổ Lao quan | `music/ho-lao.mp3` |
+| Trường Bản | `music/truong-ban.mp3` |
+| Xích Bích | `music/xich-bich.mp3` |
+| Ngũ Trượng Nguyên | `music/ngu-truong.mp3` |
+
+Bối cảnh nào chưa có file thì dùng tiếng đàn tranh tự tạo như cũ, nên có thể thêm dần từng bài. Nhạc phát lặp, nhỏ dần rồi lớn dần khi đổi bối cảnh, và theo nút Nhạc nền trên thanh công cụ. Nên dùng file mp3 128 kbps, 1–3 MB, chỗ cuối bài nối êm vào chỗ đầu. Chỉ dùng nhạc bạn có quyền phát công khai (tự làm, mua license, hoặc giấy phép CC0 / miễn phí bản quyền).
+
 ## Luật
 
 Đủ luật cờ tướng: Tướng và Sĩ không ra khỏi cung, hai Tướng không được đối mặt trên một cột trống, Mã bị cản chân, Tượng bị cản mắt và không qua sông,
