@@ -19,9 +19,10 @@
     rated: false, info: { 1: null, '-1': null }, tc: null, clock: null, deadline: null, wantTc: '',
     heroes: { 1: '', '-1': '' },              // hero leading each side (heroes.js), '' = the plain general
   };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '' };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room' };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!HEROES.valid(pref.hero)) pref.hero = '';
+  if (!STAGES.valid(pref.stage)) pref.stage = 'room';
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
 
   // ---------- game record ----------
@@ -506,6 +507,18 @@
     G.heroes[side] = pref.hero; VIEW.setHeroes({ [side]: pref.hero }); VIEW.showHero(side); updateStatus();
   });
   renderHeroes();
+
+  // stage picker: where the board stands; applies at once, in or out of a game
+  function renderStages() {
+    $('#segStage').innerHTML = STAGES.list.map(s => `<button type="button" data-id="${s.id}" class="${s.id === pref.stage ? 'on' : ''}" aria-pressed="${s.id === pref.stage}"><span class="hz">${s.han}</span><span>${s.name}</span></button>`).join('');
+    $('#stageNote').textContent = STAGES.byId[pref.stage].note;
+  }
+  $('#segStage').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.id === pref.stage) return;
+    pref.stage = b.dataset.id; savePref(); renderStages();
+    SFX.init(); SFX.pick(); VIEW.setStage(pref.stage);
+  });
+  renderStages();
   $('#bRanked').addEventListener('click', seek);
   $('#bSeekCancel').addEventListener('click', stopSeek);
   $('#bRanks').addEventListener('click', () => ACCOUNT.openRanks(0));
@@ -554,7 +567,8 @@
   // ---------- boot ----------
   async function boot() {
     // the brush font has to be in before the characters are painted on the pieces
-    try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢' + HEROES.list.map(h => h.han).join('')), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
+    try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢赤壁呂董虎牢關' + HEROES.list.map(h => h.han).join('') + STAGES.list.map(s => s.han).join('')), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
+    VIEW.setStage(pref.stage);
     VIEW.init($('#view'));
     G.heroes[1] = pref.hero; VIEW.setHeroes(G.heroes);
     VIEW.setBoard(G.pos.b, []);

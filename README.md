@@ -7,6 +7,14 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
 - **Chơi online:** tạo phòng, gửi link `…/?room=ABCD` cho bạn bè. Máy chủ kiểm tra từng nước đi, lưu ván cờ (đóng tab rồi mở lại vẫn vào đúng ván), người thứ ba vào được để xem. Hết ván bấm Đấu lại thì hai bên đổi màu quân. Người tạo phòng chọn thời gian: không giới hạn, 10 phút + 5 giây hoặc 5 phút + 3 giây.
 - **Đăng nhập Google và xếp hạng:** đăng nhập để có tên hiển thị (đổi được) và điểm Elo, bắt đầu từ 1200. **Tìm trận xếp hạng** ghép bạn với người có điểm gần nhất (lúc đầu chênh tối đa 100 điểm, nới thêm 20 điểm cho mỗi giây chờ), màu quân bốc ngẫu nhiên, mỗi bên 10 phút + 5 giây. Chơi đủ 10 ván xếp hạng thì có tên trên **Bảng xếp hạng** (top 100). Hồ sơ mỗi người có số ván thắng/hòa/thua và 20 ván gần nhất. Không đăng nhập vẫn đánh với máy và chơi phòng bạn bè bình thường.
 - **Chủ tướng:** chọn một trong 8 danh tướng (Quan Vũ, Trương Phi, Triệu Vân, Gia Cát Lượng, Lưu Bị, Tào Tháo, Tôn Quyền, Lữ Bố). Quân Tướng của bạn hóa thành người đó: dáng hình, mũ, râu và binh khí riêng, cờ hiệu mang chữ họ (關, 曹…). Khi bạn chiếu tướng, bóng chủ tướng đổ dài trên bàn cờ, và đậm hơn khi bạn thắng. Quân lính vẫn theo màu phe. Đánh với máy thì máy bốc ngẫu nhiên một chủ tướng khác; chơi online thì đối thủ thấy chủ tướng của bạn, và lựa chọn được giữ nguyên đến hết ván.
+- **Bối cảnh:** chọn nơi đặt bàn cờ trong menu, đổi được cả khi đang chơi:
+  - **Quân trướng** (mặc định): căn phòng đèn lồng.
+  - **Hổ Lao quan**: cửa ải đá giữa hai vách núi, lầu cổng có biển 虎牢關, cờ 呂 trên mặt thành. Trước cổng, Lưu Bị, Quan Vũ và Trương Phi đại chiến Lữ Bố. Trời rạng sáng, sương trôi. Âm thanh nền là gió, tiếng cờ bay và trống trận vọng lại.
+  - **Trường Bản**: chạng vạng bụi mờ bên bờ sông, Trương Phi một mình đứng chặn trên cầu. Bên kia sông, kỵ binh Tào Tháo phi ngang cuốn bụi. Âm thanh nền là gió và tiếng vó ngựa.
+  - **Xích Bích**: bàn cờ trên boong thuyền giữa sông đêm, chiến thuyền Tào Tháo bốc cháy, vách đá khắc chữ 赤壁, tàn lửa bay. Âm thanh nền là sóng nước và tiếng lửa.
+  - **Ngũ Trượng Nguyên**: đêm thu trong doanh trại Thục, lều trại, lò lửa, trời sao, thỉnh thoảng có sao băng rơi. Âm thanh nền là gió và dế.
+
+  Khi chơi, camera nhìn xuống bàn cờ nên cảnh chỉ hiện quanh mép bàn. Ở menu, và trong vài giây sau khi đổi cảnh, camera hạ thấp để thấy toàn cảnh; kéo xoay bàn để ngắm lúc nào cũng được. Máy yếu hoặc màn hình nhỏ dùng ít hạt hơn.
 - **Chiến binh:** khi đi quân, chiến binh trồi lên từ quân cờ và hành quân. Khi ăn quân, camera lia cận cảnh pha giao chiến; Pháo là máy bắn đá, bắn đá qua ngòi. Nút ⚔ ở góc trên bật chế độ đội quân: mọi quân luôn hiện chiến binh, chữ Hán in trên cờ hiệu.
 
 | Quân | Chữ (Đỏ / Đen) | Chiến binh |
@@ -94,8 +102,9 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 | `src/ai-worker.js` | Chạy máy chơi trong Web Worker |
 | `src/models.js` | Bàn cờ, quân cờ, chiến binh, các chủ tướng, đèn lồng (dựng bằng code) |
 | `src/heroes.js` | Danh sách chủ tướng, dùng chung cho trang web và server |
+| `src/stages.js` | Các bối cảnh quanh bàn cờ: bầu trời, mặt đất, cảnh xa, ánh sáng, sương mù, chuyển động |
 | `src/scene.js` | Cảnh 3D: camera, chọn quân, hiệu ứng, hoạt cảnh giao chiến |
-| `src/audio.js` | Âm thanh và nhạc nền ngũ cung, tổng hợp bằng Web Audio |
+| `src/audio.js` | Âm thanh, nhạc nền ngũ cung và âm thanh nền của từng bối cảnh, tổng hợp bằng Web Audio |
 | `src/game.js` | Ván cờ, menu, chế độ online, đồng hồ, tìm trận xếp hạng, biên bản |
 | `src/account.js` | Nút đăng nhập Google, tên và điểm của người chơi, bảng xếp hạng, hồ sơ |
 | `worker/index.js` | Cloudflare Worker: định tuyến tới file tĩnh, API và các Durable Object |

@@ -1,4 +1,4 @@
-// scene.js — the 3D view: renderer, lanterns and table, orbit camera, tapping on points, highlights and the
+// scene.js — the 3D view: renderer, the stage around the table (stages.js), orbit camera, tapping on points, highlights and the
 // battle animations (a warrior rises from the piece, marches, strikes, the defeated piece flies to the tray).
 // Holds no game rules: game.js tells it what to show.
 'use strict';
@@ -35,9 +35,11 @@ const VIEW = (() => {
   const portrait = () => W / H < 0.8;
   // on a portrait phone the controls cover the bottom of the screen: look more from above and aim below the
   // board's centre (towards the viewer) so the board sits higher, clear of the panel
+  const LOW = 0.3;                         // the low angle that shows the stage's horizon (menu, showcase)
   function resetCamera() {
-    cam.tTheta = viewer > 0 ? 0 : Math.PI; cam.tPhi = portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
-    HOME.set(0, -0.4, portrait() ? 1.5 * viewer : 0); if (cam.tZoom === 1) tFocus.copy(HOME);
+    // the menu circles low to show off the stage; in play the camera looks down on the board
+    cam.tTheta = viewer > 0 ? 0 : Math.PI; cam.tPhi = menu ? LOW : portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
+    HOME.set(0, menu ? 1.6 : -0.4, portrait() ? 1.5 * viewer : 0); if (cam.tZoom === 1) tFocus.copy(HOME);
   }
   function placeCamera() {
     const cp = Math.cos(cam.phi), d = cam.dist * cam.zoom;
@@ -46,7 +48,8 @@ const VIEW = (() => {
   }
 
   // ---------- setup ----------
-  let keyLight, checkRing, checkLight, selRing, hintRings = [], dots = [], capRings = [], lastMarks = [], lanterns = [], motes;
+  let keyLight, hemiLight, rimLight, checkRing, checkLight, selRing, hintRings = [], dots = [], capRings = [], lastMarks = [];
+  let stage = null, stageId = '';          // what surrounds the table (stages.js)
   const glowTex = (() => {
     const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
@@ -68,28 +71,17 @@ const VIEW = (() => {
     scene.fog = new THREE.Fog('#140d0a', 22, 46);
     camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
 
-    scene.add(new THREE.HemisphereLight('#ffe2c0', '#2a1408', 0.8));
+    hemiLight = new THREE.HemisphereLight('#ffe2c0', '#2a1408', 0.8); scene.add(hemiLight);
     keyLight = new THREE.DirectionalLight('#ffe9cc', 1.9);
     keyLight.position.set(-6, 14, 7); keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(2048, 2048);
     Object.assign(keyLight.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 40 });
     keyLight.shadow.bias = -0.0005; keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
-    const rim = new THREE.DirectionalLight('#7fa4ff', 0.45); rim.position.set(8, 6, -10); scene.add(rim);
+    rimLight = new THREE.DirectionalLight('#7fa4ff', 0.45); rimLight.position.set(8, 6, -10); scene.add(rimLight);
 
-    scene.add(MODELS.table());
     scene.add(MODELS.board());
-    for (const [x, z, y] of [[-11.5, -7, 7.4], [11.5, -7, 6.8], [-11.5, 7, 7], [11.5, 7, 7.6]]) {
-      const l = MODELS.lantern(); l.position.set(x, y, z); scene.add(l);
-      const pl = new THREE.PointLight('#ff7a3a', 1.6, 30, 2); pl.position.set(x, y, z); scene.add(pl);
-      lanterns.push({ l, pl, ph: Math.random() * 6 });
-    }
-    // dust in the lantern light
-    const n = 160, g = new THREE.BufferGeometry(), arr = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { arr[i * 3] = (Math.random() - 0.5) * 24; arr[i * 3 + 1] = Math.random() * 8; arr[i * 3 + 2] = (Math.random() - 0.5) * 24; }
-    g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
-    motes = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.09, map: glowTex, color: '#ffb36a', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
-    scene.add(motes);
+    setStage(wantStage);
 
     // highlight meshes
     selRing = ringMesh(0.47, 0.56, '#ffd24a', 0.95); selRing.visible = false; scene.add(selRing);
@@ -434,6 +426,35 @@ const VIEW = (() => {
     smoke(u.root.position.clone().setY(0.3), 8, '#4a3a2a', 1);
   }
 
+  // ---------- stage ----------
+  // replace everything around the table, with its light, sky and haze; the board and pieces stay as they are
+  let wantStage = 'room';
+  function setStage(id) {
+    wantStage = STAGES.valid(id) ? id : 'room';
+    if (!scene || wantStage === stageId) return;          // before init() the wish is kept for it
+    if (stage) scene.remove(stage.group);
+    const low = Math.min(innerWidth, innerHeight) < 600 || (navigator.hardwareConcurrency || 8) <= 4;
+    stage = STAGES.build(wantStage, { glowTex, low }); stageId = wantStage;
+    if (stage.sky) stage.group.add(stage.sky);
+    scene.add(stage.group);
+    stage.group.traverse(o => { if (o.isMesh && !o.material.transparent) o.receiveShadow = true; });
+    const L = stage.light;
+    hemiLight.color.set(L.hemi[0]); hemiLight.groundColor.set(L.hemi[1]); hemiLight.intensity = L.hemi[2];
+    keyLight.color.set(L.key[0]); keyLight.intensity = L.key[1];
+    rimLight.color.set(L.rim[0]); rimLight.intensity = L.rim[1];
+    scene.background = new THREE.Color(stage.background || stage.fog);
+    scene.fog.color.set(stage.fog);
+    SFX.ambience(stage.ambience);
+    if (!menu) showcase();
+  }
+  // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
+  let showcaseRun = 0;
+  function showcase() {
+    const run = ++showcaseRun;
+    cam.tPhi = LOW; cam.tTheta += 0.7; cam.tDist = fitDist() * 1.1; tFocus.set(0, 1.6, 0);
+    wait(3200).then(() => { if (run === showcaseRun && !dragged && !menu) { cam.tZoom = 1; resetCamera(); } });
+  }
+
   // ---------- heroes ----------
   // the generals of both sides as led by these heroes ({ 1: id, '-1': id }); a side left out keeps its hero
   function setHeroes(h) {
@@ -535,8 +556,7 @@ const VIEW = (() => {
     }
     // lifted selection, lantern sway, check pulse
     for (const u of units.values()) { const y = (u.lift || 0) * 0.22; if (!busy || u.lift) u.root.position.y += (y - u.root.position.y) * Math.min(1, dt * 12); }
-    for (const L of lanterns) { L.l.rotation.z = Math.sin(t / 1300 + L.ph) * 0.06; L.pl.intensity = 1.55 + Math.sin(t / 170 + L.ph) * 0.08 + Math.sin(t / 53 + L.ph) * 0.05; }
-    if (motes) { motes.rotation.y += dt * 0.01; motes.position.y = Math.sin(t / 4000) * 0.3; }
+    if (stage) stage.update(t, dt, camera);
     if (checkRing.visible) { const k = 0.5 + 0.5 * Math.sin(t / 160); checkRing.material.opacity = 0.5 + 0.45 * k; checkLight.intensity = 1.5 + k * 1.5; } else checkLight.intensity = 0;
     if (selRing.visible) selRing.scale.setScalar(1 + Math.sin(t / 200) * 0.04);
     // banners turn towards the camera so the characters on them always read the right way round
@@ -552,7 +572,7 @@ const VIEW = (() => {
     const kz = Math.min(1, dt * 3); cam.zoom += (cam.tZoom - cam.zoom) * kz; focus.lerp(tFocus, kz);
     placeCamera();
     // haze starts behind the board whatever the camera distance (portrait phones sit far back)
-    scene.fog.near = cam.dist * cam.zoom + 6; scene.fog.far = scene.fog.near + 26;
+    scene.fog.near = cam.dist * cam.zoom + 6; scene.fog.far = scene.fog.near + (stage ? stage.fogSpan : 26);
     if (shake > 0) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake = Math.max(0, shake - dt * 1.2); }
     renderer.render(scene, camera);
   }
@@ -560,8 +580,8 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow,
-    setMenu(on) { menu = on; if (!on) { dragged = false; resetCamera(); } },
+    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
+    setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px) { if (px === inset) return; inset = px; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },
   });
