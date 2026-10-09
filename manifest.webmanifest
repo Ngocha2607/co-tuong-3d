@@ -1,0 +1,16 @@
+{
+  "name": "Cờ Tướng 3D",
+  "short_name": "Cờ Tướng 3D",
+  "description": "Cờ tướng 3D: đánh với máy hoặc chơi online, quân cờ hoá chiến binh Tam Quốc khi ra trận.",
+  "lang": "vi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#140d0a",
+  "theme_color": "#140d0a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
