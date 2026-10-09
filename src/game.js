@@ -30,7 +30,7 @@
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // a signed-in player's hero and stage follow them: each pick is saved to the account
   const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room' };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!HEROES.valid(pref.hero)) pref.hero = '';
   if (!STAGES.valid(pref.stage)) pref.stage = 'room';
@@ -737,6 +737,38 @@
   });
   addEventListener('pointerdown', e => { if (!$('#musicPop').hidden && !e.target.closest('.pop-wrap')) musicPop(false); });
   $('#bMoves').addEventListener('click', () => document.body.classList.toggle('show-moves'));
+  // phones: drag the panel down by its grip or the players row to fold it away to just the players, up to unfold;
+  // a tap on the grip toggles it
+  const panelMin = on => {
+    pref.panelMin = on; savePref(); document.body.classList.toggle('panel-min', on);
+    $('#grip').setAttribute('aria-expanded', !on); $('#grip').setAttribute('aria-label', on ? 'Mở rộng bảng' : 'Thu gọn bảng');
+  };
+  panelMin(pref.panelMin);
+  let swipe = null;
+  for (const el of [$('#grip'), $('#panel .players')]) {
+    el.addEventListener('pointerdown', e => {
+      if (innerWidth > 760 || (e.pointerType === 'mouse' && e.button)) return;
+      swipe = { id: e.pointerId, y: e.clientY, dy: 0 }; el.setPointerCapture(e.pointerId); $('#panel').classList.add('drag');
+    });
+    el.addEventListener('pointermove', e => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      swipe.dy = e.clientY - swipe.y;
+      // follows the finger in the direction it can go, resists the other way
+      const min = document.body.classList.contains('panel-min'), d = (swipe.dy > 0) === !min ? swipe.dy : swipe.dy * 0.2;
+      $('#panel').style.transform = `translateY(${min ? Math.min(d, 0) * 0.5 : Math.max(d, 0)}px)`;
+    });
+    const end = e => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      const dy = swipe.dy; swipe = null;
+      $('#panel').classList.remove('drag'); $('#panel').style.transform = '';
+      if (e.type === 'pointercancel') return;
+      if (dy > 40) panelMin(true);
+      else if (dy < -40) panelMin(false);
+      else if (Math.abs(dy) < 6 && el.id === 'grip') panelMin(!pref.panelMin);
+    };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  }
+  $('#grip').addEventListener('click', e => { if (!e.detail) panelMin(!pref.panelMin); });   // keyboard
   addEventListener('pointerdown', () => SFX.init(), { once: true });
   addEventListener('resize', () => VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0));
 
