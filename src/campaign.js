@@ -1,9 +1,11 @@
-// campaign.js — "Chinh chiến Tam Quốc": five chapters along the history of the Three Kingdoms, three battles each.
+// campaign.js — "Chinh chiến Tam Quốc": five chapters along the history of the Three Kingdoms, three battles each,
+// then the "Ngoại truyện" (side stories): three harder chapters that go back to famous battles in between.
 // Shared by the page and the Worker: the same judge() decides a battle on both sides (the Worker replays the moves
 // a player sends before it records their stars), and the same rules say what is unlocked.
 //   mate      a set position: checkmate within n moves (the puzzles are proven by test/campaign.test.js)
 //   survive   hold out against an overwhelming attack for n of the enemy's moves
 //   handicap  a whole game against the computer, one side short of pieces
+//   duel      a whole game against the computer, nobody short of anything
 // Stars: one for winning, one for winning without undo or hints, one for the battle's own extra goal.
 'use strict';
 const CAMPAIGN = (() => {
@@ -14,6 +16,7 @@ const CAMPAIGN = (() => {
     easy: { time: 250, depth: 2, noise: true },
     normal: { time: 900, depth: 6 },
     hard: { time: 2600 },
+    master: { time: 4500 },        // the side stories: as long a think as a phone can bear
     defend: { time: 1200 },        // puzzles: the best defence it can find
   };
 
@@ -78,6 +81,43 @@ const CAMPAIGN = (() => {
           story: 'Ván cờ cuối cùng với Tư Mã Ý, kỳ phùng địch thủ. Ngụy quân chỉ thiếu một con Mã, mọi nước đi đều phải tính kỹ.' },
       ],
     },
+    // ---- Ngoại truyện: back to three famous battles, against the computer's longest think ----
+    {
+      id: 'c6', year: 219, name: 'Định Quân Sơn', stage: 'dinh-quan', foe: 'ha-hau-uyen', part: 'Ngoại truyện',
+      intro: 'Lưu Bị tranh Hán Trung với Tào Tháo. Lão tướng Hoàng Trung theo kế Pháp Chính chiếm ngọn núi đối diện, chờ quân Hạ Hầu Uyên mỏi mệt rồi từ trên cao đổ xuống.',
+      levels: [
+        { id: '6-1', name: 'Pháp Chính phất cờ', type: 'mate', n: 3, side: 1, ai: 'defend', fen: '4ka3/9/R1C2a3/2C2P3/2b6/9/9/5A3/6p2/3K5 w',
+          story: 'Pháp Chính đứng trên đỉnh núi chờ thời. Hai cỗ Pháo chung một đường như hai lá cờ hiệu: chỉ cần phất đúng lá cờ, quân Ngụy không còn đường lui.' },
+        { id: '6-2', name: 'Lấy nhàn đợi mỏi', type: 'survive', n: 18, keep: 6, side: 1, ai: 'master', fen: 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/1NBAKABN1 w',
+          story: 'Quân ta trên núi không có lấy một cỗ Xe, Hạ Hầu Uyên dốc toàn lực đánh lên. Giữ vững mười tám nước cho quân địch mỏi mệt.' },
+        { id: '6-3', name: 'Chém Hạ Hầu Uyên', type: 'handicap', par: 60, side: 1, ai: 'master', fen: 'rnbakabnr/9/7c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w',
+          story: 'Hoàng Trung từ trên núi đổ xuống như thác, quân Ngụy rối loạn, mất một cỗ Pháo. Nhưng Hạ Hầu Uyên vẫn là danh tướng, và máy nghĩ lâu hơn mọi trận trước.' },
+      ],
+    },
+    {
+      id: 'c7', year: 225, name: 'Nam chinh', stage: 'nam-man', foe: 'manh-hoach', part: 'Ngoại truyện',
+      intro: 'Phương Nam nổi loạn. Gia Cát Lượng dẫn quân vượt sông Lô giữa tháng năm, khí độc bốc trên mặt nước, để bắt Mạnh Hoạch bảy lần, tha bảy lần, cho đến khi vua Nam Man thật lòng quy phục.',
+      levels: [
+        { id: '7-1', name: 'Vượt sông Lô', type: 'survive', n: 16, keep: 7, side: 1, ai: 'master', fen: 'r1bakab1r/9/1cn1c1n2/p1p1p1p1p/9/2P6/P3P1P1P/1C5C1/4A4/1NB1KAB2 w',
+          story: 'Quân ta mới qua được nửa sông, Xe chưa sang, một con Mã còn kẹt bờ bên kia. Pháo của Mạnh Hoạch đã đặt giữa trận: cầm cự mười sáu nước.' },
+        { id: '7-2', name: 'Hỏa thiêu Đằng giáp', type: 'mate', n: 3, side: 1, ai: 'defend', fen: '2bk5/9/b1C2a3/9/4C4/9/6R2/9/9/4KA3 w',
+          story: 'Quân Đằng giáp đao thương không thủng. Khổng Minh nhử chúng vào hang Bàn Xà: phải dám đưa mồi, lửa mới bùng lên được.' },
+        { id: '7-3', name: 'Thất cầm Mạnh Hoạch', type: 'duel', par: 70, side: 1, ai: 'master', fen: 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w',
+          story: 'Lần thứ bảy đối mặt. Không ai chấp ai, quân hai bên đủ cả: thắng được ván này thì Mạnh Hoạch mới chịu phục.' },
+      ],
+    },
+    {
+      id: 'c8', year: 228, name: 'Không thành kế', stage: 'tay-thanh', foe: 'tu-ma-y', part: 'Ngoại truyện',
+      intro: 'Lần Bắc phạt đầu tiên. Khổng Minh thu phục Khương Duy ở Thiên Thủy, nhưng Mã Tốc làm mất Nhai Đình. Tư Mã Ý kéo mười lăm vạn quân đến Tây Thành, nơi chỉ còn vài nghìn lính già.',
+      levels: [
+        { id: '8-1', name: 'Thu phục Khương Duy', type: 'mate', n: 3, side: 1, ai: 'defend', fen: '5kb2/1N2a4/8b/9/2R6/9/9/4K4/4A4/9 w',
+          story: 'Khương Duy trí dũng song toàn, đánh thẳng thì không bắt được. Có khi phải lui một bước mới tiến được ba bước.' },
+        { id: '8-2', name: 'Tiếng đàn trên thành', type: 'survive', n: 15, keep: 4, side: 1, ai: 'master', fen: 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/4P1P2/4C4/9/2BAKAB2 w',
+          story: 'Cổng thành mở toang, trong thành chỉ còn một cỗ Pháo, hai tên lính và mấy quân giữ cung. Khổng Minh vẫn ung dung gảy đàn: giữ thành mười lăm nước, đừng để Tư Mã Ý nhìn ra sơ hở.' },
+        { id: '8-3', name: 'Kỳ phùng địch thủ', type: 'duel', par: 70, side: -1, ai: 'master', fen: 'rnbakabnr/9/1c5c1/p1p1p1p1p/9/9/P1P1P1P1P/1C5C1/9/RNBAKABNR w',
+          story: 'Tư Mã Ý đã lui quân, nhưng ván cờ giữa hai người chưa bao giờ dứt. Lần này bạn cầm quân Đen, đi sau, quân hai bên ngang nhau.' },
+      ],
+    },
   ];
   const LEVELS = CHAPTERS.flatMap(c => c.levels.map(l => Object.assign(l, { chapter: c.id })));
   const byId = Object.assign(Object.create(null), Object.fromEntries(LEVELS.map(l => [l.id, l])));
@@ -88,6 +128,7 @@ const CAMPAIGN = (() => {
   const TITLES = {
     'dao-vien': 'Huynh đệ kết nghĩa', 'ho-lao': 'Anh hùng Hổ Lao', 'truong-ban': 'Hổ tướng Trường Bản',
     'xich-bich': 'Đô đốc Xích Bích', 'ngu-truong': 'Ngọa Long', 'vo-song': 'Thiên hạ vô song',
+    'dinh-quan': 'Lão tướng Định Quân', 'nam-man': 'Bình Nam đại tướng', 'tay-thanh': 'Thần cơ diệu toán', 'nhat-thong': 'Nhất thống thiên hạ',
   };
   const REWARDS = [
     { chapter: 'c1', title: 'dao-vien', stage: 'dao-vien' },
@@ -95,9 +136,14 @@ const CAMPAIGN = (() => {
     { chapter: 'c3', title: 'truong-ban' },
     { chapter: 'c4', title: 'xich-bich', hero: 'chu-du' },
     { chapter: 'c5', title: 'ngu-truong', hero: 'tu-ma-y' },
+    { chapter: 'c6', title: 'dinh-quan', stage: 'dinh-quan', hero: 'ha-hau-uyen' },
+    { chapter: 'c7', title: 'nam-man', stage: 'nam-man', hero: 'manh-hoach' },
+    { chapter: 'c8', title: 'tay-thanh', stage: 'tay-thanh', hero: 'khuong-duy' },
     { stars: 15, hero: 'hoang-trung' },
     { stars: 30, hero: 'ma-sieu' },
-    { stars: MAX_STARS, title: 'vo-song' },
+    { stars: 45, title: 'vo-song' },             // every star of the first five chapters: kept at 45 for those who have it
+    { stars: 60, hero: 'chuc-dung' },
+    { stars: MAX_STARS, title: 'nhat-thong' },
   ];
 
   // ---------- deciding a battle ----------
@@ -134,7 +180,7 @@ const CAMPAIGN = (() => {
     return { over: false, win: false, reason: '', mine, theirs, pieces: count(), plies: seq.length };
   }
   // the extra goal of a battle (the third star)
-  const extra = (lv, r) => lv.type === 'mate' ? r.mine <= lv.n : lv.type === 'handicap' ? r.mine <= lv.par : r.pieces >= lv.keep;
+  const extra = (lv, r) => lv.type === 'mate' ? r.mine <= lv.n : lv.type === 'survive' ? r.pieces >= lv.keep : r.mine <= lv.par;
   function stars(lv, r, help) { return r.over && r.win ? 1 + (help ? 0 : 1) + (extra(lv, r) ? 1 : 0) : 0; }
 
   // ---------- what a player has opened ----------
@@ -174,7 +220,7 @@ const CAMPAIGN = (() => {
       lv.type === 'mate' ? `Chiếu bí đúng ${lv.n} nước` : lv.type === 'survive' ? `Còn ít nhất ${lv.keep} quân (không tính Tướng)` : `Thắng trong ${lv.par} nước`,
     ];
   }
-  const TYPE = { mate: ['Cờ thế', '勢'], survive: ['Thủ thành', '守'], handicap: ['Chấp quân', '讓'] };
+  const TYPE = { mate: ['Cờ thế', '勢'], survive: ['Thủ thành', '守'], handicap: ['Chấp quân', '讓'], duel: ['Quyết chiến', '決'] };
 
   const next = id => { const i = LEVELS.findIndex(l => l.id === id); return i >= 0 && i < LEVELS.length - 1 ? LEVELS[i + 1] : null; };
   return {

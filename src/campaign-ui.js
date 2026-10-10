@@ -83,7 +83,7 @@ const CAMPAIGN_UI = (() => {
     } else box.hidden = true;
     $('#campTitleNote').textContent = ACCOUNT.user ? (u.titles.length ? '' : 'Hoàn thành một chương để nhận danh hiệu đầu tiên.') : (ACCOUNT.enabled ? 'Đăng nhập Google để giữ tiến độ trên mọi thiết bị và hiện danh hiệu trên bảng xếp hạng.' : '');
     // chapters, each with its three battles
-    $('#campMap').innerHTML = CAMPAIGN.CHAPTERS.map(c => {
+    $('#campMap').innerHTML = CAMPAIGN.CHAPTERS.map((c, i) => {
       const open = c.levels.some(l => u.levels.has(l.id)), done = u.chapters.has(c.id), st = STAGES.byId[c.stage];
       const levels = c.levels.map(l => {
         const can = u.levels.has(l.id), s = p[l.id] | 0, [tname, thz] = CAMPAIGN.TYPE[l.type];
@@ -91,7 +91,9 @@ const CAMPAIGN_UI = (() => {
           <span class="hz">${can ? thz : '鎖'}</span><span class="lvt"><b>${l.id} · ${esc(l.name)}</b><small>${tname}</small></span>
           <span class="st" aria-label="${s} sao">${can ? starRow(s) : ''}</span></button>`;
       }).join('');
-      return `<section class="chap${open ? '' : ' closed'}${done ? ' done' : ''}">
+      // a heading where a new part of the campaign begins (the side stories)
+      const part = c.part && c.part !== (CAMPAIGN.CHAPTERS[i - 1] || {}).part ? `<h3 class="part">${esc(c.part)}<small>Các trận khó hơn, máy suy nghĩ lâu hơn</small></h3>` : '';
+      return `${part}<section class="chap${open ? '' : ' closed'}${done ? ' done' : ''}">
         <div class="chead"><span class="seal">${st ? st.han : '戰'}</span><div><small>Năm ${c.year}${done ? ' · đã hoàn thành' : ''}</small><h3>${esc(c.name)}</h3></div></div>
         <p class="intro">${esc(c.intro)}</p><div class="lvs">${levels}</div></section>`;
     }).join('');
@@ -109,7 +111,7 @@ const CAMPAIGN_UI = (() => {
     $('#briefType').textContent = CAMPAIGN.TYPE[lv.type][0];
     $('#briefStory').textContent = lv.story;
     $('#briefGoal').textContent = CAMPAIGN.goal(lv);
-    $('#briefFoe').textContent = `Đối thủ: ${foe ? foe.name : c.foeName || 'Quân địch'} (máy, ${{ easy: 'dễ', normal: 'vừa', hard: 'mạnh', defend: 'phòng thủ chặt' }[lv.ai]})`;
+    $('#briefFoe').textContent = `Đối thủ: ${foe ? foe.name : c.foeName || 'Quân địch'} (máy, ${{ easy: 'dễ', normal: 'vừa', hard: 'mạnh', master: 'rất mạnh', defend: 'phòng thủ chặt' }[lv.ai]})`;
     $('#briefStars').innerHTML = CAMPAIGN.starGoals(lv).map((g, i) => `<li class="${best > i ? 'got' : ''}"><span>${best > i ? '★' : '☆'}</span>${esc(g)}</li>`).join('');
     $('#bBriefGo').textContent = best ? 'Đánh lại' : 'Xuất trận';
     $('#brief').hidden = false;

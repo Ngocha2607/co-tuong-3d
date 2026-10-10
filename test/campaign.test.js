@@ -13,15 +13,16 @@ function test(name, fn) {
   try { fn(); console.log('ok   ', name); } catch (e) { failed++; console.log('FAIL ', name, '\n     ', e.message); }
 }
 
-test('five chapters of three battles, ids unique, every field in place', () => {
-  assert.strictEqual(C.CHAPTERS.length, 5);
-  assert.strictEqual(new Set(C.LEVELS.map(l => l.id)).size, 15);
-  assert.strictEqual(C.MAX_STARS, 45);
+test('eight chapters of three battles (five, then three side stories), ids unique, every field in place', () => {
+  assert.strictEqual(C.CHAPTERS.length, 8);
+  assert.strictEqual(new Set(C.LEVELS.map(l => l.id)).size, 24);
+  assert.strictEqual(C.MAX_STARS, 72);
+  assert.deepStrictEqual(C.CHAPTERS.map(c => c.part || ''), ['', '', '', '', '', 'Ngoại truyện', 'Ngoại truyện', 'Ngoại truyện']);
   for (const l of C.LEVELS) {
     assert.ok(l.name && l.story && C.AI[l.ai] && (l.side === 1 || l.side === -1), l.id);
     if (l.type === 'mate') assert.ok(l.n >= 1 && l.n <= 3, l.id);
     else if (l.type === 'survive') assert.ok(l.n > 0 && l.keep >= 0, l.id);
-    else assert.ok(l.type === 'handicap' && l.par > 0, l.id);
+    else assert.ok((l.type === 'handicap' || l.type === 'duel') && l.par > 0, l.id);
   }
   for (const c of C.CHAPTERS) assert.ok(c.name && c.intro && c.year && c.stage, c.id);
 });
@@ -31,7 +32,9 @@ test('every battle starts from a position a real game could reach', () => {
     assert.ok(M.legalSetup(p), `${l.id} ${l.fen}`);
     assert.ok(p.legal().length > 0, `${l.id} has moves`);
     // puzzles and sieges begin with the player to move
-    if (l.type !== 'handicap') assert.strictEqual(p.turn, l.side, `${l.id} player moves first`);
+    if (l.type === 'mate' || l.type === 'survive') assert.strictEqual(p.turn, l.side, `${l.id} player moves first`);
+    // a duel is a game nobody is short in: the starting position
+    if (l.type === 'duel') assert.strictEqual(l.fen, XQ.START, l.id);
   }
 });
 test('the heroes and stages the campaign uses exist, and every locked one can be earned', () => {
@@ -111,6 +114,9 @@ test('judge: a whole game with handicap counts the player\'s moves for the par s
   assert.strictEqual(C.stars(l, { over: true, win: true, mine: 30 }, false), 3);
   assert.strictEqual(C.stars(l, { over: true, win: true, mine: 80 }, false), 2);
   assert.strictEqual(C.stars(l, { over: true, win: false, mine: 30 }, false), 0);
+  const d = C.level('7-3');
+  assert.strictEqual(C.stars(d, { over: true, win: true, mine: d.par }, false), 3, 'a duel too');
+  assert.strictEqual(C.stars(d, { over: true, win: true, mine: d.par + 1 }, false), 2);
 });
 
 test('unlocking: battles open one after another, rewards come with chapters and stars', () => {
@@ -124,11 +130,21 @@ test('unlocking: battles open one after another, rewards come with chapters and 
   assert.ok(u.chapters.has('c1') && u.stages.has('dao-vien') && u.titles.includes('dao-vien') && u.levels.has('2-1'));
   const all = Object.fromEntries(C.LEVELS.map(l => [l.id, 1]));
   u = C.unlocked(all);
-  assert.strictEqual(u.total, 15);
+  assert.strictEqual(u.total, 24);
   assert.ok(u.heroes.has('chu-du') && u.heroes.has('tu-ma-y') && u.heroes.has('hoang-trung') && !u.heroes.has('ma-sieu'));
+  assert.ok(['ha-hau-uyen', 'manh-hoach', 'khuong-duy'].every(h => u.heroes.has(h)) && ['dinh-quan', 'nam-man', 'tay-thanh'].every(s => u.stages.has(s)));
   u = C.unlocked(Object.fromEntries(C.LEVELS.map(l => [l.id, 3])));
-  assert.ok(u.heroes.has('ma-sieu') && u.titles.includes('vo-song') && u.titles.length === 6);
+  assert.ok(u.heroes.has('ma-sieu') && u.heroes.has('chuc-dung') && u.titles.includes('vo-song') && u.titles.includes('nhat-thong') && u.titles.length === 10);
   assert.strictEqual(C.unlocked({ '1-1': 99 }).total, 3, 'stars are capped at three a battle');
+});
+test('the side stories open after the fifth chapter, and every star of the first five still gives its title', () => {
+  const five = Object.fromEntries(C.LEVELS.filter(l => l.chapter <= 'c5').map(l => [l.id, 3]));
+  let u = C.unlocked(five);
+  assert.strictEqual(u.total, 45);
+  assert.ok(u.levels.has('6-1') && !u.levels.has('6-2'));
+  assert.ok(u.titles.includes('vo-song') && !u.titles.includes('nhat-thong') && !u.heroes.has('chuc-dung'));
+  u = C.unlocked({ ...five, '6-1': 3, '6-2': 3, '6-3': 3, '7-1': 3, '7-2': 3 });
+  assert.ok(u.heroes.has('chuc-dung') && u.chapters.has('c6') && !u.chapters.has('c7'), '60 stars');
 });
 test('locked heroes and stages say how to earn them', () => {
   assert.match(C.requirement('hero', 'chu-du'), /Xích Bích/);

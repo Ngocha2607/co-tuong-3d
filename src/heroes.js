@@ -17,6 +17,10 @@ const HEROES = (() => {
     { id: 'ma-sieu', name: 'Mã Siêu', han: '馬', kingdom: 'Thục', look: 'Giáp bạc, mũ đầu sư tử, thương dài', campaign: true },
     { id: 'chu-du', name: 'Chu Du', han: '周', kingdom: 'Ngô', look: 'Đô đốc trẻ, giáp đỏ sẫm, mũ cắm lông đỏ', campaign: true },
     { id: 'tu-ma-y', name: 'Tư Mã Ý', han: '懿', kingdom: 'Ngụy', look: 'Áo đen, mũ quan cao, râu bạc, kiếm', campaign: true },
+    { id: 'ha-hau-uyen', name: 'Hạ Hầu Uyên', han: '淵', kingdom: 'Ngụy', look: 'Giáp thép xanh, mũ mào đỏ, song đao: vị tướng hành quân thần tốc', campaign: true },
+    { id: 'manh-hoach', name: 'Mạnh Hoạch', han: '孟', kingdom: '', look: 'Vua Nam Man: da ngăm, mũ lông chim, áo da hổ, đại đao', campaign: true },
+    { id: 'khuong-duy', name: 'Khương Duy', han: '維', kingdom: 'Thục', look: 'Tướng trẻ giáp xanh lam, mũ tua đỏ, thương dài: người kế thừa Khổng Minh', campaign: true },
+    { id: 'chuc-dung', name: 'Chúc Dung', han: '祝', kingdom: '', look: 'Nữ tướng Nam Man, vợ Mạnh Hoạch: tóc búi cài lông chim, phi đao', campaign: true },
   ];
   const byId = Object.assign(Object.create(null), Object.fromEntries(list.map(h => [h.id, h])));
   return { list, byId, valid: id => typeof id === 'string' && id in byId };
