@@ -401,6 +401,13 @@ const MODELS = (() => {
     }
     tassel(w, y - 0.1);
   }
+  function sabre(p) {                       // a broad, slightly curved single-edged blade
+    const w = group(p, 0, -0.18, 0.03);
+    const b = box(0.032, 0.26, 0.01, '#e8eef4', w, 0.008, 0.17, 0, STEEL); b.rotation.z = -0.1;
+    box(0.07, 0.016, 0.03, '#d4a017', w, 0, 0.035, 0, GOLD);
+    box(0.022, 0.07, 0.022, '#3a1a0a', w, 0, -0.01, 0);
+    return w;
+  }
   const hero = (pal, o, scale = 1.18) => { const h = humanoid(pal, o); h.scale.setScalar(scale); return [h, h.userData.j]; };
   const HERO_BUILD = {
     'quan-vu'(pal, side) {
@@ -489,6 +496,54 @@ const MODELS = (() => {
       box(0.1, 0.16, 0.1, '#0e0e12', j.head, 0, 0.17, -0.005);
       box(0.12, 0.02, 0.12, '#c9a23a', j.head, 0, 0.1, 0, GOLD);
       cape(h, side); sword(j.armR, pal);
+      return h;
+    },
+    'ha-hau-uyen'(pal, side) {                 // Wei's swift general: steel-blue armour, a red crest along the helmet, two sabres
+      const [h, j] = hero(pal, { armour: '#3c4c5e', beard: true });
+      cyl(0.062, 0.068, 0.07, '#8c98a6', j.head, 0, 0.12, 0, 8, STEEL);
+      box(0.018, 0.05, 0.12, '#c0201a', j.head, 0, 0.17, -0.005);              // the crest, front to back
+      cape(h, side); sabre(j.armR); sabre(j.armL);
+      return h;
+    },
+    'manh-hoach'(pal, side) {                  // the king of the Nanman: dark skin, a crown of feathers, a tiger skin, a great sabre
+      const [h, j] = hero(pal, { armour: '#c8862a', skin: '#8a5634', beard: 'bushy' }, 1.3);
+      for (const [x, y] of [[-0.06, 0.3], [0, 0.34], [0.06, 0.3], [-0.03, 0.22], [0.03, 0.22]]) box(0.03, 0.012, 0.013, '#2a1a10', h, x, y, 0.062);   // tiger stripes
+      cyl(0.058, 0.062, 0.03, '#d4a017', j.head, 0, 0.115, 0, 8, GOLD);       // a gold band...
+      ['#c0201a', '#2f7a3a', '#e3b448', '#2a5aa8', '#c0201a'].forEach((c, i) => {                                  // ...with feathers fanned out above it
+        const f = group(j.head, (i - 2) * 0.025, 0.13, -0.01); f.rotation.z = (2 - i) * 0.3;
+        box(0.016, 0.13, 0.008, c, f, 0, 0.065, 0);
+      });
+      for (const sx of [-1, 1]) ball(0.012, '#d4a017', j.head, sx * 0.053, 0.04, 0, GOLD);                      // gold earrings
+      cape(h, side);
+      const len = 0.76, w = pole(j.armR, len, '#3a1a0a'), y = top(len);
+      const b = box(0.09, 0.24, 0.014, '#e8eef4', w, 0.05, y + 0.05, 0, STEEL); b.rotation.z = -0.18;
+      tassel(w, y - 0.09);
+      return h;
+    },
+    'khuong-duy'(pal, side) {                  // Zhuge Liang's heir: blue armour, a silver helmet with a red tassel, a long spear
+      const [h, j] = hero(pal, { armour: '#2c4f86' });
+      cyl(0.062, 0.068, 0.07, '#dfe4ea', j.head, 0, 0.12, 0, 8, STEEL);
+      cyl(0.005, 0.005, 0.05, '#dfe4ea', j.head, 0, 0.18, 0, 4, STEEL);
+      cyl(0.03, 0.006, 0.06, '#c0201a', j.head, 0, 0.21, 0, 6);
+      cape(h, side);
+      const sp = spear(j.armR, pal, 0.88);
+      cyl(0.014, 0.014, 0.02, '#c0201a', sp, 0, 0.88 * 0.35 + 0.44 - 0.04, 0, 6);
+      sword(j.armL, pal).rotation.x = 0.4;
+      return h;
+    },
+    'chuc-dung'(pal, side) {                   // Lady Zhurong: hair in a high bun with feathers, flying knives in both hands
+      const [h, j] = hero(pal, { armour: '#9a4a2a', skin: '#b67a52', hair: '#1a1010' }, 1.12);
+      box(0.106, 0.04, 0.1, '#1a1010', j.head, 0, 0.12, -0.005);              // hair over the brow
+      ball(0.04, '#1a1010', j.head, 0, 0.16, -0.03);                          // the bun
+      for (const sx of [-1, 1]) {                                              // two long feathers from the bun
+        const f = group(j.head, sx * 0.02, 0.18, -0.04); f.rotation.z = -sx * 0.5; f.rotation.x = -0.3;
+        box(0.012, 0.2, 0.006, '#e3b448', f, 0, 0.1, 0);
+      }
+      cyl(0.14, 0.15, 0.06, '#2f7a3a', h, 0, 0.19, 0, 8);                     // a skirt of leaves over the armour
+      for (const A of [j.armR, j.armL]) for (let i = -1; i <= 1; i++) {        // three throwing knives fanned in each hand
+        const k = group(A, 0, -0.18, 0.03); k.rotation.z = i * 0.35;
+        box(0.012, 0.09, 0.004, '#e8eef4', k, 0, 0.05, 0, STEEL);
+      }
       return h;
     },
     'lu-bo'(pal, side) {

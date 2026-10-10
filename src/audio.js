@@ -91,6 +91,21 @@ const SFX = (() => {
     } else if (id === 'dust-wind') {
       bed('bandpass', 600, 0.7, 0.16, 0.11, 0.1);           // dry wind over the field
       scatter(240, 420, t => { tone(110, 'sine', t, 0.003, 0.08, 0.05, ambGain, 70); noise(t, 0.05, 0.035, 'lowpass', 420, 1, ambGain); });   // hooves far off
+    } else if (id === 'mountain') {
+      bed('bandpass', 480, 0.7, 0.2, 0.06, 0.16);           // wind over the summit, in long gusts
+      bed('bandpass', 1700, 3, 0.02, 0.09, 0.018);          // its whistle on the rocks
+      scatter(5000, 11000, t => tone(2300 + Math.random() * 400, 'triangle', t, 0.03, 0.7, 0.025, ambGain, 1500));   // an eagle's cry
+      scatter(7000, 12000, t => { for (let i = 0; i < 2; i++) tone(70, 'sine', t + i * 0.5, 0.004, 0.45, 0.12, ambGain, 48); });   // drums across the gorge
+    } else if (id === 'jungle') {
+      bed('bandpass', 5200, 8, 0.016, 11, 0.012);           // cicadas
+      bed('lowpass', 420, 0.7, 0.1, 0.05, 0.05);            // the slow river
+      scatter(500, 1400, t => { const f = 150 + Math.random() * 60; for (let i = 0; i < 2; i++) tone(f, 'triangle', t + i * 0.13, 0.005, 0.08, 0.05, ambGain, f * 0.7); });   // frogs
+      scatter(2500, 6000, t => tone(900 + Math.random() * 300, 'sine', t, 0.03, 0.35, 0.03, ambGain, 2200));   // a jungle bird's whoop
+    } else if (id === 'zither') {
+      bed('bandpass', 520, 0.7, 0.1, 0.07, 0.07);           // evening wind on the wall
+      // the zither from the tower: a few notes of the pentatonic scale, unhurried
+      const notes = [196, 220, 262, 294, 330, 392, 440];
+      scatter(1800, 4200, t => { let k = Math.floor(Math.random() * notes.length); for (let i = 0; i < 3; i++) { tone(notes[k], 'triangle', t + i * 0.42, 0.004, 1.6, 0.04, ambGain); k = Math.max(0, Math.min(notes.length - 1, k + (Math.random() < 0.5 ? -1 : 1))); } });
     }
   }
 

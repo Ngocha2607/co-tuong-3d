@@ -1,4 +1,4 @@
-// campaign-sim.js — `npm run verify:campaign`: plays the sieges and handicap games engine against engine, to see that
+// campaign-sim.js — `npm run verify:campaign`: plays the sieges, handicap games and duels engine against engine, to see that
 // each can be won by good play and is still a real fight for weak play. Slow (a few minutes) and only indicative: the
 // computer's thinking time is capped here, so its "hard" level plays weaker than in the game.
 'use strict';

@@ -781,7 +781,7 @@
   // ---------- boot ----------
   async function boot() {
     // the brush font has to be in before the characters are painted on the pieces
-    try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢赤壁呂董虎牢關' + HEROES.list.map(h => h.han).join('') + STAGES.list.map(s => s.han).join('')), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
+    try { await Promise.race([document.fonts.load('bold 64px "LXGW WenKai TC"', '帥將楚漢赤壁呂董虎牢關夏法魏懿' + HEROES.list.map(h => h.han).join('') + STAGES.list.map(s => s.han).join('')), new Promise(r => setTimeout(r, 3500))]); } catch (e) { }
     VIEW.setStage(myStage());
     VIEW.init($('#view'));
     G.heroes[1] = myHero(); VIEW.setHeroes(G.heroes);

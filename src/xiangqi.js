@@ -333,6 +333,8 @@ const XQ = (() => {
     function quiesce(alpha, beta, ply) {
       if ((++nodes & 2047) === 0 && Date.now() > deadline) stop = true;
       if (stop) return 0;
+      // checks answered by checks (evasions are searched in full) could go on for ever: stop on the evaluation
+      if (ply >= 64) return evalSide(pos);
       const side = pos.turn, check = pos.checked(side);
       if (!check) {
         const stand = evalSide(pos);

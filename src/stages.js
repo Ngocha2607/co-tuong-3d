@@ -300,6 +300,7 @@ const STAGES = (() => {
     add(g, new THREE.CylinderGeometry(0.18, 0.25, 1.6, 5), flat('#2a1c10'), 0, 0.8, 0);
     add(g, new THREE.ConeGeometry(1.4, 2.4, 6), flat('#3a4424'), 0, 2.3, 0);
     add(g, new THREE.ConeGeometry(1.0, 1.9, 6), flat('#44502a'), 0, 3.4, 0);
+    return g;
   }
 
   // ---------- Hulao Pass: the three brothers fight Lü Bu before the gate ----------
@@ -483,6 +484,244 @@ const STAGES = (() => {
     };
   }
 
-  const BUILD = { room, 'dao-vien': daoVien, 'ho-lao': hoLao, 'truong-ban': truongBan, 'xich-bich': xichBich, 'ngu-truong': nguTruong };
+  // ---------- shared by the side stories below ----------
+  // a distant army in ranks, as three instanced meshes (bodies, helmets, spears): cheap enough for hundreds.
+  // Ranks run along x around (x0, z0) and go back towards -z.
+  function army(parent, n, cols, x0, y0, z0, gap, cloth) {
+    const parts = [
+      [new THREE.BoxGeometry(0.75, 1.5, 0.5), flat(cloth), 0, 0.75, 0],
+      [new THREE.BoxGeometry(0.42, 0.42, 0.42), flat('#2a2c32', { metal: 0.4, rough: 0.5 }), 0, 1.72, 0],
+      [new THREE.CylinderGeometry(0.04, 0.04, 3.4, 4), flat('#3a2a1a'), 0.48, 1.7, 0],
+    ].map(([g, m, dx, dy, dz]) => ({ im: new THREE.InstancedMesh(g, m, n), dx, dy, dz }));
+    const m = new THREE.Matrix4();
+    for (let i = 0; i < n; i++) {
+      const x = x0 + ((i % cols) - (cols - 1) / 2) * gap + rnd(-0.25, 0.25), z = z0 - Math.floor(i / cols) * gap * 1.3 + rnd(-0.25, 0.25);
+      for (const P of parts) { m.makeTranslation(x + P.dx, y0 + P.dy, z + P.dz); P.im.setMatrixAt(i, m); }
+    }
+    for (const P of parts) parent.add(P.im);
+  }
+  // clouds or mist: big soft sprites that drift along x and wrap round at ±x
+  function drifts(ctx, group, n, color, opacity, w, h, x, y, z) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color, transparent: true, opacity, depthWrite: false }));
+      m.scale.set(rnd(w[0], w[1]), rnd(h[0], h[1]), 1); m.position.set(rnd(-x, x), rnd(y[0], y[1]), rnd(z[0], z[1])); group.add(m);
+      out.push({ m, v: rnd(0.5, 1.3), ph: Math.random() * 6, o: opacity });
+    }
+    return out;
+  }
+  function drift(list, dt, x) { for (const D of list) { D.m.position.x += D.v * dt; if (D.m.position.x > x) D.m.position.x = -x; } }
+
+  // ---------- Mount Dingjun: on the facing peak at dawn, the red flag that sends Huang Zhong down ----------
+  function bird(group) {
+    const b = new THREE.Group(), c = flat('#2a2420');
+    add(b, new THREE.BoxGeometry(0.25, 0.18, 0.9), c);
+    const wings = [-1, 1].map(sx => { const w = new THREE.Group(); w.position.x = sx * 0.12; b.add(w); add(w, new THREE.BoxGeometry(1.6, 0.05, 0.5), c, sx * 0.8, 0, 0); return w; });
+    group.add(b);
+    return { b, wings };
+  }
+  function dinhQuan(ctx) {
+    const group = new THREE.Group();
+    const stone = stoneTexture('#7a7468'); stone.repeat.set(3, 3);
+    const top = add(group, new THREE.CylinderGeometry(9, 9.4, 0.5, 9), new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95 }), 0, -1.15, 0);
+    top.rotation.y = 0.2;
+    // the summit falls away under the platform, down to a sea of cloud
+    const rock = flat('#5c5a50'), moss = flat('#4e6a3a');
+    add(group, new THREE.CylinderGeometry(9.6, 21, 17, 9), rock, 0, -9.9, 0);
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2, r = add(group, new THREE.DodecahedronGeometry(rnd(1.5, 2.6), 0), i % 3 ? rock : moss, Math.cos(a) * rnd(10.5, 12.5), rnd(-6, -4.5), Math.sin(a) * rnd(10.5, 12.5));
+      r.rotation.set(rnd(0, 3), rnd(0, 3), 0);
+    }
+    for (let i = 0; i < (ctx.low ? 6 : 12); i++) {                          // pines clinging to the slopes
+      const a = rnd(0, Math.PI * 2), r = rnd(13, 18), g = tree(group, Math.cos(a) * r, Math.sin(a) * r, rnd(1, 1.5));
+      g.position.y = -1.4 - (r - 9.6) * 1.55;
+    }
+    // peaks all around, rising out of the cloud, bluer with distance; the near ring leaves the view to Dingjun open
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + rnd(-0.1, 0.1), far = i % 2, r = far ? rnd(72, 86) : rnd(46, 58);
+      if (!far && Math.abs(Math.atan2(Math.sin(a + Math.PI / 2), Math.cos(a + Math.PI / 2))) < 0.5) continue;
+      const m = add(group, new THREE.ConeGeometry(rnd(9, 16), rnd(24, 40), 6), flat(far ? '#5e6e86' : '#46603e'), Math.cos(a) * r, -17, Math.sin(a) * r);
+      m.rotation.y = rnd(0, 3);
+    }
+    // Mount Dingjun across the gorge, with Xiahou Yuan's camp on its flat top
+    const dj = new THREE.Group(); dj.position.set(0, -3, -55); group.add(dj);
+    add(dj, new THREE.CylinderGeometry(6, 20, 26, 8), flat('#506646'), 0, -8, 0);
+    const wei = flagTexture('夏', '#1c2a44', '#c9d3de'), weiFlags = [];
+    for (let i = 0; i < (ctx.low ? 3 : 5); i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.4, T = tent('#2e3c56'); T.g.scale.setScalar(0.7); T.g.position.set(Math.cos(a) * 4, 5, Math.sin(a) * 4 - 1); dj.add(T.g);
+    }
+    for (const x of [-4.5, 4.5]) weiFlags.push(flagPole(dj, wei, x, 5, 2.5, 4));
+    const hhu = figure('ha-hau-uyen', -1, 3.4, 0, 5, 3); dj.add(hhu);
+    // Huang Zhong on a spur of rock below, ready to charge; Fa Zheng's red flag on the summit behind the board
+    add(group, new THREE.DodecahedronGeometry(4.2, 0), rock, 11, -9, -20);
+    const ht = figure('hoang-trung', 1, 3.6, 11, -5.2, -20); group.add(ht);
+    const sig = flagPole(group, flagTexture('法', '#b3261e', '#e3b448'), -6.2, -0.9, -6.2, 6.5);
+    sig.f.parent.scale.setScalar(1.3);
+    // clouds below and around, a low sun, and two eagles circling
+    const clouds = drifts(ctx, group, ctx.low ? 14 : 28, '#f4f2ee', 0.55, [24, 40], [6, 10], 90, [-14, -8], [-90, 90]);
+    const high = drifts(ctx, group, ctx.low ? 4 : 8, '#fff4e4', 0.3, [30, 50], [4, 7], 90, [22, 30], [-80, -20]);
+    const sun = glow(ctx, '#ffd9a0', 30, 0.8); sun.material.fog = false; sun.position.set(60, 16, -55); group.add(sun);
+    const birds = [bird(group), bird(group)];
+    return {
+      group, sky: skyDome('#5d86c0', '#f3d9a8', '#8a9aa6'), fog: '#c4ccd2', fogSpan: 80, ambience: 'mountain',
+      light: { hemi: ['#e8f0ff', '#3a4a2a', 0.95], key: ['#fff0d8', 1.6], rim: ['#ffc890', 0.45] },
+      update(t, dt, camera) {
+        drift(clouds, dt, 90); drift(high, dt * 0.5, 90);
+        sig.f.rotation.y = Math.sin(t / 380) * 0.5;
+        for (const F of weiFlags) F.f.rotation.y = Math.sin(t / 520 + F.ph) * 0.35;
+        birds.forEach((B, i) => {
+          const a = t / (9000 + i * 2500) + i * 3, r = 28 + i * 7;
+          B.b.position.set(Math.cos(a) * r, 11 + i * 3 + Math.sin(t / 2000 + i) * 1.5, Math.sin(a) * r - 10);
+          B.b.rotation.y = -a; B.b.rotation.z = 0.3;
+          const flap = Math.max(0, Math.sin(t / 160 + i)) * 0.5;
+          B.wings[0].rotation.z = -flap; B.wings[1].rotation.z = flap;
+        });
+        faceBanners([ht, hhu], camera);
+        if (ht.userData.j.armR) ht.userData.j.armR.rotation.x = -0.9 - 0.6 * Math.sin(t / 700);
+      },
+    };
+  }
+
+  // ---------- the Nanman jungle: a bamboo deck by the Lu river, poison mist on the water, war elephants ----------
+  function palm(parent, x, z, s) {
+    const g = new THREE.Group(); g.position.set(x, -1.6, z); g.scale.setScalar(s); g.rotation.y = rnd(0, 6); g.userData.clear = 2.6 * s; parent.add(g);
+    const bark = flat('#5a4a32'), lean = rnd(0.05, 0.25);
+    let y = 0, dx = 0;
+    for (let i = 0; i < 4; i++) { const seg = add(g, new THREE.CylinderGeometry(0.12, 0.15, 0.9, 5), bark, dx, y + 0.45, 0); seg.rotation.z = -lean; y += 0.88; dx += Math.sin(lean) * 0.9; }
+    const crown = new THREE.Group(); crown.position.set(dx, y, 0); g.add(crown);
+    for (let i = 0; i < 7; i++) {
+      const f = new THREE.Group(); f.rotation.y = (i / 7) * Math.PI * 2; crown.add(f);
+      const leaf = add(f, new THREE.BoxGeometry(0.5, 0.04, 2), flat(i % 2 ? '#3e7a32' : '#4e8a3a'), 0, 0, 1); leaf.rotation.x = 0.45;
+    }
+  }
+  function bamboo(parent, x, z) {
+    const g = new THREE.Group(); g.position.set(x, -1.6, z); g.userData.clear = 1.4; parent.add(g);
+    for (let i = 0; i < 6; i++) {
+      const h = rnd(4, 8), c = add(g, new THREE.CylinderGeometry(0.07, 0.08, h, 5), flat(i % 2 ? '#7a9a3a' : '#6a8a32'), rnd(-0.8, 0.8), h / 2, rnd(-0.8, 0.8));
+      c.rotation.set(rnd(-0.08, 0.08), 0, rnd(-0.08, 0.08));
+    }
+  }
+  function totem(parent, x, z) {
+    const g = new THREE.Group(); g.position.set(x, -1.6, z); g.userData.clear = 1.2; parent.add(g);
+    ['#8a3a1a', '#2a5a6a', '#c8862a', '#6a2a1a'].forEach((c, i) => {
+      add(g, new THREE.BoxGeometry(1, 1.1, 1), flat(c), 0, 0.55 + i * 1.1, 0);
+      for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(0.2, 0.14, 0.05), flat('#f0e6d0'), sx * 0.22, 0.7 + i * 1.1, 0.52);
+      add(g, new THREE.BoxGeometry(0.5, 0.1, 0.05), flat('#1a1010'), 0, 0.36 + i * 1.1, 0.52);
+    });
+    for (const sx of [-1, 1]) { const w = add(g, new THREE.BoxGeometry(1.4, 0.5, 0.15), flat('#c8862a'), sx * 1.1, 4.3, 0); w.rotation.z = sx * 0.3; }
+    g.lookAt(0, -1.6, 0);
+  }
+  function namMan(ctx) {
+    const group = new THREE.Group();
+    const deckTex = woodTexture('#8a7a42', 12); deckTex.repeat.set(3, 3);
+    add(group, new THREE.BoxGeometry(15, 0.5, 17), new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.9 }), 0, -1.15, 0);
+    for (const [x, z] of [[-7, -8], [7, -8], [-7, 8], [7, 8]]) add(group, new THREE.CylinderGeometry(0.25, 0.25, 1.4, 6), flat('#6a5a2a'), x, -1.9, z);
+    const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#2e4424'), 0, -1.6, 0); ground.rotation.x = -Math.PI / 2;
+    // the Lu river, green and still, with the poison mist on it
+    const river = add(group, new THREE.PlaneGeometry(190, 14), new THREE.MeshStandardMaterial({ color: '#3a5a3e', roughness: 0.3, metalness: 0.25 }), 0, -1.55, -26);
+    river.rotation.x = -Math.PI / 2;
+    const mist = [...drifts(ctx, group, ctx.low ? 8 : 16, '#9ad06a', 0.3, [10, 18], [2.5, 4], 70, [-1.2, 1], [-31, -21]),
+      ...drifts(ctx, group, ctx.low ? 4 : 8, '#b48ad8', 0.22, [8, 14], [2, 3.5], 70, [-1, 1.5], [-31, -21])];
+    // the jungle: palms, bamboo and broad-leaved trees, kept off the river
+    for (let i = 0; i < (ctx.low ? 16 : 32); i++) {
+      const a = rnd(0, Math.PI * 2), r = rnd(17, 55), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.abs(z + 26) < 8) continue;
+      if (i % 3 === 0) bamboo(group, x, z); else palm(group, x, z, rnd(1.6, 2.6));
+    }
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2, r = rnd(60, 80), t = new THREE.Group(); t.position.set(Math.cos(a) * r, -1.6, Math.sin(a) * r); group.add(t);
+      add(t, new THREE.CylinderGeometry(0.8, 1.2, 10, 6), flat('#3a2e1e'), 0, 5, 0);
+      for (let k = 0; k < 4; k++) add(t, new THREE.IcosahedronGeometry(rnd(5, 8), 0), flat(k % 2 ? '#2a5a2a' : '#356a30'), rnd(-4, 4), rnd(10, 15), rnd(-4, 4));
+    }
+    for (const [x, z] of [[-15, -15], [16, -13], [-18, 11]]) totem(group, x, z);
+    // the king of the Nanman across the river, his war elephants walking the bank
+    const mh = figure('manh-hoach', -1, 4.2, -8, -1.6, -38); group.add(mh);
+    const herd = [];
+    for (let i = 0; i < (ctx.low ? 2 : 3); i++) {
+      const e = MODELS.warrior(-3); e.scale.setScalar(3.6); e.rotation.y = -Math.PI / 2; e.position.set(30 - i * 14, -1.6, -41 - (i % 2) * 3); group.add(e);
+      herd.push({ e, j: e.userData.j, ph: i * 1.3 });
+    }
+    const flies = specks(ctx, ctx.low ? 40 : 90, '#e8ff9a', 0.2, [24, -1, 4], 0.85); group.add(flies);
+    const fp = flies.geometry.attributes.position, home = Float32Array.from(fp.array);
+    return {
+      group, sky: skyDome('#5e7e66', '#d8d2a0', '#2e4424'), fog: '#71825a', fogSpan: 55, ambience: 'jungle',
+      light: { hemi: ['#e0f0c8', '#2a3a1a', 0.9], key: ['#fff0c8', 1.45], rim: ['#c8ff9a', 0.35] },
+      update(t, dt, camera) {
+        drift(mist, dt * 0.6, 70);
+        for (const M of mist) M.m.material.opacity = M.o * (0.75 + 0.25 * Math.sin(t / 1400 + M.ph));
+        for (const H of herd) {
+          H.e.position.x -= dt * 1.4; if (H.e.position.x < -60) H.e.position.x += 120;
+          const ph = t / 380 + H.ph;
+          if (H.j.legs) H.j.legs.forEach((L, i) => { L.rotation.x = Math.sin(ph + (i % 2 ? Math.PI : 0) + (i > 1 ? Math.PI : 0)) * 0.35; });
+          if (H.j.trunk) H.j.trunk.rotation.x = 0.5 + Math.sin(ph * 0.5) * 0.25;
+        }
+        for (let i = 0; i < fp.count; i++) {
+          fp.setX(i, home[i * 3] + Math.sin(t / 1600 + i) * 1.3); fp.setY(i, home[i * 3 + 1] + Math.sin(t / 800 + i * 2) * 0.5); fp.setZ(i, home[i * 3 + 2] + Math.cos(t / 1400 + i) * 1.3);
+        }
+        fp.needsUpdate = true;
+        faceBanners([mh, ...herd.map(H => H.e)], camera);
+        if (mh.userData.j.armR) mh.userData.j.armR.rotation.x = -0.8 - 0.5 * Math.sin(t / 650);
+      },
+    };
+  }
+
+  // ---------- the West City: the gate wide open, Zhuge Liang playing the zither on the wall before Sima Yi's army ----------
+  function tayThanh(ctx) {
+    const group = new THREE.Group();
+    const stone = stoneTexture('#8a8070'); stone.repeat.set(3, 3);
+    add(group, new THREE.BoxGeometry(16, 0.5, 18), new THREE.MeshStandardMaterial({ map: stone, roughness: 0.95 }), 0, -1.15, 0);
+    // the wall runs left and right under the terrace; the plain outside lies ahead, far below
+    const wallTex = stoneTexture('#6e665a'); wallTex.repeat.set(24, 3);
+    add(group, new THREE.BoxGeometry(150, 12, 12), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 1 }), 0, -7.4, -3);
+    for (let x = -72; x <= 72; x += 2.6) add(group, new THREE.BoxGeometry(1.4, 1.2, 0.8), flat('#6a6256'), x, -0.8, -9.4);   // battlements
+    // the gateway below the terrace, doors thrown open, and two old soldiers sweeping before it
+    add(group, new THREE.BoxGeometry(7, 8, 0.4), flat('#120e0c'), 0, -9.4, -9.1);
+    for (const sx of [-1, 1]) { const d = add(group, new THREE.BoxGeometry(3.4, 7.6, 0.3), flat('#4a2c16'), sx * 4.6, -9.6, -10.6); d.rotation.y = sx * 1.1; }
+    const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#7a6a48'), 0, -13.4, 0); ground.rotation.x = -Math.PI / 2;
+    const sweepers = [-3, 3].map((x, i) => {
+      const w = MODELS.warrior(7); w.scale.setScalar(2.6); w.position.set(x, -13.4, -15); w.rotation.y = Math.PI + (i ? -0.6 : 0.6); group.add(w);
+      const j = w.userData.j, broom = new THREE.Group(); broom.position.set(0, -0.18, 0.03); if (j.armR) j.armR.add(broom);
+      add(broom, new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), flat('#6a4a2a'), 0, -0.1, 0);
+      add(broom, new THREE.BoxGeometry(0.12, 0.08, 0.03), flat('#c8a85a'), 0, -0.36, 0);
+      return { w, j, ph: i * 2 };
+    });
+    // Zhuge Liang on the wall beside the terrace: the zither on a low table, incense, two boys in attendance
+    const kz = new THREE.Group(); kz.position.set(-11.5, -1.4, -4.5); group.add(kz);
+    const kml = figure('gia-cat-luong', 1, 2.4, 0, 0, 0); kz.add(kml);
+    add(kz, new THREE.BoxGeometry(1.6, 0.5, 0.6), flat('#3a2414'), 0, 0.25, -0.9);
+    add(kz, new THREE.BoxGeometry(1.4, 0.1, 0.4), flat('#6a3a1c', { rough: 0.5 }), 0, 0.55, -0.9);        // the zither
+    for (let i = 0; i < 7; i++) add(kz, new THREE.BoxGeometry(1.3, 0.01, 0.01), flat('#e8dcc0'), 0, 0.61, -1.05 + i * 0.05);
+    for (const sx of [-1, 1]) { const b = MODELS.warrior(2); b.scale.setScalar(1.7); b.position.set(sx * 1.6, 0, 0.6); kz.add(b); }
+    const smoke = [];
+    add(kz, new THREE.CylinderGeometry(0.15, 0.12, 0.25, 8), flat('#8a6a3a', { metal: 0.5, rough: 0.5 }), 1.1, 0.62, -0.9);
+    for (let i = 0; i < 5; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: ctx.glowTex, color: '#e8e4e0', transparent: true, opacity: 0.3, depthWrite: false })); kz.add(m); smoke.push({ m, k: i / 5 }); }
+    // Sima Yi's army on the plain, halted before the open gate
+    army(group, ctx.low ? 90 : 180, 30, 0, -13.4, -40, 2.2, '#26324a');
+    army(group, ctx.low ? 30 : 60, 10, -42, -13.4, -36, 2.2, '#26324a');
+    army(group, ctx.low ? 30 : 60, 10, 42, -13.4, -36, 2.2, '#26324a');
+    const flags = [], wei = flagTexture('魏', '#1c2436', '#c9d3de'), sima = flagTexture('懿', '#3a1a1a', '#e3b448');
+    const nf = ctx.low ? 6 : 10;
+    for (let i = 0; i < nf; i++) flags.push(flagPole(group, i % 3 ? wei : sima, -36 + (i * 72) / (nf - 1), -13.4, -37, 7));
+    const smy = figure('tu-ma-y', -1, 4.2, 0, -13.4, -33); group.add(smy);
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, m = add(group, new THREE.ConeGeometry(rnd(12, 20), rnd(10, 18), 5), flat('#6a5a4a'), Math.cos(a) * 82, -13.4, Math.sin(a) * 82); m.rotation.y = rnd(0, 3); }
+    const dust = specks(ctx, ctx.low ? 60 : 140, '#ffd8a0', 0.13, [34, -12, 4], 0.5); group.add(dust);
+    return {
+      group, sky: skyDome('#3e4466', '#eca266', '#7a6a48'), fog: '#b08a66', fogSpan: 80, ambience: 'zither',
+      light: { hemi: ['#ffe0c0', '#3a2a1a', 0.85], key: ['#ffc890', 1.5], rim: ['#8aa0ff', 0.35] },
+      update(t, dt, camera) {
+        for (const F of flags) F.f.rotation.y = Math.sin(t / 560 + F.ph) * 0.35;
+        for (const S of sweepers) { const k = Math.sin(t / 500 + S.ph); if (S.j.armR) S.j.armR.rotation.x = -0.4 + k * 0.5; S.w.rotation.z = k * 0.04; }
+        if (kml.userData.j.armL) kml.userData.j.armL.rotation.x = -0.9 + Math.sin(t / 300) * 0.15;   // the hand on the strings
+        for (const S of smoke) {
+          S.k = (S.k + dt * 0.12) % 1;
+          S.m.position.set(1.1 + Math.sin(S.k * 5) * 0.25, 1 + S.k * 3, -0.9); S.m.scale.setScalar(0.4 + S.k * 1.8); S.m.material.opacity = 0.3 * Math.min(1, S.k * 5) * (1 - S.k);
+        }
+        dust.rotation.y += dt * 0.015;
+        faceBanners([smy], camera);
+      },
+    };
+  }
+
+  const BUILD = { room, 'dao-vien': daoVien, 'ho-lao': hoLao, 'truong-ban': truongBan, 'xich-bich': xichBich, 'ngu-truong': nguTruong, 'dinh-quan': dinhQuan, 'nam-man': namMan, 'tay-thanh': tayThanh };
   return { list, byId, valid: id => typeof id === 'string' && id in byId, build: (id, ctx) => (BUILD[id] || room)(ctx) };
 })();
