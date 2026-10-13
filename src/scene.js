@@ -344,12 +344,21 @@ const VIEW = (() => {
     if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
     u.war.position.y = DISC_H;
   }
+  // the length of a route: from where the unit stands through the points given
+  const routeLen = (u, pts) => pts.reduce((s, p, i) => s + p.distanceTo(i ? pts[i - 1] : u.root.position.clone().setY(0)), 0);
+  // march to a point, or through a list of points (the lines of the three-kingdom board bend), turning at each bend
   async function march(u, to, ms) {
-    const a = u.root.position.clone(), d = a.distanceTo(to), type = L.typeOf(u.piece);
+    const pts = [u.root.position.clone().setY(0), ...(Array.isArray(to) ? to : [to])], type = L.typeOf(u.piece);
+    const lens = pts.slice(1).map((p, i) => p.distanceTo(pts[i])), d = lens.reduce((s, x) => s + x, 0);
     if (type === N) SFX.gallop(); else if (type === R) SFX.roll(); else SFX.step();
+    let leg = -1;
     await tween(ms, k => {
       const e = ease(k);
-      u.root.position.set(lerp(a.x, to.x, e), Math.sin(k * Math.PI) * (type === N ? 0.25 : 0.06), lerp(a.z, to.z, e));
+      let x = e * d, i = 0;
+      while (i < lens.length - 1 && x > lens[i]) x -= lens[i++];
+      const a = pts[i], b = pts[i + 1], f = lens[i] ? Math.min(1, x / lens[i]) : 1;
+      if (i !== leg && lens.length > 1) { leg = i; u.war.rotation.y = Math.atan2(b.x - a.x, b.z - a.z); }
+      u.root.position.set(lerp(a.x, b.x, f), Math.sin(k * Math.PI) * (type === N ? 0.25 : 0.06), lerp(a.z, b.z, f));
       marchPose(u, e, d);
     });
     u.root.position.y = 0; restPose(u);
@@ -409,6 +418,7 @@ const VIEW = (() => {
   }
 
   // play one move; captured is the piece taken (0 for none). Resolves when the animation is over.
+  // opts.via: the points the move passes over, when the lines it follows bend (the three-kingdom board)
   async function play(m, opts = {}) {
     const f = L.from(m), t = L.to(m), u = units.get(f);
     if (!u) return;
@@ -424,17 +434,22 @@ const VIEW = (() => {
     if (target && opts.closeUp !== false) {
       tFocus.copy(u.root.position).lerp(dest, 0.6).setY(0.2); cam.tZoom = 0.52;
     }
+    // the route along the board's lines; the last point before the target is where the attack comes from
+    const route = [...(opts.via || []).map(pos), dest], last = route.length > 1 ? route[route.length - 2] : u.root.position.clone().setY(0);
     await Promise.all([summon(u), target ? summon(target) : null]);
-    face(u, dest); if (target) face(target, u.root.position);
+    face(u, route[0]); if (target) face(target, last);
     if (target && type === XQ.C) {
+      face(u, dest);                                       // the stone flies straight over the screen
       await throwStone(u, target);
       units.delete(t);
       await fall(target, u.root.position, by);
-      await march(u, dest, travelMs(u.root.position.distanceTo(dest)));
+      await march(u, route, travelMs(routeLen(u, route)));
     } else if (target) {
-      const a = u.root.position.clone(), dir = dest.clone().sub(a), d = dir.length(); dir.normalize();
-      const stop = dest.clone().sub(dir.multiplyScalar(0.62));
-      if (d > 0.7) await march(u, stop, travelMs(d - 0.62));
+      // up to just short of the target, along the last stretch of the route
+      const dir = dest.clone().sub(last), d = dir.length(); dir.normalize();
+      const stop = route.slice(0, -1).concat(dest.clone().sub(dir.multiplyScalar(Math.min(0.62, d))));
+      if (routeLen(u, stop) > 0.08) await march(u, stop, travelMs(routeLen(u, stop)));
+      face(u, dest);
       await strike(u);
       const at = dest.clone().setY(0.55);
       SFX.clash(); sparks(at, '#fff0b0', 26); flash(at, '#ffd27a', 5); shake = 0.18;
@@ -443,7 +458,7 @@ const VIEW = (() => {
       restPose(u);
       await march(u, dest, 260);
     } else {
-      await march(u, dest, travelMs(u.root.position.distanceTo(dest)));
+      await march(u, route, travelMs(routeLen(u, route)));
     }
     u.root.position.copy(dest);
     dustRing(dest); SFX.place();
