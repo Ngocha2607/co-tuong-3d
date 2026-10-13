@@ -22,6 +22,13 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
   - Tiến độ của khách lưu trong trình duyệt. Đăng nhập thì đồng bộ lên server, đổi máy không mất, và những trận đã thắng lúc chưa đăng nhập được gửi lên. Server đi lại từng ván để xác minh trước khi ghi sao.
   - Khi đăng nhập, chủ tướng và bối cảnh đang chọn cũng lưu theo tài khoản: sang máy khác đăng nhập là có lại. Lần đăng nhập đầu tiên, lựa chọn trên máy đang dùng được gửi lên làm mặc định.
 - **Đánh với máy:** chọn cầm quân Đỏ hoặc Đen, ba mức Dễ / Thường / Khó. Máy tính nước trong Web Worker nên hình không bị giật. Có Đi lại và Gợi ý.
+- **Tam Quốc tranh hùng (cờ tướng ba người):** Thục (đỏ), Ngô (xanh lục), Ngụy (xanh đen) chung một bàn lục giác ghép từ ba nửa bàn cờ, ba con sông 長江, 淮水, 漢水 ngăn giữa. Mỗi nước chọn Người hoặc Máy: đánh với hai máy, hai ba người chung một máy (bàn cờ tự xoay về phía nước đến lượt), hay ngồi xem ba máy đấu. Ba mức Dễ / Thường / Khó, có Đi lại và Gợi ý. Chỉ chơi trên một máy, chưa có online.
+  - Ba nước đi lần lượt Thục, Ngô, Ngụy (ngược chiều kim đồng hồ). Quân đi như cờ tướng.
+  - Nửa trái của mỗi nước giáp nửa phải của nước bên trái: qua sông, cột c gặp cột 8 − c như trên bàn thường. Đường giữa của ba nước gặp nhau ở tam giác trung tâm, đi lên đường giữa thì rẽ được sang cả hai nước.
+  - Tốt sang đất nước khác thì tiến về phía cung nước đó hoặc đi ngang. Tượng, Sĩ, Tướng không rời đất nhà.
+  - Không được để Tướng mình bị bất kỳ nước nào chiếu, kể cả lộ mặt Tướng. Tướng không bị ăn: đến lượt mà không còn nước đi (bị chiếu bí hay hết nước) thì mất nước, Tướng rời bàn và tàn quân về tay người vừa đi nước cuối (theo ghi chép cổ về 三國棋), quân đổi sang màu nước đó nhưng vẫn đi theo đất nhà cũ.
+  - Nước cuối cùng còn Tướng nhất thống thiên hạ. 50 vòng không ăn quân hoặc lặp thế ba lần thì hòa.
+  - Máy tính nước theo lối "paranoid": coi hai nước kia là liên minh chống mình, giữ quân mình hơn trung bình quân của họ.
 - **Chơi online:** tạo phòng, gửi link `…/?room=ABCD` cho bạn bè. Máy chủ kiểm tra từng nước đi, lưu ván cờ (đóng tab rồi mở lại vẫn vào đúng ván), người thứ ba vào được để xem. Hết ván bấm Đấu lại thì hai bên đổi màu quân. Người tạo phòng chọn thời gian: không giới hạn, 10 phút + 5 giây hoặc 5 phút + 3 giây.
 - **Đăng nhập Google và xếp hạng:** đăng nhập để có tên hiển thị (đổi được) và điểm Elo, bắt đầu từ 1200. **Tìm trận xếp hạng** ghép bạn với người có điểm gần nhất (lúc đầu chênh tối đa 100 điểm, nới thêm 20 điểm cho mỗi giây chờ), màu quân bốc ngẫu nhiên, mỗi bên 10 phút + 5 giây. Chơi đủ 10 ván xếp hạng thì có tên trên **Bảng xếp hạng** (top 100). Hồ sơ mỗi người có số ván thắng/hòa/thua và 20 ván gần nhất. Không đăng nhập vẫn đánh với máy và chơi phòng bạn bè bình thường.
 - **Chủ tướng:** chọn một trong 8 danh tướng (Quan Vũ, Trương Phi, Triệu Vân, Gia Cát Lượng, Lưu Bị, Tào Tháo, Tôn Quyền, Lữ Bố), hoặc 8 tướng mở trong Chiến dịch (Hoàng Trung, Mã Siêu, Chu Du, Tư Mã Ý, Hạ Hầu Uyên, Mạnh Hoạch, Khương Duy, Chúc Dung). Quân Tướng của bạn hóa thành người đó: dáng hình, mũ, râu và binh khí riêng, cờ hiệu mang chữ họ (關, 曹…). Khi bạn chiếu tướng, bóng chủ tướng đổ dài trên bàn cờ, và đậm hơn khi bạn thắng. Quân lính vẫn theo màu phe. Đánh với máy thì máy bốc ngẫu nhiên một chủ tướng khác; chơi online thì đối thủ thấy chủ tướng của bạn, và lựa chọn được giữ nguyên đến hết ván.
@@ -53,7 +60,7 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
 ```bash
 npm install
 npm start          # wrangler dev, mở http://localhost:8787
-npm test           # luật cờ (perft), máy chơi, Elo, đồng hồ, đăng nhập, và chứng minh mọi thế cờ của chiến dịch
+npm test           # luật cờ (perft), luật Tam Quốc, máy chơi, Elo, đồng hồ, đăng nhập, và chứng minh mọi thế cờ của chiến dịch
 npm run verify:campaign   # (chậm, vài phút) cho máy đánh các trận thủ thành, chấp quân, quyết chiến để xem độ khó
 ```
 
@@ -138,16 +145,17 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 | File | Nội dung |
 |---|---|
 | `src/xiangqi.js` | Luật, ký hiệu nước đi, máy chơi (alpha-beta, bảng chuyển vị, nước sát thủ). Dùng chung cho trang web, Web Worker và Cloudflare Worker |
-| `src/ai-worker.js` | Chạy máy chơi trong Web Worker |
+| `src/sanguo.js` | Cờ Tam Quốc ba người: hình bàn lục giác, các đường nối qua sông, luật, mất nước và giao quân, ký hiệu nước đi, máy chơi (paranoid alpha-beta) |
+| `src/ai-worker.js` | Chạy máy chơi trong Web Worker (cả cờ thường lẫn Tam Quốc) |
 | `src/models.js` | Bàn cờ, quân cờ, chiến binh, các chủ tướng, đèn lồng (dựng bằng code) |
 | `src/heroes.js` | Danh sách chủ tướng, dùng chung cho trang web và server |
 | `src/campaign.js` | Các chương, trận và thế cờ của chiến dịch; luật chấm thắng thua, sao và mở khóa. Dùng chung cho trang web và server |
 | `src/campaign-ui.js` | Bản đồ chiến dịch, bảng nhiệm vụ, phần thưởng, danh hiệu; lưu và đồng bộ tiến độ |
 | `src/stage-list.js` | Danh sách bối cảnh (tên, chữ Hán, phần thưởng), dùng chung cho trang web và server |
 | `src/stages.js` | Các bối cảnh quanh bàn cờ: bầu trời, mặt đất, cảnh xa, ánh sáng, sương mù, chuyển động |
-| `src/scene.js` | Cảnh 3D: camera, chọn quân, hiệu ứng, hoạt cảnh giao chiến |
+| `src/scene.js` | Cảnh 3D: camera, chọn quân, hiệu ứng, hoạt cảnh giao chiến; hai kiểu bàn (thường và lục giác Tam Quốc) |
 | `src/audio.js` | Âm thanh, nhạc nền ngũ cung và âm thanh nền của từng bối cảnh, tổng hợp bằng Web Audio |
-| `src/game.js` | Ván cờ, menu, chế độ online, đồng hồ, tìm trận xếp hạng, biên bản |
+| `src/game.js` | Ván cờ, ván Tam Quốc, menu, chế độ online, đồng hồ, tìm trận xếp hạng, biên bản |
 | `src/account.js` | Nút đăng nhập Google, tên và điểm của người chơi, bảng xếp hạng, hồ sơ |
 | `worker/index.js` | Cloudflare Worker: định tuyến tới file tĩnh, API và các Durable Object |
 | `worker/room.js` | Durable Object cho từng phòng: trọng tài, đồng hồ, ghi kết quả ván xếp hạng vào D1 |
