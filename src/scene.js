@@ -1,6 +1,7 @@
 // scene.js — the 3D view: renderer, the stage around the table (stages.js), orbit camera, tapping on points, highlights and the
 // battle animations (a warrior rises from the piece, marches, strikes, the defeated piece flies to the tray).
-// Holds no game rules: game.js tells it what to show.
+// Holds no game rules: game.js tells it what to show. Two layouts: the ordinary board, and the hexagon of the
+// three-kingdom game (sanguo.js).
 'use strict';
 const VIEW = (() => {
   THREE.ColorManagement.legacyMode = false;
@@ -8,12 +9,58 @@ const VIEW = (() => {
   const { N, R, B } = XQ;
   let renderer, scene, camera, W = 1, H = 1, inset = 0;   // inset: px covered by the side panel on the right
   const units = new Map();                 // square -> unit { piece, root, disc, war, sq }
-  const trays = { 1: [], '-1': [] };       // pieces captured by Red / by Black (meshes)
+
+  // ---------- layouts ----------
+  // Where each point lies, how to read a move and a piece, and where each side sits: yaw is the direction of a side's
+  // own edge seen from the centre (the camera looks from there for that player); its warriors face the other way.
+  // taker(piece): the side that took a piece, when only the piece is known.
+  const CLASSIC = {
+    sides: [1, -1],
+    pos: s => new THREE.Vector3(XQ.col(s) - 4, 0, XQ.row(s) - 4.5),
+    from: XQ.from, to: XQ.to,
+    sideOf: p => (p > 0 ? 1 : -1), typeOf: p => Math.abs(p), king: side => side * XQ.K,
+    yaw: side => (side > 0 ? 0 : Math.PI),
+    taker: p => (p > 0 ? -1 : 1),
+    // pieces taken by Red line up on Red's right, pieces taken by Black on Black's right
+    tray(by, i) {
+      const col = i % 2, rowI = Math.floor(i / 2);
+      return new THREE.Vector3(by > 0 ? 5.7 + col * 0.62 : -5.7 - col * 0.62, -0.7, by > 0 ? 4 - rowI * 0.62 : -4 + rowI * 0.62);
+    },
+    pick(x, z) {
+      const c = Math.round(x + 4), r = Math.round(z + 4.5);
+      return c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(x + 4 - c, z + 4.5 - r) > 0.5 ? -1 : r * 9 + c;
+    },
+    board: () => MODELS.board(),
+    fit: [6.4, 5.5, 6.0], edge: 5.4, shadow: 9, far: 32,   // camera framing, the hero shadow's edge, light, zoom out
+  };
+  // the three kingdoms; pieces are drawn as 20 + 10 * kingdom + type (models.js)
+  const local = (k, X, Y) => { const y = SG.YAW(k), sn = Math.sin(y), cs = Math.cos(y); return new THREE.Vector3(X * cs + Y * sn, 0, -X * sn + Y * cs); };
+  const SANGUO = {
+    sides: [0, 1, 2],
+    pos: s => new THREE.Vector3(SG.XZ[s * 2], 0, SG.XZ[s * 2 + 1]),
+    from: SG.from, to: SG.to,
+    sideOf: p => ((p / 10) | 0) - 2, typeOf: p => p % 10, king: k => 20 + 10 * k + SG.K,
+    yaw: SG.YAW,
+    taker: p => ((p / 10) | 0) - 2,
+    // behind each kingdom's own edge, to its right
+    tray: (by, i) => local(by, 0.8 + (i % 6) * 0.62, SG.BOARD_R + 0.9 + Math.floor(i / 6) * 0.62).setY(-0.7),
+    pick(x, z) {
+      let best = -1, d = 0.5;
+      for (let s = 0; s < SG.SQ; s++) { const e = Math.hypot(x - SG.XZ[s * 2], z - SG.XZ[s * 2 + 1]); if (e < d) { d = e; best = s; } }
+      return best;
+    },
+    board: () => MODELS.sanguoBoard(),
+    fit: [9.0, 9.4, 9.6], edge: SG.BOARD_R - 0.3, shadow: 11.5, far: 42,
+  };
+  let L = CLASSIC, layoutName = 'classic', boardMesh = null;
+  let trays = { 1: [], '-1': [] };         // pieces captured by each side (meshes)
   let armyOn = false, viewer = 1, menu = false, busy = false;
-  const heroes = { 1: '', '-1': '' };      // hero leading each side (heroes.js id, '' = the plain general)
+  let heroes = { 1: '', '-1': '' };        // hero leading each side (heroes.js id, '' = the plain general)
   let clock = performance.now(), last = clock;
   const tweens = [], parts = [];
-  const pos = (s) => new THREE.Vector3(XQ.col(s) - 4, 0, XQ.row(s) - 4.5);
+  const pos = s => L.pos(s);
+  const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+  const rest = p => wrap(L.yaw(L.sideOf(p)) + Math.PI);       // the way a piece's warrior faces between moves
   const S = { onTap: null };
 
   // ---------- tweens ----------
@@ -30,7 +77,7 @@ const VIEW = (() => {
   function fitDist() {
     const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - inset) / H;
     // portrait screens fit the board's width only; the trays beside it may leave the frame
-    return Math.max(6.4 / v, (portrait() ? 5.5 : 6.0) / (v * a)) * 1.02;
+    return Math.max(L.fit[0] / v, (portrait() ? L.fit[1] : L.fit[2]) / (v * a)) * 1.02;
   }
   const portrait = () => W / H < 0.8;
   // on a portrait phone the controls cover the bottom of the screen: look more from above and aim below the
@@ -38,8 +85,9 @@ const VIEW = (() => {
   const LOW = 0.3;                         // the low angle that shows the stage's horizon (menu, showcase)
   function resetCamera() {
     // the menu circles low to show off the stage; in play the camera looks down on the board
-    cam.tTheta = viewer > 0 ? 0 : Math.PI; cam.tPhi = menu ? LOW : portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
-    HOME.set(0, menu ? 1.6 : -0.4, portrait() ? 1.5 * viewer : 0); if (cam.tZoom === 1) tFocus.copy(HOME);
+    const y = L.yaw(viewer), lean = portrait() ? 1.5 : 0;
+    cam.tTheta = y; cam.tPhi = menu ? LOW : portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
+    HOME.set(lean * Math.sin(y), menu ? 1.6 : -0.4, lean * Math.cos(y)); if (cam.tZoom === 1) tFocus.copy(HOME);
   }
   function placeCamera() {
     const cp = Math.cos(cam.phi), d = cam.dist * cam.zoom;
@@ -81,7 +129,7 @@ const VIEW = (() => {
     scene.add(keyLight);
     rimLight = new THREE.DirectionalLight('#7fa4ff', 0.45); rimLight.position.set(8, 6, -10); scene.add(rimLight);
 
-    scene.add(MODELS.board());
+    boardMesh = L.board(); scene.add(boardMesh);
     setStage(wantStage);
 
     // highlight meshes
@@ -122,7 +170,7 @@ const VIEW = (() => {
       const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
       if (ptrs.size === 2) {
         const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (pinch0) cam.tDist = Math.max(7, Math.min(32, dist0 * pinch0 / d));
+        if (pinch0) cam.tDist = Math.max(7, Math.min(L.far, dist0 * pinch0 / d));
         dragged = true; return;
       }
       if (downAt && Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 7) moved = true;
@@ -137,7 +185,7 @@ const VIEW = (() => {
       if (ptrs.size === 0) downAt = null;
     };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
-    el.addEventListener('wheel', e => { e.preventDefault(); cam.tDist = Math.max(7, Math.min(32, cam.tDist * (1 + Math.sign(e.deltaY) * 0.08))); dragged = true; }, { passive: false });
+    el.addEventListener('wheel', e => { e.preventDefault(); cam.tDist = Math.max(7, Math.min(L.far, cam.tDist * (1 + Math.sign(e.deltaY) * 0.08))); dragged = true; }, { passive: false });
     el.addEventListener('dblclick', () => { dragged = false; resetCamera(); });
   }
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -DISC_H / 2), hit = new THREE.Vector3();
@@ -148,41 +196,35 @@ const VIEW = (() => {
     const hits = ray.intersectObjects(roots, true);
     for (const h of hits) { let o = h.object; while (o && !o.userData.sq && o.userData.sq !== 0) o = o.parent; if (o && o.visible !== false) return o.userData.sq; }
     if (!ray.ray.intersectPlane(plane, hit)) return -1;
-    const c = Math.round(hit.x + 4), r = Math.round(hit.z + 4.5);
-    if (c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(hit.x + 4 - c, hit.z + 4.5 - r) > 0.5) return -1;
-    return r * 9 + c;
+    return L.pick(hit.x, hit.z);
   }
   let hoverFn = null;
   function hover(e) { if (hoverFn) renderer.domElement.style.cursor = hoverFn(pick(e.clientX, e.clientY)) ? 'pointer' : 'grab'; }
 
   // ---------- units ----------
   function makeUnit(piece, s) {
-    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece, heroes[piece > 0 ? 1 : -1]);
-    root.add(disc); war.position.y = DISC_H; root.add(war);
-    disc.rotation.y = viewer > 0 ? 0 : Math.PI;
+    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece, heroes[L.sideOf(piece)]);
+    root.add(disc); war.position.y = DISC_H; war.rotation.y = rest(piece); root.add(war);
+    disc.rotation.y = L.yaw(viewer);
     war.visible = armyOn; war.scale.setScalar(armyOn ? 1 : 0.001);
     root.position.copy(pos(s)); root.userData.sq = s;
     scene.add(root);
     return { piece, root, disc, war, sq: s };
   }
   function disposeUnit(u) { scene.remove(u.root); }
+  // captured: the pieces already taken, each a piece or [piece, side that took it]
   function setBoard(b, captured) {
     for (const u of units.values()) disposeUnit(u); units.clear();
-    for (let s = 0; s < 90; s++) if (b[s]) units.set(s, makeUnit(b[s], s));
-    for (const side of [1, -1]) { for (const d of trays[side]) scene.remove(d); trays[side] = []; }
-    if (captured) for (const pc of captured) addToTray(pc, false);
+    for (let s = 0; s < b.length; s++) if (b[s]) units.set(s, makeUnit(b[s], s));
+    for (const side of Object.keys(trays)) for (const d of trays[side]) scene.remove(d);
+    trays = Object.fromEntries(L.sides.map(side => [side, []]));
+    if (captured) for (const c of captured) Array.isArray(c) ? addToTray(c[0], false, c[1]) : addToTray(c, false);
     clearMarks();
   }
-  function trayPos(byside, i) {
-    // pieces taken by Red line up on Red's right, pieces taken by Black on Black's right
-    const col = i % 2, rowI = Math.floor(i / 2);
-    const x = byside > 0 ? 5.7 + col * 0.62 : -5.7 - col * 0.62, z = byside > 0 ? 4 - rowI * 0.62 : -4 + rowI * 0.62;
-    return new THREE.Vector3(x, -0.7, z);
-  }
-  function addToTray(piece, animFrom) {
-    const by = piece > 0 ? -1 : 1, d = MODELS.disc(piece, true), list = trays[by];
-    d.rotation.y = viewer > 0 ? 0 : Math.PI;
-    const p = trayPos(by, list.length); list.push(d); scene.add(d);
+  function addToTray(piece, animFrom, by = L.taker(piece)) {
+    const d = MODELS.disc(piece, true), list = trays[by];
+    d.rotation.y = L.yaw(viewer);
+    const p = L.tray(by, list.length); list.push(d); scene.add(d);
     if (!animFrom) { d.position.copy(p); return Promise.resolve(); }
     const a = animFrom.clone();
     d.position.copy(a);
@@ -193,8 +235,8 @@ const VIEW = (() => {
   function setViewer(side, instant) {
     viewer = side;
     showing++; homeTheta = null; cam.tZoom = 1;          // a game starts: a hero preview still running must not move the camera
-    for (const u of units.values()) u.disc.rotation.y = side > 0 ? 0 : Math.PI;
-    for (const s of [1, -1]) for (const d of trays[s]) d.rotation.y = side > 0 ? 0 : Math.PI;
+    for (const u of units.values()) u.disc.rotation.y = L.yaw(side);
+    for (const s of Object.keys(trays)) for (const d of trays[s]) d.rotation.y = L.yaw(side);
     dragged = false; resetCamera();
     if (instant) { cam.theta = cam.tTheta; cam.phi = cam.tPhi; cam.dist = cam.tDist; }
   }
@@ -270,7 +312,7 @@ const VIEW = (() => {
     const p = u.root.position, yaw = Math.atan2(target.x - p.x, target.z - p.z);
     u.war.rotation.y = yaw;
   }
-  function restFacing(u) { u.war.rotation.y = u.piece > 0 ? Math.PI : 0; }
+  function restFacing(u) { u.war.rotation.y = rest(u.piece); }
   // a warrior grows out of its piece, larger than life so the fight reads from across the table
   const BIG = () => (armyOn ? 1.35 : 1.8), REST = () => (armyOn ? 1 : 0.001);
   async function summon(u) {
@@ -279,14 +321,14 @@ const VIEW = (() => {
     await tween(280, k => u.war.scale.setScalar(Math.max(0.001, a + (b - a) * backOut(k))));
   }
   async function dismiss(u) {
-    const a = u.war.scale.x, b = REST(), y0 = u.war.rotation.y, y1 = u.piece > 0 ? Math.PI : 0;
+    const a = u.war.scale.x, b = REST(), y0 = u.war.rotation.y, y1 = y0 + wrap(rest(u.piece) - y0);   // the short way round
     await tween(240, k => { u.war.scale.setScalar(Math.max(0.001, lerp(a, b, k))); u.war.rotation.y = lerp(y0, y1, k); });
     if (!armyOn) u.war.visible = false;
     restFacing(u);
   }
   // per-frame pose while marching
   function marchPose(u, k, dist) {
-    const j = u.war.userData.j, type = Math.abs(u.piece), ph = k * dist * 9;
+    const j = u.war.userData.j, type = L.typeOf(u.piece), ph = k * dist * 9;
     if (j.legL) { j.legL.rotation.x = Math.sin(ph) * 0.6; j.legR.rotation.x = -Math.sin(ph) * 0.6; }
     if (j.legs) j.legs.forEach((L, i) => { L.rotation.x = Math.sin(ph * (type === N ? 1.6 : 1) + (i % 2 ? Math.PI : 0) + (i > 1 ? 1 : 0)) * (type === N ? 0.8 : 0.35); });
     if (j.body && type === N) j.body.rotation.x = Math.sin(ph * 1.6) * 0.08;
@@ -303,7 +345,7 @@ const VIEW = (() => {
     u.war.position.y = DISC_H;
   }
   async function march(u, to, ms) {
-    const a = u.root.position.clone(), d = a.distanceTo(to), type = Math.abs(u.piece);
+    const a = u.root.position.clone(), d = a.distanceTo(to), type = L.typeOf(u.piece);
     if (type === N) SFX.gallop(); else if (type === R) SFX.roll(); else SFX.step();
     await tween(ms, k => {
       const e = ease(k);
@@ -313,7 +355,7 @@ const VIEW = (() => {
     u.root.position.y = 0; restPose(u);
   }
   async function strike(u) {
-    const j = u.war.userData.j, type = Math.abs(u.piece);
+    const j = u.war.userData.j, type = L.typeOf(u.piece);
     if (type === B) {           // the elephant rears and stamps
       await tween(260, k => { j.body.rotation.x = -0.45 * out(k); if (j.trunk) j.trunk.rotation.x = 0.5 - 1.4 * k; });
       await tween(140, k => { j.body.rotation.x = -0.45 * (1 - k) + 0.12 * k; });
@@ -327,10 +369,10 @@ const VIEW = (() => {
     }
     if (type === N && j.body) j.body.rotation.x = 0;
   }
-  async function fall(u, from) {
-    // knocked back, topples, bursts into pieces; the disc flies to the tray
+  async function fall(u, from, by) {
+    // knocked back, topples, bursts into pieces; the disc flies to the tray of the side that took it
     const p = u.root.position, away = new THREE.Vector3(p.x - from.x, 0, p.z - from.z).normalize();
-    const pal = MODELS.PAL[u.piece > 0 ? 1 : -1];
+    const pal = MODELS.PAL[MODELS.palKey(u.piece)];
     const a = p.clone();
     await tween(300, k => {
       u.root.position.set(a.x + away.x * 0.3 * out(k), 0, a.z + away.z * 0.3 * out(k));
@@ -342,7 +384,7 @@ const VIEW = (() => {
     SFX.thud();
     u.war.visible = false;
     disposeUnit(u);
-    await addToTray(u.piece, u.root.position.clone().setY(0.1));
+    await addToTray(u.piece, u.root.position.clone().setY(0.1), by);
   }
   async function throwStone(u, target) {
     const j = u.war.userData.j, a = u.root.position.clone().setY(0.9), b = target.root.position.clone().setY(0.5);
@@ -368,13 +410,13 @@ const VIEW = (() => {
 
   // play one move; captured is the piece taken (0 for none). Resolves when the animation is over.
   async function play(m, opts = {}) {
-    const f = XQ.from(m), t = XQ.to(m), u = units.get(f);
+    const f = L.from(m), t = L.to(m), u = units.get(f);
     if (!u) return;
     busy = true; clearMarks(); hint(-1, -1);
-    const target = units.get(t), dest = pos(t), type = Math.abs(u.piece), fast = opts.fast;
+    const target = units.get(t), dest = pos(t), type = L.typeOf(u.piece), fast = opts.fast, by = L.sideOf(u.piece);
     u.root.userData.sq = t;
     if (fast) {
-      if (target) { disposeUnit(target); units.delete(t); addToTray(target.piece, false); }
+      if (target) { disposeUnit(target); units.delete(t); addToTray(target.piece, false, by); }
       units.delete(f); units.set(t, u); u.sq = t; u.root.position.copy(dest); u.lift = 0;
       lastMove(f, t); busy = false; return;
     }
@@ -387,7 +429,7 @@ const VIEW = (() => {
     if (target && type === XQ.C) {
       await throwStone(u, target);
       units.delete(t);
-      await fall(target, u.root.position);
+      await fall(target, u.root.position, by);
       await march(u, dest, travelMs(u.root.position.distanceTo(dest)));
     } else if (target) {
       const a = u.root.position.clone(), dir = dest.clone().sub(a), d = dir.length(); dir.normalize();
@@ -397,7 +439,7 @@ const VIEW = (() => {
       const at = dest.clone().setY(0.55);
       SFX.clash(); sparks(at, '#fff0b0', 26); flash(at, '#ffd27a', 5); shake = 0.18;
       units.delete(t);
-      await fall(target, u.root.position);
+      await fall(target, u.root.position, by);
       restPose(u);
       await march(u, dest, 260);
     } else {
@@ -460,15 +502,15 @@ const VIEW = (() => {
   // ---------- heroes ----------
   // the generals of both sides as led by these heroes ({ 1: id, '-1': id }); a side left out keeps its hero
   function setHeroes(h) {
-    for (const side of [1, -1]) {
+    for (const side of L.sides) {
       if (!(side in h) || heroes[side] === (h[side] || '')) continue;
       heroes[side] = h[side] || '';
       for (const u of units.values()) {
-        if (u.piece !== side * XQ.K) continue;
+        if (u.piece !== L.king(side)) continue;
         const shown = u.war.visible, scale = u.war.scale.x;
         u.root.remove(u.war);
         u.war = MODELS.warrior(u.piece, heroes[side]);
-        u.war.position.y = DISC_H; u.war.visible = shown; u.war.scale.setScalar(scale);
+        u.war.position.y = DISC_H; u.war.rotation.y = rest(u.piece); u.war.visible = shown; u.war.scale.setScalar(scale);
         u.root.add(u.war);
       }
     }
@@ -476,12 +518,12 @@ const VIEW = (() => {
   // the hero rises from the general's piece, raises their weapon and goes back (the menu's preview)
   let showing = 0, homeTheta = null;     // camera angle to return to after a preview (kept across quick re-picks)
   async function showHero(side) {
-    const u = [...units.values()].find(x => x.piece === side * XQ.K);
+    const u = [...units.values()].find(x => x.piece === L.king(side));
     if (!u || busy) return;
     const id = ++showing, j = u.war.userData.j, a = u.war.scale.x;
     u.war.visible = true;
-    // the camera comes round in front of them and moves in (Red faces -z, Black faces +z)
-    const front = side > 0 ? Math.PI : 0, turn = ((front - cam.theta) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+    // the camera comes round in front of them and moves in (they face the centre, away from their own edge)
+    const front = L.yaw(side) + Math.PI, turn = ((front - cam.theta) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
     if (homeTheta === null) homeTheta = cam.tTheta;
     cam.tTheta = cam.theta + turn; cam.tPhi = 0.42;
     tFocus.copy(u.root.position).setY(0.7); cam.tZoom = 0.26;
@@ -502,7 +544,7 @@ const VIEW = (() => {
   function silhouette(id, side) {
     const key = id + side;
     if (shadowTex.has(key)) return shadowTex.get(key);
-    const war = MODELS.warrior(side * XQ.K, id), j = war.userData.j;
+    const war = MODELS.warrior(L.king(side), id), j = war.userData.j;
     war.userData.flag.visible = false; war.rotation.y = 0.45;
     if (j.armR) j.armR.rotation.x = -2.5;
     const s = new THREE.Scene(); s.add(war);
@@ -523,7 +565,7 @@ const VIEW = (() => {
   const SHADOW_L = 9, SHADOW_W = 4.5;
   function heroShadow(side, win) {
     if (!renderer) return;
-    const pivot = new THREE.Group(); pivot.rotation.y = side > 0 ? 0 : Math.PI; scene.add(pivot);
+    const pivot = new THREE.Group(); pivot.rotation.y = L.yaw(side); scene.add(pivot);
     const m = new THREE.MeshBasicMaterial({ color: '#000000', alphaMap: silhouette(heroes[side], side), transparent: true, opacity: 0, depthWrite: false });
     const plane = new THREE.Mesh(new THREE.PlaneGeometry(SHADOW_W, SHADOW_L), m);
     plane.rotation.x = -Math.PI / 2; plane.renderOrder = 1; pivot.add(plane);
@@ -531,9 +573,27 @@ const VIEW = (() => {
     return tween(ms, k => {
       const grow = 0.82 + 0.22 * out(Math.min(1, k * 2));            // the shadow lengthens as the hero rises
       plane.scale.set(grow, grow, 1);
-      plane.position.set(0, 0.006, 5.4 - (SHADOW_L * grow) / 2);    // feet at the hero's own edge of the board
+      plane.position.set(0, 0.006, L.edge - (SHADOW_L * grow) / 2); // feet at the hero's own edge of the board
       m.opacity = peak * Math.min(1, k * 4) * Math.min(1, (1 - k) * 3);
     }).then(() => { scene.remove(pivot); plane.geometry.dispose(); m.dispose(); });
+  }
+
+  // ---------- layout ----------
+  // 'classic' or 'sanguo': swaps the board, empties it and its trays; setBoard and setHeroes follow
+  function setLayout(name) {
+    if (name === layoutName) return;
+    layoutName = name; L = name === 'sanguo' ? SANGUO : CLASSIC;
+    for (const u of units.values()) disposeUnit(u); units.clear();
+    for (const side of Object.keys(trays)) for (const d of trays[side]) scene.remove(d);
+    trays = Object.fromEntries(L.sides.map(side => [side, []]));
+    heroes = Object.fromEntries(L.sides.map(side => [side, '']));
+    if (!scene) return;                                  // before init(): the board is built from L then
+    clearMarks(); lastMove(-1, -1); hint(-1, -1); check(-1);
+    if (boardMesh) scene.remove(boardMesh);
+    boardMesh = L.board(); scene.add(boardMesh);
+    Object.assign(keyLight.shadow.camera, { left: -L.shadow, right: L.shadow, top: L.shadow, bottom: -L.shadow });
+    keyLight.shadow.camera.updateProjectionMatrix();
+    cam.tZoom = 1; tFocus.copy(HOME); dragged = false; resetCamera();
   }
 
   // ---------- frame ----------
@@ -588,7 +648,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
+    init, setLayout, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px) { if (px === inset) return; inset = px; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },

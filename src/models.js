@@ -1,6 +1,7 @@
 // models.js — everything on the table, built from code: the board texture, the round pieces with their
 // brush-written characters, and a low-poly Three Kingdoms warrior for every piece type.
-// Red is the army of Shu (crimson and gold), Black is the army of Wei (ink blue and silver).
+// Red is the army of Shu (crimson and gold), Black is the army of Wei (ink blue and silver); in the three-kingdom game
+// (sanguo.js) Wu joins them in jade green.
 // One board step is 1 world unit; figures are built facing +z and stand on y = 0.
 'use strict';
 const MODELS = (() => {
@@ -8,7 +9,21 @@ const MODELS = (() => {
   const PAL = {
     1: { main: '#a8231b', dark: '#5c1310', trim: '#e3b448', cloth: '#7a1712', plume: '#ffcf4a', ink: '#a3201a', banner: '#b3261e', horse: '#8a4a24', metal: '#d9b65a' },
     '-1': { main: '#26344d', dark: '#121a29', trim: '#c9d3de', cloth: '#18233a', plume: '#6fb1ff', ink: '#1b1b1b', banner: '#22324c', horse: '#2b2b33', metal: '#c3ccd6' },
+    2: { main: '#2c7348', dark: '#143a24', trim: '#e3c86a', cloth: '#1d5233', plume: '#9be07a', ink: '#17663a', banner: '#215c39', horse: '#5a3a1e', metal: '#d9c27a' },
   };
+  // by palette: a general's armour, an advisor's robe, a general's cape
+  const ARMOUR = { 1: '#c0392b', '-1': '#2f4160', 2: '#2e7a4f' }, ROBE = { 1: '#8e1d16', '-1': '#223150', 2: '#1e5a3a' }, CAPE = { 1: '#7a0f0b', '-1': '#101828', 2: '#0f3d26' };
+  // Pieces are signed numbers in the ordinary game (Red > 0); the three-kingdom game draws them as
+  // 20 + 10 * kingdom + type (Shu 2x in red, Wu 3x in green, Wei 4x in ink blue), each with its kingdom on the general.
+  const SG_PAL = [1, 2, -1];
+  const SG_HAN = [
+    [null, '蜀', '仕', '相', '傌', '俥', '炮', '兵'],
+    [null, '吳', '士', '象', '馬', '車', '炮', '卒'],
+    [null, '魏', '士', '象', '馬', '車', '砲', '卒'],
+  ];
+  const palKey = p => (p >= 20 ? SG_PAL[((p / 10) | 0) - 2] : p > 0 ? 1 : -1);
+  const typeOf = p => (p >= 20 ? p % 10 : Math.abs(p));
+  const han = p => (p >= 20 ? SG_HAN[((p / 10) | 0) - 2][p % 10] : XQ.HAN[p]);
   const SKIN = '#e5b88c', WOOD = '#6b4423', IRON = '#9aa3ad';
   const DISC_R = 0.43, DISC_H = 0.2;
 
@@ -96,7 +111,7 @@ const MODELS = (() => {
   const faceCache = new Map();
   function faceTexture(piece) {
     if (faceCache.has(piece)) return faceCache.get(piece);
-    const side = piece > 0 ? 1 : -1, ink = PAL[side].ink, ch = XQ.HAN[piece];
+    const ink = PAL[palKey(piece)].ink, ch = han(piece);
     const t = canvas(256, 256, (g, w) => {
       const gr = g.createRadialGradient(w / 2, w / 2, 20, w / 2, w / 2, w / 2);
       gr.addColorStop(0, '#f6e6c4'); gr.addColorStop(1, '#e2c792');
@@ -111,10 +126,10 @@ const MODELS = (() => {
   }
   // banner cloth for army view: the character in gold on the side's colour
   const bannerCache = new Map();
-  function bannerTexture(piece, ch = XQ.HAN[piece]) {
+  function bannerTexture(piece, ch = han(piece)) {
     const key = piece + ch;
     if (bannerCache.has(key)) return bannerCache.get(key);
-    const pal = PAL[piece > 0 ? 1 : -1];
+    const pal = PAL[palKey(piece)];
     const t = canvas(128, 176, (g, w, h) => {
       g.fillStyle = pal.banner; g.fillRect(0, 0, w, h);
       g.fillStyle = pal.trim; g.fillRect(0, 0, w, 10); g.fillRect(0, h - 22, w, 6);
@@ -140,6 +155,64 @@ const MODELS = (() => {
     for (const [x, z] of [[-4.7, -5.2], [4.7, -5.2], [-4.7, 5.2], [4.7, 5.2]]) mesh(geo('foot', () => new THREE.CylinderGeometry(0.3, 0.38, 0.4, 10)), mat('#2a120a'), g, x, -0.7, z);
     return g;
   }
+  // the three-kingdom board (sanguo.js): a hexagon of three half-boards. The texture covers the square around it,
+  // SPAN units from the centre each way; world x, z map straight onto the canvas.
+  const SPAN = 9.2;
+  function sanguoTexture() {
+    const PX = 2048, sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc;
+    return canvas(PX, PX, g => {
+      woodGrain(g, PX, PX, '#d9b277', 380, 11);
+      const vg = g.createRadialGradient(PX / 2, PX / 2, 300, PX / 2, PX / 2, PX * 0.62);
+      vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, 'rgba(70, 30, 5, 0.38)');
+      g.fillStyle = vg; g.fillRect(0, 0, PX, PX);
+      g.strokeStyle = '#3b1d0b'; g.lineCap = 'round'; g.lineJoin = 'round';
+      const line = pts => { g.beginPath(); pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.stroke(); };
+      // the frame: a hexagon a little outside the outer points
+      const rim = (SG.H + 0.22) / Math.cos(Math.PI / 6);
+      g.lineWidth = 8;
+      line(Array.from({ length: 7 }, (_, i) => { const a = Math.PI / 6 + (i * Math.PI) / 3; return [rim * Math.sin(a), rim * Math.cos(a)]; }));
+      g.lineWidth = 3.4;
+      for (let k = 0; k < 3; k++) {
+        for (let r = 0; r <= 4; r++) line([SG.at(k, 0, r), SG.at(k, 4, r), SG.at(k, 8, r)]);
+        for (let c = 0; c <= 8; c++) line([SG.at(k, c, 0), SG.at(k, c, 4)]);
+        line([SG.at(k, 3, 0), SG.at(k, 4, 1), SG.at(k, 5, 2)]); line([SG.at(k, 5, 0), SG.at(k, 4, 1), SG.at(k, 3, 2)]);
+        // the outer files and the centre run on across the rivers
+        line([SG.at(k, 8, 4), SG.at(SG.rightOf(k), 0, 4)]);
+        line([SG.at(k, 4, 4), SG.at(SG.rightOf(k), 4, 4)]);
+      }
+      // the three rivers, each named for the water between those two kingdoms; each kingdom's seal at its edge
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      const RIVER = ['長  江', '淮  水', '漢  水'];
+      for (let k = 0; k < 3; k++) {
+        const a = SG.YAW(k) + Math.PI / 3, dx = Math.sin(a), dz = Math.cos(a), d = 4.1, turn = Math.atan2(dz, dx);
+        g.save(); g.translate(X(dx * d), Z(dz * d)); g.rotate(Math.cos(turn) < 0 ? turn + Math.PI : turn);   // never upside down
+        g.fillStyle = 'rgba(59, 29, 11, 0.8)'; g.font = `bold 78px ${BRUSH}`; g.fillText(RIVER[k], 0, 0); g.restore();
+        const y = SG.YAW(k), e = SG.H + 0.45;
+        g.save(); g.translate(X(Math.sin(y) * e), Z(Math.cos(y) * e)); g.rotate(-y);
+        g.fillStyle = PAL[SG_PAL[k]].ink; g.globalAlpha = 0.8; g.font = `bold 46px ${BRUSH}`; g.fillText(SG_HAN[k][1], 0, 0); g.restore();
+      }
+    });
+  }
+  function sanguoBoard() {
+    const g = new THREE.Group(), rc = SG.BOARD_R / Math.cos(Math.PI / 6);
+    const corners = Array.from({ length: 6 }, (_, i) => { const a = Math.PI / 6 + (i * Math.PI) / 3; return [rc * Math.sin(a), rc * Math.cos(a)]; });
+    // the top: a hexagon fan with the texture laid flat on it
+    const pos = [0, 0, 0], uv = [0.5, 0.5], idx = [];
+    corners.forEach(([x, z], i) => { pos.push(x, 0, z); uv.push((x + SPAN) / (2 * SPAN), 1 - (z + SPAN) / (2 * SPAN)); idx.push(0, i + 1, ((i + 1) % 6) + 1); });
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); tg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    tg.setIndex(idx); tg.computeVertexNormals();
+    const top = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: sanguoTexture(), roughness: 0.88 }));
+    top.receiveShadow = true; g.add(top);
+    const side = new THREE.MeshStandardMaterial({ map: tableTexture(), color: '#8a5a32', roughness: 0.6 });
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(rc, rc, 0.36, 6), side);
+    // the slab's own top stays a little below the textured one: seen from afar the two would flicker into each other
+    slab.rotation.y = Math.PI / 6; slab.position.y = -0.2; slab.receiveShadow = true; slab.castShadow = true; g.add(slab);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(rc + 0.3, rc + 0.3, 0.2, 6), new THREE.MeshStandardMaterial({ color: '#2a120a', roughness: 0.35, metalness: 0.1 }));
+    rim.rotation.y = Math.PI / 6; rim.position.y = -0.42; rim.receiveShadow = true; g.add(rim);
+    for (const [x, z] of corners) mesh(geo('foot', () => new THREE.CylinderGeometry(0.3, 0.38, 0.4, 10)), mat('#2a120a'), g, x * 0.93, -0.7, z * 0.93);
+    return g;
+  }
   function table() {
     const t = tableTexture(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 6);
     const m = new THREE.Mesh(new THREE.CircleGeometry(26, 64), new THREE.MeshStandardMaterial({ map: t, color: '#7a4a2a', roughness: 0.5 }));
@@ -163,7 +236,7 @@ const MODELS = (() => {
     return new THREE.LatheGeometry(pts, 40);
   });
   function disc(piece, small) {
-    const g = new THREE.Group(), side = piece > 0 ? 1 : -1;
+    const g = new THREE.Group(), side = palKey(piece);
     const body = mesh(discGeo(), new THREE.MeshStandardMaterial({ color: '#e7cf9f', roughness: 0.62 }), g);
     // a thin coloured band around the rim tells the sides apart from any angle
     mesh(geo('band', () => new THREE.CylinderGeometry(DISC_R + 0.004, DISC_R + 0.004, 0.05, 40, 1, true)), mat(PAL[side].ink), g, 0, DISC_H / 2, 0);
@@ -236,7 +309,7 @@ const MODELS = (() => {
   // generals wear a cape in their side's colour, which also tells the sides apart when a hero leads them
   function cape(h, side) {
     const c = group(h, 0, 0.42, -0.07); c.rotation.x = 0.18;
-    box(0.24, 0.36, 0.02, side > 0 ? '#7a0f0b' : '#101828', c, 0, -0.18, 0);
+    box(0.24, 0.36, 0.02, CAPE[side], c, 0, -0.18, 0);
     h.userData.j.cape = c;
   }
   // a white feather fan held up in front (j.restArm keeps the arm raised between moves)
@@ -249,7 +322,7 @@ const MODELS = (() => {
   }
 
   function buildGeneral(pal, side) {
-    const h = humanoid(pal, { armour: side > 0 ? '#c0392b' : '#2f4160', beard: true }), j = h.userData.j;
+    const h = humanoid(pal, { armour: ARMOUR[side], beard: true }), j = h.userData.j;
     cyl(0.062, 0.068, 0.07, pal.trim, j.head, 0, 0.12, 0, 8, { metal: 0.7, rough: 0.3 });
     cyl(0.02, 0.03, 0.05, pal.trim, j.head, 0, 0.18, 0, 6, { metal: 0.7, rough: 0.3 });
     plumes(j.head, pal.plume);
@@ -259,7 +332,7 @@ const MODELS = (() => {
     return h;
   }
   function buildAdvisor(pal, side) {
-    const h = humanoid(pal, { robe: side > 0 ? '#8e1d16' : '#223150', noLegs: true, beard: true }), j = h.userData.j;
+    const h = humanoid(pal, { robe: ROBE[side], noLegs: true, beard: true }), j = h.userData.j;
     // scholar's hat
     box(0.15, 0.025, 0.11, '#1a1010', j.head, 0, 0.125, 0);
     box(0.08, 0.06, 0.08, '#1a1010', j.head, 0, 0.16, 0);
@@ -560,23 +633,23 @@ const MODELS = (() => {
   // a warrior for a piece, facing the enemy; with a banner pole for the army view.
   // hero: id from heroes.js for a general led by that hero (its banner then bears the hero's character)
   function warrior(piece, hero) {
-    const side = piece > 0 ? 1 : -1, type = Math.abs(piece), pal = PAL[side];
+    const side = palKey(piece), type = typeOf(piece), pal = PAL[side];
     const led = type === XQ.K && HEROES.valid(hero) ? hero : '';
     const root = new THREE.Group();
     const fig = led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
     root.add(fig);
-    root.rotation.y = side > 0 ? Math.PI : 0;                // Red sits at +z and faces -z
+    root.rotation.y = side === 1 ? Math.PI : 0;              // Red sits at +z and faces -z
     // banner on a pole, shown in the army view so the character stays readable
     const flag = group(root, -0.16, 0, -0.12);
     const tall = type === 1 ? 1.25 : 1.0;
     cyl(0.01, 0.01, tall, '#2a160a', flag, 0, tall / 2, 0, 4);
     ball(0.025, pal.trim, flag, 0, tall + 0.01, 0, { metal: 0.6, rough: 0.3 });
     const cloth = new THREE.Mesh(geo('banner', () => { const p = new THREE.PlaneGeometry(0.3, 0.41); p.translate(0.15, 0, 0); return p; }),
-      new THREE.MeshStandardMaterial({ map: bannerTexture(piece, led ? HEROES.byId[led].han : XQ.HAN[piece]), side: THREE.DoubleSide, roughness: 0.85 }));
+      new THREE.MeshStandardMaterial({ map: bannerTexture(piece, led ? HEROES.byId[led].han : han(piece)), side: THREE.DoubleSide, roughness: 0.85 }));
     cloth.position.y = tall - 0.24; cloth.castShadow = true; flag.add(cloth);
     root.userData = { fig, j: fig.userData.j || {}, flag, cloth, type, side, hero: led };
     return root;
   }
 
-  return { board, table, lantern, disc, warrior, faceTexture, clearTextureCache, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, table, lantern, disc, warrior, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();

@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#140d0a">
 <meta name="apple-mobile-web-app-title" content="Cờ Tướng 3D">
-<meta name="description" content="Cờ tướng 3D: đánh với máy hoặc chơi online, quân cờ hoá chiến binh Tam Quốc khi ra trận.">
+<meta name="description" content="Cờ tướng 3D: đánh với máy, chơi online hoặc cờ Tam Quốc ba người, quân cờ hoá chiến binh Tam Quốc khi ra trận.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Noto+Serif:wght@600;700&family=LXGW+WenKai+TC:wght@700&display=swap">
@@ -74,7 +74,8 @@
   .players { display: grid; gap: 8px; }
   .pl { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(245, 233, 212, 0.05); border: 1px solid transparent; transition: border-color 200ms, background 200ms; }
   .pl .chip { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font: 700 17px/1 var(--han); background: #ecd6a8; box-shadow: inset 0 0 0 2px currentColor; }
-  .pl.red .chip { color: #a3201a; } .pl.black .chip { color: #1b1b1b; }
+  .pl.red .chip { color: #a3201a; } .pl.black .chip { color: #1b1b1b; } .pl.green .chip { color: #17663a; }
+  .pl.out { opacity: 0.45; } .pl.out .nm { text-decoration: line-through; }
   .pl .nm { font-weight: 700; }
   .pl .nm small { display: block; color: var(--dim); font-weight: 500; font-size: 12px; white-space: nowrap; }
   .pl .who { margin-left: auto; color: var(--dim); font-size: 13px; text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -95,6 +96,16 @@
   #moves li em { font-style: normal; color: var(--dim); font-variant-numeric: tabular-nums; }
   #moves .mv.r { color: #ff9a8a; } #moves .mv.b { color: #cfd8e6; }
   #moves .mv.cap { font-weight: 700; }
+  /* the three-kingdom game: one move a line, each kingdom in its colour */
+  #moves li.tri { grid-template-columns: 28px 1fr; }
+  #moves .mv b { font-weight: 700; }
+  #moves .mv.k0 { color: #ff9a8a; } #moves .mv.k1 { color: #8fe0a8; } #moves .mv.k2 { color: #cfd8e6; }
+  #moves li.fall { color: var(--gold); font-weight: 700; }
+  .seats { display: grid; gap: 6px; }
+  .seat { display: grid; grid-template-columns: auto 1fr minmax(150px, 55%); align-items: center; gap: 10px; }
+  .seat .hz { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; box-shadow: inset 0 0 0 2px currentColor; font: 700 17px/1 var(--han); }
+  .seat .hz.k0 { color: #a3201a; } .seat .hz.k1 { color: #17663a; } .seat .hz.k2 { color: #1b1b1b; }
+  .rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--dim); font-size: 13px; }
   #moves .empty { display: block; color: var(--dim); border: 0; }
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .btn { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.06); font-weight: 600; cursor: pointer; transition: background 150ms, border-color 150ms; }
@@ -311,6 +322,8 @@
     .icon { width: 36px; height: 36px; }
     #panel { top: auto; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); width: auto; padding: 10px; gap: 8px; max-height: 52vh; }
     .players { grid-template-columns: 1fr 1fr; gap: 6px; }
+    body[data-mode="sanguo"] .players { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    body[data-mode="sanguo"] .pl .who, body[data-mode="sanguo"] .pl .clk { display: none; }
     .pl { padding: 6px 8px; gap: 6px; }
     .pl .chip { width: 24px; height: 24px; font-size: 14px; }
     .pl .nm small { display: none; }
@@ -369,8 +382,9 @@
 <aside id="panel">
   <button id="grip" type="button" aria-label="Thu gọn bảng" aria-expanded="true"><i></i></button>
   <div class="players">
-    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm">Đỏ <small>Thục</small></span><span class="who"></span><span class="clk"></span></div>
-    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm">Đen <small>Ngụy</small></span><span class="who"></span><span class="clk"></span></div>
+    <div class="pl red" id="plRed"><span class="chip">帥</span><span class="nm"><span class="lab">Đỏ</span> <small>Thục</small></span><span class="who"></span><span class="clk"></span></div>
+    <div class="pl green" id="plGreen" hidden><span class="chip">吳</span><span class="nm"><span class="lab">Ngô</span> <small></small></span><span class="who"></span><span class="clk"></span></div>
+    <div class="pl black" id="plBlack"><span class="chip">將</span><span class="nm"><span class="lab">Đen</span> <small>Ngụy</small></span><span class="who"></span><span class="clk"></span></div>
   </div>
   <div id="room" hidden>
     <div class="mhead"><span id="roomKind">Phòng</span></div>
@@ -411,6 +425,7 @@
       <div class="modes">
         <button class="mode main" id="bCampaign" type="button"><span class="hz">戰</span><span><b>Chinh chiến Tam Quốc</b><small id="campNote"></small></span><span class="chev">›</span></button>
         <button class="mode" type="button" data-go="ai"><span class="hz">弈</span><span><b>Đánh với máy</b><small id="aiNote"></small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="sanguo"><span class="hz">三</span><span><b>Tam Quốc tranh hùng</b><small id="sgNote"></small></span><span class="chev">›</span></button>
         <button class="mode" type="button" data-go="online"><span class="hz">友</span><span><b>Chơi online</b><small id="onlineSum">Phòng chơi với bạn bè</small></span><span class="chev">›</span></button>
         <button class="mode" type="button" data-go="army"><span class="hz" id="armyHz">帥</span><span><b>Chủ tướng &amp; bối cảnh</b><small id="armyNote"></small></span><span class="chev">›</span></button>
       </div>
@@ -435,6 +450,33 @@
         <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
       </section>
       <button class="btn primary wide" id="bPlayAI" type="button">Vào trận</button>
+    </div>
+
+    <div class="view" data-view="sanguo" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Tam Quốc tranh hùng</h2></div>
+      <section>
+        <p class="note">Cờ tướng ba người: Thục, Ngô, Ngụy chung một bàn lục giác ghép từ ba nửa bàn cờ. Diệt hai nước kia để nhất thống thiên hạ.</p>
+        <h2>Ai cầm quân</h2>
+        <div class="seats">
+          <div class="seat"><span class="hz k0">蜀</span><b>Thục <small class="note">đi trước</small></b><div class="seg" id="seat0"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
+          <div class="seat"><span class="hz k1">吳</span><b>Ngô</b><div class="seg" id="seat1"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
+          <div class="seat"><span class="hz k2">魏</span><b>Ngụy</b><div class="seg" id="seat2"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
+        </div>
+        <p class="note">Nhiều người cùng chơi trên một máy thì bàn cờ tự xoay về phía nước đến lượt.</p>
+        <h2>Độ khó của máy</h2>
+        <div class="seg" id="segSgLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+      </section>
+      <details class="foot"><summary>Luật chơi</summary>
+        <ul class="rules">
+          <li>Ba nước đi lần lượt Thục, Ngô, Ngụy (ngược chiều kim đồng hồ). Quân đi như cờ tướng.</li>
+          <li>Qua sông bên trái là đất nước bên trái, qua sông bên phải là đất nước bên phải. Đường giữa thông vào cả hai nước.</li>
+          <li>Tốt sang đất nước khác thì tiến về phía cung nước đó hoặc đi ngang. Tượng, Sĩ, Tướng không rời đất nhà.</li>
+          <li>Không được để Tướng mình bị bất kỳ nước nào chiếu, kể cả lộ mặt Tướng. Tướng không bị ăn, chỉ bị dồn.</li>
+          <li>Đến lượt mà không còn nước đi (bị chiếu bí hay hết nước) thì mất nước: Tướng rời bàn, tàn quân về tay người vừa đi nước cuối.</li>
+          <li>Nước cuối cùng còn Tướng nhất thống thiên hạ. 50 vòng không ăn quân, hoặc lặp thế ba lần, thì hòa.</li>
+        </ul>
+      </details>
+      <button class="btn primary wide" id="bPlaySg" type="button">Vào trận</button>
     </div>
 
     <div class="view" data-view="online" id="onlineBox" hidden>
@@ -538,6 +580,7 @@
 
 <script src="src/vendor/three.min.js"></script>
 <script src="src/xiangqi.js"></script>
+<script src="src/sanguo.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/heroes.js"></script>
 <script src="src/models.js"></script>
