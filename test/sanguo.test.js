@@ -148,6 +148,12 @@ test('the engine mates when it can', () => {
   const r = SG.think(mating(), { time: 800 });
   assert.strictEqual(r.move, SG.mv(sq(1, 3, 7), sq(1, 0, 7)));
 });
+test('a straight move goes along the lines: over the bend at the centre file, across the river', () => {
+  assert.deepStrictEqual(SG.via(SG.mv(sq(0, 2, 1), sq(0, 2, 7))), [2, 3, 4, 5, 6].map(c => sq(0, 2, c)));
+  assert.deepStrictEqual(SG.via(SG.mv(sq(0, 3, 0), sq(2, 2, 8))), [sq(0, 4, 0), sq(2, 4, 8), sq(2, 3, 8)]);
+  assert.deepStrictEqual(SG.via(SG.mv(sq(0, 3, 4), sq(1, 3, 4))), [sq(0, 4, 4), sq(1, 4, 4)]);
+  assert.deepStrictEqual(SG.via(SG.mv(sq(0, 0, 1), sq(0, 2, 2))), []);   // a horse jumps
+});
 test('pack and unpack keep the position', () => {
   let p = SG.Pos.start();
   for (const m of [p.legal()[3]]) p = SG.play(p, m).pos;

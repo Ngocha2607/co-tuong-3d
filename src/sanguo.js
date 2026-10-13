@@ -267,6 +267,14 @@ const SG = (() => {
     return { over: false, checks, repeat: n };
   }
 
+  // the points a straight move passes over between its two ends, along the lines of the board (they bend at the
+  // centre file and across the rivers); none for a jump or a single step
+  function via(m) {
+    const f = from(m), t = to(m);
+    for (const ray of RAYS[f]) { const i = ray.indexOf(t); if (i >= 0) return ray.slice(0, i); }
+    return [];
+  }
+
   // ---------- notation: "Xe 9·1 → 9·4", a point in someone else's half named with that kingdom, "Mã 2·1 → Ngô 3·5" ----------
   const NAME = [null, 'Tướng', 'Sĩ', 'Tượng', 'Mã', 'Xe', 'Pháo', 'Tốt'];
   // files counted from each kingdom's right, 1-9, as in ordinary notation; rows from its back rank, 1-5
@@ -380,7 +388,7 @@ const SG = (() => {
   return {
     K, A, B, N, R, C, P, SQ, KINGDOMS, NAMES, SEAL, NAME, MATE, QUIET,
     sq, kOf, rOf, cOf, rightOf, leftOf, piece, T, HOME, OWN, mv, from, to,
-    Pos, play, status, notation, think, pack, unpack,
+    Pos, play, status, notation, via, think, pack, unpack,
     at, XZ, H, BOARD_R, YAW, STEP, RAYS, HORSE,
   };
 })();

@@ -486,7 +486,7 @@
     G.lastMover = mover; renderMoves();
     enqueue(async () => {
       if (gen !== G.gen) return;
-      await VIEW.play(m, {});
+      await VIEW.play(m, { via: SG.via(m) });              // along the bends of the lines, not across them
       if (gen !== G.gen) return;
       VIEW.check(-1);
       for (const f of r.falls) {
