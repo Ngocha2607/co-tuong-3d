@@ -211,7 +211,7 @@
   .join input { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--ink); font: 700 16px/1 var(--ui); letter-spacing: 0.25em; text-transform: uppercase; }
   .join input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
   .note { margin: 0; color: var(--dim); font-size: 13px; }
-  #onlineBox.off .btn, #onlineBox.off .join { opacity: 0.4; pointer-events: none; }
+  #onlineBox.off .btn, #onlineBox.off .join, #sgOnlineBox.off .btn, #sgOnlineBox.off .join, #sgOnlineBox.off .seg { opacity: 0.4; pointer-events: none; }
   .foot { margin: 12px 0 0; color: var(--dim); font-size: 12px; }
   .foot a { color: var(--dim); }
   details.foot summary { cursor: pointer; width: max-content; }
@@ -465,6 +465,19 @@
         <p class="note">Nhiều người cùng chơi trên một máy thì bàn cờ tự xoay về phía nước đến lượt.</p>
         <h2>Độ khó của máy</h2>
         <div class="seg" id="segSgLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+        <button class="btn primary wide" id="bPlaySg" type="button">Vào trận trên máy này</button>
+      </section>
+      <section id="sgOnlineBox">
+        <h2>Online</h2>
+        <div id="sgRankedBox" hidden>
+          <button class="btn primary wide" id="bSgRanked" type="button">Tìm trận xếp hạng · 3 người</button>
+          <p class="note" id="sgRankedNote"></p>
+          <button class="linkish" id="bSgRanks" type="button">Xem bảng xếp hạng Tam Quốc</button>
+        </div>
+        <div class="seg" id="segSgTc" title="Thời gian mỗi nước"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
+        <button class="btn gold" id="bSgCreate" type="button">Tạo phòng 3 người</button>
+        <div class="join"><input id="inSgRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng Tam Quốc"><button class="btn" id="bSgJoin" type="button">Vào phòng</button></div>
+        <p class="note">Tạo phòng rồi gửi link cho hai người bạn. Người tạo phòng cầm Thục; mỗi lần đấu lại, cả ba xoay một ghế.</p>
       </section>
       <details class="foot"><summary>Luật chơi</summary>
         <ul class="rules">
@@ -476,7 +489,6 @@
           <li>Nước cuối cùng còn Tướng nhất thống thiên hạ. 50 vòng không ăn quân, hoặc lặp thế ba lần, thì hòa.</li>
         </ul>
       </details>
-      <button class="btn primary wide" id="bPlaySg" type="button">Vào trận</button>
     </div>
 
     <div class="view" data-view="online" id="onlineBox" hidden>
@@ -571,7 +583,7 @@
 <div id="ranks" class="overlay dialog" hidden>
   <div class="card">
     <button class="icon" id="bRanksClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    <div class="seg" id="rkTabs"><button type="button" data-v="0">Bảng xếp hạng</button><button type="button" data-v="1">Hồ sơ của tôi</button></div>
+    <div class="seg" id="rkTabs"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="2">Tam Quốc</button><button type="button" data-v="1">Hồ sơ của tôi</button></div>
     <div id="rkBody"></div>
   </div>
 </div>

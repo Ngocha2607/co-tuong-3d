@@ -1,9 +1,10 @@
 // worker/index.js — Cloudflare deployment: static files, the accounts API, one Durable Object per online room
-// (room.js) and one for the ranked queue (lobby.js).
+// (room.js, and sg-room.js for the three-kingdom game) and one for the ranked queues (lobby.js).
 import { api, authReady, currentUser } from './api.js';
 import { RANKED_TC } from './clock.js';
 export { Room } from './room.js';
 export { Lobby } from './lobby.js';
+export { SgRoom } from './sg-room.js';
 
 const ROOM_RE = /^[A-Z0-9]{4,8}$/;
 
@@ -11,14 +12,14 @@ const ROOM_RE = /^[A-Z0-9]{4,8}$/;
 function withUser(req, user) {
   const h = new Headers(req.headers);
   h.delete('x-user');
-  if (user) h.set('x-user', encodeURIComponent(JSON.stringify({ id: user.id, name: user.name, rating: user.rating, title: user.title || '' })));
+  if (user) h.set('x-user', encodeURIComponent(JSON.stringify({ id: user.id, name: user.name, rating: user.rating, sgRating: user.sg_rating, title: user.title || '' })));
   return new Request(req, { headers: h });
 }
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url), p = url.pathname;
-    if (p === '/ws' || p === '/ws/lobby') {
+    if (p === '/ws' || p === '/ws/sg' || p === '/ws/lobby') {
       if ((req.headers.get('upgrade') || '').toLowerCase() !== 'websocket') return new Response('Expected WebSocket', { status: 426 });
       let user = null;
       try { user = await currentUser(req, env); } catch (e) { console.error('session lookup failed', e); }
@@ -28,7 +29,8 @@ export default {
       }
       const room = (url.searchParams.get('room') || '').toUpperCase();
       if (!ROOM_RE.test(room)) return new Response('Bad room code', { status: 400 });
-      return env.ROOMS.get(env.ROOMS.idFromName(room)).fetch(withUser(req, user));
+      const rooms = p === '/ws/sg' ? env.SGROOMS : env.ROOMS;
+      return rooms.get(rooms.idFromName(room)).fetch(withUser(req, user));
     }
     if (p === '/info') {
       const accounts = authReady(env);

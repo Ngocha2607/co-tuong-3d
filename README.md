@@ -22,7 +22,9 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
   - Tiến độ của khách lưu trong trình duyệt. Đăng nhập thì đồng bộ lên server, đổi máy không mất, và những trận đã thắng lúc chưa đăng nhập được gửi lên. Server đi lại từng ván để xác minh trước khi ghi sao.
   - Khi đăng nhập, chủ tướng và bối cảnh đang chọn cũng lưu theo tài khoản: sang máy khác đăng nhập là có lại. Lần đăng nhập đầu tiên, lựa chọn trên máy đang dùng được gửi lên làm mặc định.
 - **Đánh với máy:** chọn cầm quân Đỏ hoặc Đen, ba mức Dễ / Thường / Khó. Máy tính nước trong Web Worker nên hình không bị giật. Có Đi lại và Gợi ý.
-- **Tam Quốc tranh hùng (cờ tướng ba người):** Thục (đỏ), Ngô (xanh lục), Ngụy (xanh đen) chung một bàn lục giác ghép từ ba nửa bàn cờ, ba con sông 長江, 淮水, 漢水 ngăn giữa. Mỗi nước chọn Người hoặc Máy: đánh với hai máy, hai ba người chung một máy (bàn cờ tự xoay về phía nước đến lượt), hay ngồi xem ba máy đấu. Ba mức Dễ / Thường / Khó, có Đi lại và Gợi ý. Chỉ chơi trên một máy, chưa có online.
+- **Tam Quốc tranh hùng (cờ tướng ba người):** Thục (đỏ), Ngô (xanh lục), Ngụy (xanh đen) chung một bàn lục giác ghép từ ba nửa bàn cờ, ba con sông 長江, 淮水, 漢水 ngăn giữa. Mỗi nước chọn Người hoặc Máy: đánh với hai máy, hai ba người chung một máy (bàn cờ tự xoay về phía nước đến lượt), hay ngồi xem ba máy đấu. Ba mức Dễ / Thường / Khó, có Đi lại và Gợi ý.
+  - **Online:** tạo phòng 3 người rồi gửi link `…/?tq=ABCD` cho hai người bạn (hoặc nhập mã phòng). Người vào trước cầm Thục, rồi Ngô, rồi Ngụy; đủ ba người mới bắt đầu. Máy chủ kiểm tra từng nước, mỗi nước một đồng hồ (không giờ, 10 phút + 5 giây hoặc 5 phút + 3 giây). Xin hàng hay hết giờ thì nước đó rút quân khỏi bàn, hai nước kia đánh tiếp; người đã mất nước ở lại xem được. Đấu lại thì cả ba xoay một ghế, ai cũng có lượt đi trước.
+  - **Xếp hạng Tam Quốc:** đăng nhập rồi bấm *Tìm trận xếp hạng · 3 người*: ghép ba người có điểm Tam Quốc gần nhau, ghế bốc ngẫu nhiên, 10 phút + 5 giây. Điểm Tam Quốc tách riêng khỏi điểm cờ tướng, bắt đầu từ 1200. Mỗi cặp người chơi tính như một ván Elo (ai về trên thì thắng, cùng hạng thì hòa) với K giảm một nửa: ba người ngang điểm thì nhất +20, nhì ±0, ba −20. Bỏ ván quá 60 giây khi đến lượt thì rút quân; một nước chưa đi nước đầu sau 30 giây thì ván bị hủy, không tính điểm. Bảng xếp hạng có thêm tab Tam Quốc, hồ sơ có thành tích và 20 ván Tam Quốc gần nhất.
   - Ba nước đi lần lượt Thục, Ngô, Ngụy (ngược chiều kim đồng hồ). Quân đi như cờ tướng.
   - Nửa trái của mỗi nước giáp nửa phải của nước bên trái: qua sông, cột c gặp cột 8 − c như trên bàn thường. Đường giữa của ba nước gặp nhau ở tam giác trung tâm, đi lên đường giữa thì rẽ được sang cả hai nước.
   - Tốt sang đất nước khác thì tiến về phía cung nước đó hoặc đi ngang. Tượng, Sĩ, Tướng không rời đất nhà.
@@ -30,7 +32,7 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
   - Nước cuối cùng còn Tướng nhất thống thiên hạ. 50 vòng không ăn quân hoặc lặp thế ba lần thì hòa.
   - Máy tính nước theo lối "paranoid": coi hai nước kia là liên minh chống mình, giữ quân mình hơn trung bình quân của họ.
 - **Chơi online:** tạo phòng, gửi link `…/?room=ABCD` cho bạn bè. Máy chủ kiểm tra từng nước đi, lưu ván cờ (đóng tab rồi mở lại vẫn vào đúng ván), người thứ ba vào được để xem. Hết ván bấm Đấu lại thì hai bên đổi màu quân. Người tạo phòng chọn thời gian: không giới hạn, 10 phút + 5 giây hoặc 5 phút + 3 giây.
-- **Đăng nhập Google và xếp hạng:** đăng nhập để có tên hiển thị (đổi được) và điểm Elo, bắt đầu từ 1200. **Tìm trận xếp hạng** ghép bạn với người có điểm gần nhất (lúc đầu chênh tối đa 100 điểm, nới thêm 20 điểm cho mỗi giây chờ), màu quân bốc ngẫu nhiên, mỗi bên 10 phút + 5 giây. Chơi đủ 10 ván xếp hạng thì có tên trên **Bảng xếp hạng** (top 100). Hồ sơ mỗi người có số ván thắng/hòa/thua và 20 ván gần nhất. Không đăng nhập vẫn đánh với máy và chơi phòng bạn bè bình thường.
+- **Đăng nhập Google và xếp hạng (cờ tướng):** đăng nhập để có tên hiển thị (đổi được) và điểm Elo, bắt đầu từ 1200. **Tìm trận xếp hạng** ghép bạn với người có điểm gần nhất (lúc đầu chênh tối đa 100 điểm, nới thêm 20 điểm cho mỗi giây chờ), màu quân bốc ngẫu nhiên, mỗi bên 10 phút + 5 giây. Chơi đủ 10 ván xếp hạng thì có tên trên **Bảng xếp hạng** (top 100). Hồ sơ mỗi người có số ván thắng/hòa/thua và 20 ván gần nhất. Không đăng nhập vẫn đánh với máy và chơi phòng bạn bè bình thường.
 - **Chủ tướng:** chọn một trong 8 danh tướng (Quan Vũ, Trương Phi, Triệu Vân, Gia Cát Lượng, Lưu Bị, Tào Tháo, Tôn Quyền, Lữ Bố), hoặc 8 tướng mở trong Chiến dịch (Hoàng Trung, Mã Siêu, Chu Du, Tư Mã Ý, Hạ Hầu Uyên, Mạnh Hoạch, Khương Duy, Chúc Dung). Quân Tướng của bạn hóa thành người đó: dáng hình, mũ, râu và binh khí riêng, cờ hiệu mang chữ họ (關, 曹…). Khi bạn chiếu tướng, bóng chủ tướng đổ dài trên bàn cờ, và đậm hơn khi bạn thắng. Quân lính vẫn theo màu phe. Đánh với máy thì máy bốc ngẫu nhiên một chủ tướng khác; chơi online thì đối thủ thấy chủ tướng của bạn, và lựa chọn được giữ nguyên đến hết ván.
 - **Bối cảnh:** chọn nơi đặt bàn cờ trong menu, đổi được cả khi đang chơi:
   - **Quân trướng** (mặc định): căn phòng đèn lồng.
@@ -95,7 +97,7 @@ Lần deploy đầu tiên wrangler tự tạo cơ sở dữ liệu D1 `co-tuong-
 3. Tạo khóa ký phiên: `npx wrangler secret put SESSION_SECRET` rồi nhập một chuỗi ngẫu nhiên dài, ví dụ lấy từ `openssl rand -base64 32`. Đổi khóa này thì mọi người bị đăng xuất.
 4. Tạo bảng: `npm run db:remote`, rồi `npm run deploy` lại.
 
-Khi có migration mới trong `migrations/` (ví dụ `0002_campaign.sql` cho chiến dịch và danh hiệu), chạy `npm run db:remote` **trước** khi deploy code mới.
+Khi có migration mới trong `migrations/` (ví dụ `0002_campaign.sql` cho chiến dịch và danh hiệu, `0003_sanguo.sql` cho xếp hạng Tam Quốc), chạy `npm run db:remote` **trước** khi deploy code mới. Phòng Tam Quốc là một Durable Object mới (`SgRoom`, migration `v3` trong `wrangler.toml`), wrangler tự tạo khi deploy.
 
 Máy chủ chỉ lưu mã tài khoản Google (`sub`) và tên hiển thị. Không lưu email hay ảnh đại diện.
 
@@ -159,11 +161,13 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 | `src/account.js` | Nút đăng nhập Google, tên và điểm của người chơi, bảng xếp hạng, hồ sơ |
 | `worker/index.js` | Cloudflare Worker: định tuyến tới file tĩnh, API và các Durable Object |
 | `worker/room.js` | Durable Object cho từng phòng: trọng tài, đồng hồ, ghi kết quả ván xếp hạng vào D1 |
-| `worker/lobby.js` | Durable Object hàng chờ xếp hạng: ghép cặp theo điểm |
+| `worker/sg-room.js` | Durable Object cho từng phòng Tam Quốc: ba ghế, trọng tài, ba đồng hồ, ghi kết quả xếp hạng vào D1 |
+| `worker/sg-game.js` | Luật của phòng Tam Quốc (dựng lại ván, đồng hồ, hạn chót, thứ hạng), không phụ thuộc Cloudflare nên test được bằng Node |
+| `worker/lobby.js` | Durable Object hàng chờ xếp hạng: ghép cặp cờ tướng, ghép bộ ba Tam Quốc theo điểm |
 | `worker/api.js` | Đăng nhập, người chơi hiện tại, đổi tên, bảng xếp hạng, hồ sơ |
 | `worker/auth.js` | Kiểm tra ID token của Google bằng WebCrypto, cookie phiên ký HMAC |
-| `worker/clock.js`, `worker/elo.js` | Luật thời gian và cách tính điểm, không phụ thuộc Cloudflare nên test được bằng Node |
-| `migrations/` | Cấu trúc bảng D1 (`users`, `games`, `campaign`) |
+| `worker/clock.js`, `worker/elo.js` | Luật thời gian và cách tính điểm (cả Elo ba người), không phụ thuộc Cloudflare nên test được bằng Node |
+| `migrations/` | Cấu trúc bảng D1 (`users`, `games`, `campaign`, `sg_games`) |
 | `test/rules.test.js` | Kiểm tra luật bằng perft và vài thế cờ đặc biệt |
 | `test/server.test.mjs` | Kiểm tra Elo, đồng hồ, xác thực token Google và cookie phiên |
 | `test/mate.js` | Bộ giải chiếu bí vét cạn, dùng để chứng minh các thế cờ (chỉ dùng khi kiểm tra) |

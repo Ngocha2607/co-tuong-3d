@@ -1,9 +1,11 @@
 // server.test.mjs — `npm test`: the parts of the Worker that need no Cloudflare runtime:
-// ratings, clock rules, Google token checks (against a key made here) and session cookies.
+// ratings, clock rules, Tam Quốc rooms, Google token checks (against a key made here) and session cookies.
 import assert from 'assert';
 import * as elo from '../worker/elo.js';
 import * as C from '../worker/clock.js';
 import { verifyGoogle, makeSession, readSession, b64u, cookieOf } from '../worker/auth.js';
+import * as R from '../worker/sg-game.js';
+import SG from '../src/sanguo.js';
 
 let failed = 0;
 async function test(name, fn) {
@@ -62,6 +64,51 @@ await test('lobby: rating window widens with waiting time', () => {
   assert.ok(!elo.fits(a, b, 1000));
   assert.ok(elo.fits(a, b, 8000));
   assert.ok(!elo.fits(a, { ...a }, 60000), 'a player is never paired with themselves');
+});
+
+// ---------- Tam Quốc rooms ----------
+await test('elo, three kingdoms: first gains, last loses, the middle evens out', () => {
+  const p = [{ rating: 1200, games: 0 }, { rating: 1200, games: 0 }, { rating: 1200, games: 0 }];
+  assert.deepStrictEqual(elo.rate3(p, [1, 2, 3]), [20, 0, -20]);
+  assert.deepStrictEqual(elo.rate3(p, [1, 1, 3]), [10, 10, -20]);
+  const strong = [{ rating: 1600, games: 50 }, { rating: 1200, games: 50 }, { rating: 1200, games: 50 }];
+  const d = elo.rate3(strong, [3, 1, 2]);
+  assert.ok(d[0] < -8 && d[1] > 5, JSON.stringify(d));
+});
+await test('lobby, three kingdoms: three who all fit, closest first; never the same player twice', () => {
+  const s = (id, rating, since = 0) => ({ user: { id, rating }, since });
+  assert.strictEqual(elo.trio([s(1, 1200), s(2, 1250)], 0), null);
+  const t = elo.trio([s(1, 1200), s(2, 1290), s(3, 1210), s(4, 1220)], 0);
+  assert.deepStrictEqual(t.map(x => x.user.id).sort(), [1, 3, 4]);
+  assert.strictEqual(elo.trio([s(1, 1200), s(2, 1200), s(1, 1200)], 0), null);
+  assert.ok(elo.trio([s(1, 1200), s(2, 1400), s(3, 1300)], 6000));    // the windows widen with waiting
+});
+await test('three-kingdom room: replay, a kingdom leaving, places', () => {
+  const p0 = SG.Pos.start(), m0 = p0.legal()[0];
+  let g = R.replay([m0]);
+  assert.strictEqual(g.pos.turn, 1);
+  g = R.replay([m0, { out: 1, why: 'resign' }]);
+  assert.strictEqual(g.pos.turn, 2); assert.deepStrictEqual(g.out, [1]); assert.ok(!g.pos.alive[1]);
+  assert.strictEqual(R.result(g), null);
+  g = R.replay([m0, { out: 1, why: 'resign' }, { out: 2, why: 'time' }]);
+  assert.deepStrictEqual(R.result(g), { winner: 0, reason: 'unite', places: [1, 3, 2], out: [1, 2] });
+  assert.deepStrictEqual(R.places([true, true, false], [2]), [1, 1, 3]);
+});
+await test('three-kingdom room: clocks start after everyone moved once, then charge whoever is to move', () => {
+  const st = { ...R.fresh(), rated: true, tc: C.CONTROLS['10+5'], left: R.fullClock(C.CONTROLS['10+5']), turnAt: 1000 };
+  assert.strictEqual(R.running(st), -1);
+  assert.deepStrictEqual(R.deadline(st), { at: 1000 + C.ABORT_MS, kind: 'abort', side: 0 });
+  Object.assign(st, { moves: 3, turn: 0, turnAt: 0 });
+  assert.strictEqual(R.running(st), 0);
+  assert.ok(R.charge(st, 0, 20000));
+  assert.deepStrictEqual(st.left, [600000 - 20000 + 5000, 600000, 600000]);
+  st.turn = 1;
+  assert.deepStrictEqual(R.leftNow(st, 30000), [585000, 590000, 600000]);
+  assert.deepStrictEqual(R.deadline(st), { at: 20000 + 600000, kind: 'time', side: 1 });
+  Object.assign(st, { left: [9000, 1000, 9000] });
+  assert.strictEqual(R.charge(st, 1, 22000), false);
+  st.away = [0, 21000, 0]; st.left = [9000, 600000, 9000];
+  assert.deepStrictEqual(R.deadline(st), { at: 21000 + C.ABANDON_MS, kind: 'abandon', side: 1 });
 });
 
 // a stand-in for Google: our own RSA key signs the tokens

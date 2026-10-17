@@ -1,12 +1,14 @@
-// worker/lobby.js — the queue for ranked games: a single Durable Object every signed-in seeker connects to.
-// Seekers are paired by rating (fits in elo.js). A pair gets a fresh ranked room (code X + 7 characters) with random
-// colours; both pages are told the code and open it like any other room.
+// worker/lobby.js — the queues for ranked games: a single Durable Object every signed-in seeker connects to.
+// Two queues: ordinary games ('xq'), where seekers are paired by rating (fits in elo.js), and Tam Quốc ('sg'), where
+// three are matched by their Tam Quốc rating (trio). A match gets a fresh ranked room (code X + 7 characters, or Y + 7
+// for Tam Quốc) with random seats; the pages are told the code and open it like any other room.
 import { DurableObject } from 'cloudflare:workers';
 import { userOf } from './room.js';
-import { fits } from './elo.js';
+import { fits, trio } from './elo.js';
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const code = () => 'X' + Array.from(crypto.getRandomValues(new Uint8Array(7)), b => CHARS[b % CHARS.length]).join('');
+const code = first => first + Array.from(crypto.getRandomValues(new Uint8Array(7)), b => CHARS[b % CHARS.length]).join('');
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 export class Lobby extends DurableObject {
   async fetch(req) {
@@ -14,16 +16,17 @@ export class Lobby extends DurableObject {
     if (!user) return new Response('sign in first', { status: 401 });
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ user, since: 0 });
+    server.serializeAttachment({ user, since: 0, v: 'xq' });
     return new Response(null, { status: 101, webSocket: client });
   }
 
   send(ws, o) { try { ws.send(JSON.stringify(o)); } catch (e) { } }
-  seekers() {
-    return this.ctx.getWebSockets().map(ws => ({ ws, a: ws.deserializeAttachment() })).filter(s => s.a && s.a.since)
+  // everyone searching in queue v, longest waiting first
+  seekers(v) {
+    return this.ctx.getWebSockets().map(ws => ({ ws, a: ws.deserializeAttachment() })).filter(s => s.a && s.a.since && (!v || (s.a.v || 'xq') === v))
       .sort((x, y) => x.a.since - y.a.since);
   }
-  mark(s, since) { s.a = { ...s.a, since }; s.ws.serializeAttachment(s.a); }
+  mark(s, since, v) { s.a = { ...s.a, since, ...(v ? { v } : {}) }; s.ws.serializeAttachment(s.a); }
 
   async webSocketMessage(ws, raw) {
     if (typeof raw !== 'string' || raw.length > 256) return;
@@ -32,8 +35,9 @@ export class Lobby extends DurableObject {
     if (!m || !me.a) return;
     if (m.t === 'seek') {
       // one search per player: a second tab takes over
+      const v = m.v === 'sg' ? 'sg' : 'xq';
       for (const s of this.seekers()) if (s.ws !== ws && s.a.user.id === me.a.user.id) { this.mark(s, 0); this.send(s.ws, { t: 'cancelled', why: 'elsewhere' }); }
-      if (!me.a.since) this.mark(me, Date.now());
+      if (!me.a.since || me.a.v !== v) this.mark(me, Date.now(), v);
       await this.pair();
     } else if (m.t === 'cancel') {
       this.mark(me, 0);
@@ -49,7 +53,7 @@ export class Lobby extends DurableObject {
     if (this.pairing) return;            // setting up a room awaits another object; don't pair the same people twice
     this.pairing = true;
     try {
-      const now = Date.now(), list = this.seekers(), taken = new Set();
+      const now = Date.now(), list = this.seekers('xq'), taken = new Set();
       for (const x of list) {
         if (taken.has(x)) continue;
         let best = null;
@@ -61,8 +65,14 @@ export class Lobby extends DurableObject {
         taken.add(x); taken.add(best);
         await this.start(x, best);
       }
+      // Tam Quốc: threes, each judged by their Tam Quốc rating
+      for (;;) {
+        const sg = this.seekers('sg').map(s => ({ s, user: { id: s.a.user.id, rating: s.a.user.sgRating || 1200 }, since: s.a.since }));
+        const t = trio(sg, now);
+        if (!t || !(await this.start3(t.map(x => x.s)))) break;
+      }
       const left = this.seekers();
-      for (const s of left) this.send(s.ws, { t: 'seeking', n: left.length });
+      for (const v of ['xq', 'sg']) { const q = left.filter(s => (s.a.v || 'xq') === v); for (const s of q) this.send(s.ws, { t: 'seeking', n: q.length }); }
       if (left.length) await this.ctx.storage.setAlarm(now + 2000); else await this.ctx.storage.deleteAlarm();
     } finally { this.pairing = false; }
   }
@@ -73,12 +83,26 @@ export class Lobby extends DurableObject {
     const [red, black] = Math.random() < 0.5 ? [x, y] : [y, x];
     const seat = s => ({ id: s.a.user.id, name: s.a.user.name, rating: s.a.user.rating, title: s.a.user.title || '' });
     for (let i = 0; i < 4; i++) {
-      const room = code();
+      const room = code('X');
       const r = await this.env.ROOMS.get(this.env.ROOMS.idFromName(room)).fetch('https://room/setup', {
         method: 'POST', body: JSON.stringify({ code: room, info: { 1: seat(red), '-1': seat(black) } }),
       });
       if (r.ok) { this.send(x.ws, { t: 'match', room }); this.send(y.ws, { t: 'match', room }); return; }
     }
     this.mark(x, since[0]); this.mark(y, since[1]);   // could not open a room: back in the queue
+  }
+  // three Tam Quốc seekers into a ranked room, in random seats; false when no room could be opened
+  async start3(list) {
+    const since = list.map(s => s.a.since);
+    for (const s of list) this.mark(s, 0);
+    const seats = shuffle(list.slice());
+    const info = seats.map(s => ({ id: s.a.user.id, name: s.a.user.name, rating: s.a.user.sgRating || 1200, title: s.a.user.title || '' }));
+    for (let i = 0; i < 4; i++) {
+      const room = code('Y');
+      const r = await this.env.SGROOMS.get(this.env.SGROOMS.idFromName(room)).fetch('https://room/setup', { method: 'POST', body: JSON.stringify({ code: room, info }) });
+      if (r.ok) { for (const s of list) this.send(s.ws, { t: 'match', room, v: 'sg' }); return true; }
+    }
+    list.forEach((s, i) => this.mark(s, since[i]));
+    return false;
   }
 }

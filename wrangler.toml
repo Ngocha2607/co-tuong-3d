@@ -28,10 +28,15 @@ migrations_dir = "migrations"
 name = "ROOMS"
 class_name = "Room"
 
-# one Durable Object for the ranked queue
+# one Durable Object for the ranked queues
 [[durable_objects.bindings]]
 name = "LOBBY"
 class_name = "Lobby"
+
+# one Durable Object per three-kingdom (Tam Quốc) room
+[[durable_objects.bindings]]
+name = "SGROOMS"
+class_name = "SgRoom"
 
 [[migrations]]
 tag = "v1"
@@ -40,3 +45,7 @@ new_sqlite_classes = ["Room"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Lobby"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["SgRoom"]
