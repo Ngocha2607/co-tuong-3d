@@ -1047,7 +1047,10 @@
     mark(value);
     el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); mark(+b.dataset.v); onPick(+b.dataset.v); });
   }
-  const renderAINote = () => { $('#aiNote').textContent = `Quân ${pref.side > 0 ? 'Đỏ' : 'Đen'} · ${['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường'}`; };
+  // the home page's lines under the two- and three-player games: the computer game as set up, and whether online is there
+  let onlineThere = false;
+  const andOnline = () => (onlineThere ? ' · hoặc chơi online' : '');
+  const renderAINote = () => { $('#aiNote').textContent = `Với máy: quân ${pref.side > 0 ? 'Đỏ' : 'Đen'}, ${(['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường').toLowerCase()}${andOnline()}`; };
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); renderAINote(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
@@ -1055,7 +1058,7 @@
   // the three-kingdom page: who leads each kingdom, and how strong the computer is
   const renderSgNote = () => {
     const people = pref.sgSeats.map((v, k) => (v ? -1 : k)).filter(k => k >= 0);
-    $('#sgNote').textContent = people.length === 1 ? `Bạn cầm ${KNAME[people[0]]}, đấu với hai máy` : people.length ? `${people.length} người chung một máy` : 'Xem ba máy tranh hùng';
+    $('#sgNote').textContent = (people.length === 1 ? `Với máy: bạn cầm ${KNAME[people[0]]}` : people.length ? `${people.length} người chung một máy` : 'Xem ba máy tranh hùng') + andOnline();
   };
   [0, 1, 2].forEach(k => seg('#seat' + k, pref.sgSeats[k], v => { pref.sgSeats[k] = v; savePref(); renderSgNote(); }));
   seg('#segSgLevel', pref.sgLevel, v => { pref.sgLevel = v; savePref(); });
@@ -1268,7 +1271,7 @@
     $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
     $('#onlineBox').classList.toggle('off', !online);
-    $('#onlineSum').textContent = !online ? 'Cần chạy qua Cloudflare Worker' : info.accounts ? 'Xếp hạng hoặc phòng với bạn bè' : 'Phòng chơi với bạn bè';
+    onlineThere = online; renderAINote(); renderSgNote();
     $('#onlineNote').textContent = online ? 'Tạo phòng rồi gửi link cho bạn bè, hoặc nhập mã phòng để vào.' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const q = new URLSearchParams(location.search), invited = cleanRoom(q.get('room')), invitedSg = cleanRoom(q.get('tq'));
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
