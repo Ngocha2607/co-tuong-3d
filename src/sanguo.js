@@ -249,12 +249,22 @@ const SG = (() => {
   // just moved. Returns the new position and the falls, [{ k, by, king }] (king: the square its general stood on).
   function play(pos, m) {
     const p = pos.after(m), falls = [];
-    while (p.living() > 1 && !p.legal().length) {
-      const k = p.turn, king = p.kings[k];
-      falls.push({ k, by: p.last, king, mate: p.inCheck() });
-      p.fall(k, p.last);
-    }
+    settle(p, falls);
     return { pos: p, falls };
+  }
+  // kingdom k leaves the game (it resigned, ran out of time or walked away): its army leaves the board with it, and
+  // whoever is then left without a move falls as usual
+  function drop(pos, k) {
+    const p = pos.clone(), falls = [];
+    if (p.alive[k] && p.living() > 1) { p.fall(k, -1); settle(p, falls); }
+    return { pos: p, falls };
+  }
+  function settle(p, falls) {
+    while (p.living() > 1 && !p.legal().length) {
+      const k = p.turn, king = p.kings[k], by = p.last !== k && p.alive[p.last] ? p.last : -1;
+      falls.push({ k, by, king, mate: p.inCheck() });
+      p.fall(k, by);
+    }
   }
   // the game is over with one general left, or drawn: a position seen for the third time, or 50 rounds without a capture
   const QUIET = 150;
@@ -388,7 +398,7 @@ const SG = (() => {
   return {
     K, A, B, N, R, C, P, SQ, KINGDOMS, NAMES, SEAL, NAME, MATE, QUIET,
     sq, kOf, rOf, cOf, rightOf, leftOf, piece, T, HOME, OWN, mv, from, to,
-    Pos, play, status, notation, via, think, pack, unpack,
+    Pos, play, drop, status, notation, via, think, pack, unpack,
     at, XZ, H, BOARD_R, YAW, STEP, RAYS, HORSE,
   };
 })();

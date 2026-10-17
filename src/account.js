@@ -1,9 +1,12 @@
-// account.js — the signed-in player: Google sign-in button, nickname, rating, the leaderboard and player profiles.
+// account.js — the signed-in player: Google sign-in button, nickname, ratings (ordinary and Tam Quốc), the two
+// leaderboards and player profiles.
 // The Worker does the real work (worker/api.js); this file only talks to it and draws the menus.
 'use strict';
 const ACCOUNT = (() => {
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const KNAME = ['Thục', 'Ngô', 'Ngụy'], PLACE = ['', 'Nhất', 'Nhì', 'Ba'];
+  const SG_REASON = { unite: 'Thống nhất', repetition: 'Lặp thế cờ', quiet: '50 vòng không ăn quân' };
   const REASON = { checkmate: 'Chiếu bí', stalemate: 'Hết nước', repetition: 'Lặp thế cờ', quiet: '60 nước không ăn quân', resign: 'Xin thua', time: 'Hết giờ', abandon: 'Bỏ ván', agreement: 'Thỏa thuận hòa', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai' };
   const sign = n => (n > 0 ? '+' : n < 0 ? '−' : '±') + Math.abs(n);
   let user = null, enabled = false, provisional = 10, toast = () => { };
@@ -63,12 +66,16 @@ const ACCOUNT = (() => {
     if (u.games >= provisional) return `${u.rating} điểm · hạng ${u.rank} · ${u.games} ván`;
     return `${u.rating} điểm · còn ${provisional - u.games} ván để có tên trên bảng`;
   }
+  function sgLine(u) {
+    if (u.sg_games >= provisional) return `Tam Quốc: ${u.sg_rating} điểm · hạng ${u.sg_rank} · ${u.sg_games} ván`;
+    return `Tam Quốc: ${u.sg_rating} điểm · còn ${provisional - u.sg_games} ván để có tên trên bảng`;
+  }
   function render() {
     $('#acOut').hidden = !!user; $('#acIn').hidden = !user;
     if (!user) return;
     $('#meAv').textContent = user.name.slice(0, 1).toUpperCase();
     $('#meName').textContent = user.name;
-    $('#meStat').textContent = (titleOf(user) ? titleOf(user) + ' · ' : '') + statLine(user);
+    $('#meStat').textContent = (titleOf(user) ? titleOf(user) + ' · ' : '') + statLine(user) + (user.sg_games ? ` · Tam Quốc ${user.sg_rating}` : '');
   }
   function startRename() {
     const f = $('#renameForm');
@@ -85,6 +92,7 @@ const ACCOUNT = (() => {
   $('#bLogout').addEventListener('click', logout);
 
   // ---------- leaderboard and profiles ----------
+  // tabs: 0 the ordinary leaderboard, 2 the Tam Quốc one, 1 a profile (one's own unless another player was picked)
   let tab = 0;
   function openRanks(which = 0) { $('#ranks').hidden = false; show(which); }
   function show(which, id) {
@@ -94,26 +102,28 @@ const ACCOUNT = (() => {
     $('#rkTabs').querySelector('[data-v="1"]').hidden = !user;
     const body = $('#rkBody');
     body.innerHTML = '<p class="note">Đang tải…</p>';
-    (which === 0 && !id ? board() : profile(id || (user && user.id))).then(h => { body.innerHTML = h; }, () => { body.innerHTML = '<p class="note">Không tải được, thử lại sau.</p>'; });
+    (which !== 1 && !id ? board(which === 2) : profile(id || (user && user.id))).then(h => { body.innerHTML = h; }, () => { body.innerHTML = '<p class="note">Không tải được, thử lại sau.</p>'; });
   }
-  async function board() {
-    const { top, provisional: p } = await call('api/leaderboard');
+  async function board(sg) {
+    const { top, provisional: p } = await call('api/leaderboard' + (sg ? '?v=sg' : ''));
     provisional = p;
+    const R = u => (sg ? { rating: u.sg_rating, games: u.sg_games, wins: u.sg_wins } : u);
     let h = '';
-    if (!top.length) h = `<p class="note">Chưa ai chơi đủ ${p} ván xếp hạng. Hãy là người đầu tiên có tên trên bảng!</p>`;
+    if (!top.length) h = `<p class="note">Chưa ai chơi đủ ${p} ván xếp hạng${sg ? ' Tam Quốc' : ''}. Hãy là người đầu tiên có tên trên bảng!</p>`;
     else {
-      h = '<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Điểm</th><th>Ván</th><th>Thắng</th></tr></thead><tbody>';
+      h = `<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Điểm</th><th>Ván</th><th>${sg ? 'Thống nhất' : 'Thắng'}</th></tr></thead><tbody>`;
       top.forEach((u, i) => {
-        h += `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${esc(u.name)}${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}</td><td><b>${u.rating}</b></td><td>${u.games}</td><td>${Math.round(100 * u.wins / u.games)}%</td></tr>`;
+        const r = R(u);
+        h += `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${esc(u.name)}${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}</td><td><b>${r.rating}</b></td><td>${r.games}</td><td>${Math.round(100 * r.wins / r.games)}%</td></tr>`;
       });
       h += '</tbody></table>';
     }
-    if (user) h += `<p class="note mine">Bạn: ${esc(statLine(user))}</p>`;
+    if (user) h += `<p class="note mine">Bạn: ${esc(sg ? sgLine(user) : statLine(user))}</p>`;
     else h += '<p class="note">Đăng nhập Google rồi chơi trận xếp hạng để có tên trên bảng.</p>';
     return h;
   }
   async function profile(id) {
-    const { user: u, games } = await call('api/user/' + id);
+    const { user: u, games, sg = [] } = await call('api/user/' + id);
     let h = `<div class="phead"><span class="av big">${esc(u.name.slice(0, 1).toUpperCase())}</span><div><h3>${esc(u.name)}</h3>${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}<small>${esc(statLine(u))}</small></div></div>
       <div class="stats"><div><b>${u.games}</b>Ván</div><div><b>${u.wins}</b>Thắng</div><div><b>${u.draws}</b>Hòa</div><div><b>${u.losses}</b>Thua</div></div>
       <h4>Ván gần đây</h4>`;
@@ -125,6 +135,19 @@ const ACCOUNT = (() => {
         h += `<li class="${res[0]}"><span class="r">${res[1]}</span>
           <span class="vs">gặp <a href="#" data-id="${g.opp.id}">${esc(g.opp.name)}</a> <small>${g.opp.rating}</small><br>
           <small>${g.side > 0 ? 'Đỏ' : 'Đen'} · ${REASON[g.reason] || ''} · ${Math.ceil(g.plies / 2)} nước · ${new Date(g.at).toLocaleDateString('vi-VN')}</small></span>
+          <span class="d">${sign(g.delta)}<small>${g.rating}</small></span></li>`;
+      }
+      h += '</ul>';
+    }
+    // Tam Quốc: its own rating, record and games
+    if (u.sg_games || sg.length) {
+      h += `<h4>Tam Quốc</h4><p class="note">${esc(sgLine(u))}</p>
+        <div class="stats"><div><b>${u.sg_games}</b>Ván</div><div><b>${u.sg_wins}</b>Thống nhất</div><div><b>${u.sg_draws}</b>Hòa</div><div><b>${u.sg_losses}</b>Mất nước</div></div><ul class="glist">`;
+      for (const g of sg) {
+        const res = g.place === 1 ? (g.others.some(o => o.place === 1) ? ['draw', '和'] : ['win', '勝']) : ['lose', PLACE[g.place] === 'Nhì' ? '二' : '三'];
+        h += `<li class="${res[0]}"><span class="r">${res[1]}</span>
+          <span class="vs">${KNAME[g.k]} · gặp ${g.others.map(o => `<a href="#" data-id="${o.id}">${esc(o.name)}</a>`).join(', ')}<br>
+          <small>Hạng ${PLACE[g.place]} · ${SG_REASON[g.reason] || ''} · ${Math.ceil(g.plies / 3)} vòng · ${new Date(g.at).toLocaleDateString('vi-VN')}</small></span>
           <span class="d">${sign(g.delta)}<small>${g.rating}</small></span></li>`;
       }
       h += '</ul>';

@@ -9,7 +9,7 @@ import HEROES from '../src/heroes.js';
 import STAGE_LIST from '../src/stage-list.js';
 
 export const authReady = env => !!(env.DB && env.GOOGLE_CLIENT_ID && env.SESSION_SECRET);
-const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage';
+const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage, sg_rating, sg_games, sg_wins, sg_draws, sg_losses';
 
 const json = (body, init = {}) => Response.json(body, { ...init, headers: { 'cache-control': 'no-store', ...init.headers } });
 const fail = (status, error) => json({ error }, { status });
@@ -29,6 +29,11 @@ export function cleanName(s) {
 const rankOf = async (env, u) => u.games >= PROVISIONAL
   ? (await env.DB.prepare('SELECT COUNT(*) + 1 AS r FROM users WHERE games >= 10 AND rating > ?').bind(u.rating).first()).r
   : null;
+const sgRankOf = async (env, u) => u.sg_games >= PROVISIONAL
+  ? (await env.DB.prepare('SELECT COUNT(*) + 1 AS r FROM users WHERE sg_games >= 10 AND sg_rating > ?').bind(u.sg_rating).first()).r
+  : null;
+// a player as the page sees them: both ranks with the rest
+const withRanks = async (env, u) => ({ ...u, rank: await rankOf(env, u), sg_rank: await sgRankOf(env, u) });
 
 // state-changing requests must come from our own page (the cookie is SameSite=Lax; this closes the rest)
 const sameOrigin = (req, url) => req.headers.get('origin') === url.origin && (req.headers.get('content-type') || '').startsWith('application/json');
@@ -57,13 +62,13 @@ export async function api(req, env, url) {
       user = await env.DB.prepare(`INSERT INTO users (google_sub, name, created_at, seen_at) VALUES (?, ?, ?, ?)
         ON CONFLICT (google_sub) DO UPDATE SET seen_at = excluded.seen_at RETURNING ${USER_COLS}`).bind(claims.sub, name, now, now).first();
     }
-    return json({ user: { ...user, rank: await rankOf(env, user) } }, { headers: { 'set-cookie': setCookie(await makeSession(env.SESSION_SECRET, user.id), secure) } });
+    return json({ user: await withRanks(env, user) }, { headers: { 'set-cookie': setCookie(await makeSession(env.SESSION_SECRET, user.id), secure) } });
   }
   if (p === '/auth/logout' && post) return json({ ok: true }, { headers: { 'set-cookie': setCookie('', secure, 0) } });
 
   if (p === '/api/me') {
     const user = await currentUser(req, env);
-    if (!post) return json({ user: user && { ...user, rank: await rankOf(env, user) } });
+    if (!post) return json({ user: user && await withRanks(env, user) });
     if (!user) return fail(401, 'not signed in');
     const b = await body(req), next = { ...user };
     let won = null;                                            // what the campaign has given this player, when needed
@@ -87,7 +92,7 @@ export async function api(req, env, url) {
       next.stage = b.stage;
     }
     await env.DB.prepare('UPDATE users SET name = ?, title = ?, hero = ?, stage = ? WHERE id = ?').bind(next.name, next.title, next.hero, next.stage, user.id).run();
-    return json({ user: { ...next, rank: await rankOf(env, next) } });
+    return json({ user: await withRanks(env, next) });
   }
   if (p === '/api/campaign') {
     const user = await currentUser(req, env);
@@ -111,7 +116,10 @@ export async function api(req, env, url) {
     return json({ stars, levels: progress });
   }
   if (p === '/api/leaderboard') {
-    const { results } = await env.DB.prepare(`SELECT ${USER_COLS} FROM users WHERE games >= 10 ORDER BY rating DESC, games DESC LIMIT 100`).all();
+    const q = url.searchParams.get('v') === 'sg'
+      ? `SELECT ${USER_COLS} FROM users WHERE sg_games >= 10 ORDER BY sg_rating DESC, sg_games DESC LIMIT 100`
+      : `SELECT ${USER_COLS} FROM users WHERE games >= 10 ORDER BY rating DESC, games DESC LIMIT 100`;
+    const { results } = await env.DB.prepare(q).all();
     return json({ top: results, provisional: PROVISIONAL });
   }
   const m = p.match(/^\/api\/user\/(\d{1,12})$/);
@@ -129,7 +137,17 @@ export async function api(req, env, url) {
         delta: red ? g.red_delta : g.black_delta, rating: (red ? g.red_rating + g.red_delta : g.black_rating + g.black_delta), at: g.ended_at,
       };
     });
-    return json({ user: { ...user, rank: await rankOf(env, user) }, games });
+    // Tam Quốc games: the player's kingdom, place and rating change, and the two others
+    const sg = (await env.DB.prepare(`SELECT g.*, a.name AS n0, b.name AS n1, c.name AS n2 FROM sg_games g
+      JOIN users a ON a.id = g.p0 JOIN users b ON b.id = g.p1 JOIN users c ON c.id = g.p2
+      WHERE g.p0 = ?1 OR g.p1 = ?1 OR g.p2 = ?1 ORDER BY g.ended_at DESC LIMIT 20`).bind(id).all()).results.map(g => {
+      const k = [g.p0, g.p1, g.p2].indexOf(id);
+      return {
+        k, place: g['place' + k], reason: g.reason, plies: g.plies, delta: g['delta' + k], rating: g['rating' + k] + g['delta' + k], at: g.ended_at,
+        others: [0, 1, 2].filter(j => j !== k).map(j => ({ k: j, id: g['p' + j], name: g['n' + j], place: g['place' + j] })),
+      };
+    });
+    return json({ user: await withRanks(env, user), games, sg });
   }
   return fail(404, 'not found');
 }

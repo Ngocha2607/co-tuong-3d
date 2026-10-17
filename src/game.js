@@ -1,7 +1,7 @@
 // game.js — the match: menu, playing against the computer (search in a Web Worker), the campaign's battles,
 // online rooms over a WebSocket to the Cloudflare Worker, the move list, banners and the end screen.
 // VIEW draws, XQ rules, CAMPAIGN judges the battles and CAMPAIGN_UI keeps their progress. The three-kingdom game
-// (SG, sanguo.js) is played on this device only: each kingdom is a person or the computer.
+// (SG, sanguo.js) is played on this device (each kingdom a person or the computer) or online in a three-seat room.
 'use strict';
 (() => {
   const $ = s => document.querySelector(s);
@@ -31,7 +31,7 @@
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // a signed-in player's hero and stage follow them: each pick is saved to the account
   const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1 };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0 };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!Array.isArray(pref.sgSeats) || pref.sgSeats.length !== 3 || pref.sgSeats.some(v => v !== 0 && v !== 1)) pref.sgSeats = [0, 1, 1];
   if (!HEROES.valid(pref.hero)) pref.hero = '';
@@ -284,6 +284,7 @@
   const mmss = ms => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`;
   const fmtClock = ms => ms < 10000 ? (Math.floor(ms / 100) / 10).toFixed(1) : mmss(ms);
   function renderClocks() {
+    if (G.mode === 'sanguo') { sgClocks(); return; }
     for (const side of [1, -1]) {
       const el = $(side > 0 ? '#plRed .clk' : '#plBlack .clk'), on = G.mode === 'online' && !!G.clock, v = clockOf(side);
       el.textContent = on ? fmtClock(v) : '';
@@ -298,6 +299,7 @@
     return d.side === G.you ? `Bạn đang mất kết nối · ${s}s` : `${them} mất kết nối · xử thua sau ${s}s`;
   }
   setInterval(() => {
+    if (sgNet()) { if (G.sg.net.clock) renderClocks(); if (G.sg.net.deadline && !G.over) updateStatus(); return; }
     if (G.mode !== 'online') return;
     if (G.clock) renderClocks();
     if (G.deadline && !G.over) updateStatus();
@@ -306,7 +308,8 @@
   // ---------- online ----------
   const ROOM_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const cleanRoom = v => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-  const roomLink = () => `${location.origin}${location.pathname}?room=${G.room}`;
+  // invitation links: ?room= for an ordinary room, ?tq= for a Tam Quốc one
+  const roomLink = () => `${location.origin}${location.pathname}?${G.mode === 'sanguo' ? 'tq' : 'room'}=${G.room}`;
   const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
   function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
@@ -330,14 +333,14 @@
   }
   function connect() {
     clearTimeout(retryT);
-    const ws = new WebSocket(`${wsBase()}/ws?room=${G.room}`);
+    const sg = G.mode === 'sanguo', ws = new WebSocket(`${wsBase()}/ws${sg ? '/sg' : ''}?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
     ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero() })); };
-    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onNet(m); };
+    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (sg) sgNetMsg(m); else onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
       G.netState = 'lost'; updateStatus();
-      if (G.mode === 'online') retryT = setTimeout(connect, 1800);
+      if (G.mode === 'online' || sgNet()) retryT = setTimeout(connect, 1800);
     };
   }
   function disconnect() { clearTimeout(retryT); if (G.ws) { const w = G.ws; G.ws = null; try { w.close(); } catch (e) { } } }
@@ -390,18 +393,22 @@
 
   // ---------- ranked queue ----------
   let lobby = null, seekT = null;
-  function seek() {
+  // v: 'xq' an ordinary game, 'sg' a Tam Quốc game with two others
+  function seek(v = 'xq') {
     if (!ACCOUNT.user) { toast('Đăng nhập Google để chơi xếp hạng'); showEnd(false); showMenu(true); return; }
     stopSeek(); SFX.init(); showEnd(false);
     const t0 = Date.now(), ws = new WebSocket(`${wsBase()}/ws/lobby`);
     lobby = ws;
     $('#seek').hidden = false; $('#seekInfo').textContent = 'Đang vào hàng chờ…'; $('#seekTime').textContent = '0:00';
     seekT = setInterval(() => { $('#seekTime').textContent = mmss(Date.now() - t0); }, 500);
-    ws.onopen = () => ws.send(JSON.stringify({ t: 'seek' }));
+    $('#seek h2').textContent = v === 'sg' ? 'Đang tìm hai đối thủ' : 'Đang tìm đối thủ';
+    ws.onopen = () => ws.send(JSON.stringify({ t: 'seek', v }));
     ws.onmessage = e => {
       let m; try { m = JSON.parse(e.data); } catch (x) { return; }
-      if (m.t === 'seeking') $('#seekInfo').textContent = m.n > 1 ? `${m.n} kỳ thủ đang tìm trận. Đang chờ người có điểm gần bạn…` : 'Lúc này chỉ có bạn đang tìm trận. Chờ thêm chút nhé.';
-      else if (m.t === 'match') { stopSeek(); goOnline(m.room); }
+      if (m.t === 'seeking') $('#seekInfo').textContent = v === 'sg'
+        ? (m.n > 1 ? `${m.n} kỳ thủ đang chờ trận Tam Quốc. Cần đủ ba người có điểm gần nhau…` : 'Lúc này chỉ có bạn chờ trận Tam Quốc. Cần thêm hai người nữa.')
+        : (m.n > 1 ? `${m.n} kỳ thủ đang tìm trận. Đang chờ người có điểm gần bạn…` : 'Lúc này chỉ có bạn đang tìm trận. Chờ thêm chút nhé.');
+      else if (m.t === 'match') { stopSeek(); if (m.v === 'sg') sgOnline(m.room); else goOnline(m.room); }
       else if (m.t === 'cancelled') { stopSeek(); if (m.why === 'elsewhere') toast('Bạn đang tìm trận ở một tab khác'); }
     };
     ws.onclose = () => { if (lobby === ws) { stopSeek(); toast('Không vào được hàng chờ. Thử đăng nhập lại nhé.'); ACCOUNT.refresh(); } };
@@ -414,35 +421,48 @@
   }
 
   // ---------- Tam Quốc: three kingdoms on one board (sanguo.js) ----------
-  // G.sg: { pos, keys (before each move), quiet, log, captured ([piece as drawn, taker]), seats (0 a person, 1 the
-  // computer, by kingdom), hist (what to go back to for each move), level, viewer }
+  // G.sg: { pos, keys (before each move), quiet, log, captured ([piece as drawn, taker]), seats (on this device: 0 a
+  // person, 1 the computer, by kingdom), hist (what to go back to for each move), level, viewer, net }.
+  // net is set for a game online (worker/sg-room.js referees it): { room, you (kingdom, -1 watching), players, info,
+  // rated, tc, clock, deadline, rematch, n (entries of the room's history applied here) }.
   const SG_LEVELS = [
     { name: 'Dễ', time: 300, depth: 2, noise: true },
     { name: 'Thường', time: 1000, depth: 4 },
     { name: 'Khó', time: 2600 },
   ];
-  const KNAME = SG.NAMES, RULERS = ['luu-bi', 'ton-quyen', 'tao-thao'];
+  const KNAME = SG.NAMES, RULERS = ['luu-bi', 'ton-quyen', 'tao-thao'], PL = ['#plRed', '#plGreen', '#plBlack'];
+  const OUT_WHY = { resign: 'xin hàng', time: 'hết giờ', abandon: 'bỏ ván' };
   const sgShow = pc => (pc ? 20 + 10 * SG.OWN(pc) + SG.T(pc) : 0);       // a piece as models.js draws it
   const sgBoard = () => Int8Array.from(G.sg.pos.b, sgShow);
-  const sgPeople = () => [0, 1, 2].filter(k => G.sg.seats[k] === 0);
+  const sgNet = () => G.mode === 'sanguo' && G.sg.net;
+  // the kingdoms this device plays, and those the computer plays
+  const sgPeople = () => (G.sg.net ? (G.sg.net.you >= 0 ? [G.sg.net.you] : []) : [0, 1, 2].filter(k => G.sg.seats[k] === 0));
+  const sgAIk = k => !G.sg.net && G.sg.seats[k] === 1;
   const sgSolo = () => { const p = sgPeople(); return p.length === 1 ? p[0] : -1; };
   const sgMoves = () => G.sg.log.filter(x => x.m);
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sgFresh = (seats, net) => ({ pos: SG.Pos.start(), keys: [], quiet: 0, log: [], captured: [], seats, hist: [], level: pref.sgLevel, viewer: 0, net });
   // a person's general takes their chosen hero (the first person's, with others at the table), the rest their rulers
   function sgHeroes() {
     const first = sgPeople()[0], h = {};
     for (let k = 0; k < 3; k++) h[k] = k === first && myHero() ? myHero() : RULERS[k];
     return h;
   }
+  function sgShowBoard() {
+    const sg = G.sg;
+    VIEW.setBoard(sgBoard(), sg.captured); clearSel(); VIEW.hint(-1, -1);
+    const lm = sgMoves().pop(); VIEW.lastMove(lm ? SG.from(lm.m) : -1, lm ? SG.to(lm.m) : -1);
+    VIEW.check(!G.over && sg.pos.inCheck() ? sg.pos.kings[sg.pos.turn] : -1);
+  }
+  // a game on this device
   function sgStart() {
     disconnect(); stopSeek(); resetOnline();
-    const seats = pref.sgSeats.slice(), people = seats.map((v, k) => (v ? -1 : k)).filter(k => k >= 0);
     G.mode = 'sanguo'; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.lv = null; G.over = null;
-    G.sg = { pos: SG.Pos.start(), keys: [], quiet: 0, log: [], captured: [], seats, hist: [], level: pref.sgLevel, viewer: people.length ? people[0] : 0 };
+    G.sg = sgFresh(pref.sgSeats.slice(), null);
+    const people = sgPeople(); G.sg.viewer = people.length ? people[0] : 0;
     VIEW.setLayout('sanguo'); VIEW.setStage(myStage());
     G.heroes = sgHeroes(); VIEW.setHeroes(G.heroes);
-    clearSel(); VIEW.setMenu(false); VIEW.setViewer(G.sg.viewer); VIEW.setBoard(sgBoard(), []);
-    VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    VIEW.setMenu(false); VIEW.setViewer(G.sg.viewer); sgShowBoard();
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init(); SFX.gong(); banner('Tam Quốc tranh hùng', 'open');
     if (people.length === 1) toast(`Bạn cầm quân ${KNAME[people[0]]}. Thục đi trước, rồi Ngô, rồi Ngụy.`);
@@ -450,12 +470,25 @@
     const gen = G.gen;
     setTimeout(() => { if (G.mode === 'sanguo' && G.gen === gen && !sgMoves().length) sgNext(); }, 900);
   }
-  // whose turn now: the computer thinks; with several people at the table the board turns to the one to play
+  // a game online: a friendly room (tc: time control asked for by whoever opens it) or a ranked one from the Lobby
+  function sgOnline(room, tc = '') {
+    disconnect(); stopSeek(); resetOnline();
+    G.mode = 'sanguo'; G.room = room; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.lv = null; G.over = null;
+    G.sg = sgFresh([0, 0, 0], { room, you: -1, players: [false, false, false], info: [null, null, null], rated: false, tc: null, clock: null, deadline: null, rematch: [false, false, false], n: 0 });
+    history.replaceState(null, '', roomLink());
+    VIEW.setLayout('sanguo'); VIEW.setStage(myStage());
+    G.heroes = { 0: RULERS[0], 1: RULERS[1], 2: RULERS[2] }; VIEW.setHeroes(G.heroes);
+    VIEW.setMenu(false); VIEW.setViewer(0); sgShowBoard();
+    showMenu(false); showEnd(false); renderMoves(); layoutMode();
+    SFX.init();
+    connect();
+  }
+  // whose turn now: the computer thinks; with several people at this table the board turns to the one to play
   function sgNext() {
     const sg = G.sg, k = sg.pos.turn;
     if (G.over) return;
-    if (sg.seats[k]) { sgAI(); return; }
-    if (sgPeople().length > 1 && k !== sg.viewer) { sg.viewer = k; VIEW.setViewer(k); banner(`Lượt ${KNAME[k]}`, 'open'); }
+    if (sgAIk(k)) { sgAI(); return; }
+    if (!sg.net && sgPeople().length > 1 && k !== sg.viewer) { sg.viewer = k; VIEW.setViewer(k); banner(`Lượt ${KNAME[k]}`, 'open'); }
     updateStatus();
   }
   function sgAI() {
@@ -470,47 +503,93 @@
       }, Math.max(0, 400 - (Date.now() - t0)));
     });
   }
-  // play a move: the record now, the animation in turn; kingdoms left without a move fall to the mover
-  function sgCommit(m) {
+
+  // ---------- the record: a move, or a kingdom leaving the game ----------
+  const sgSnapshot = sg => sg.hist.push({ pos: sg.pos, keys: sg.keys.length, quiet: sg.quiet, log: sg.log.length, captured: sg.captured.length });
+  function sgFalls(sg, falls) { for (const f of falls) { sg.log.push({ fall: f }); sg.captured.push([20 + 10 * f.k + SG.K, f.by]); } }
+  function sgRecord(m) {
     const sg = G.sg, before = sg.pos, mover = before.turn, cap = before.b[SG.to(m)], text = SG.notation(before, m);
-    sg.hist.push({ pos: before, keys: sg.keys.length, quiet: sg.quiet, log: sg.log.length, captured: sg.captured.length });
+    sgSnapshot(sg);
     sg.keys.push(before.key());
     const r = SG.play(before, m);
     sg.pos = r.pos; sg.quiet = cap ? 0 : sg.quiet + 1;
     if (cap) sg.captured.push([sgShow(cap), mover]);
     sg.log.push({ k: mover, m, text, cap: !!cap });
-    for (const f of r.falls) { sg.log.push({ fall: f }); sg.captured.push([20 + 10 * f.k + SG.K, f.by]); }
-    const st = SG.status(sg.pos, sg.keys, sg.quiet), gen = G.gen, people = sgPeople();
-    // with people at the table, the game is over for them when the last of their kingdoms falls
-    const lost = people.length && !people.some(k => sg.pos.alive[k]);
+    sgFalls(sg, r.falls);
+    if (sg.net) sg.net.n++;
+    return { r, mover };
+  }
+  function sgRecordOut(k, why) {
+    const sg = G.sg;
+    sgSnapshot(sg);
+    const r = SG.drop(sg.pos, k);
+    sg.pos = r.pos;
+    sg.log.push({ fall: { k, by: -1, why } });
+    sgFalls(sg, r.falls);
+    if (sg.net) sg.net.n++;
+    return { r };
+  }
+  // after the board has caught up with the record: falls, the end, checks, and on to the next turn
+  async function sgAfter(r, mover, gen) {
+    const sg = G.sg, people = sgPeople();
+    for (const f of r.falls) {
+      VIEW.defeat(f.king); if (f.by >= 0) VIEW.heroShadow(f.by); SFX.drum();
+      banner(`${KNAME[f.k]} diệt vong!`, 'check');
+      toast(`${f.mate ? 'Bị chiếu bí' : 'Hết nước đi'}: ${f.by >= 0 ? `tàn quân ${KNAME[f.k]} về tay ${KNAME[f.by]}` : `${KNAME[f.k]} rút quân`}`);
+      await sleep(1600);
+      if (gen !== G.gen) return;
+    }
+    if (r.falls.length) VIEW.setBoard(sgBoard(), sg.captured);     // the fallen general leaves, his army changes colours
+    const st = SG.status(sg.pos, sg.keys, sg.quiet);
+    if (st.over) { sgEnd(st); return; }
+    if (!sg.net && people.length && !people.some(k => sg.pos.alive[k])) {   // nobody left at this table
+      sgEnd({ over: true, winner: -1, reason: 'fallen', k: r.falls.length ? r.falls[r.falls.length - 1].k : people[0] }); return;
+    }
+    if (sg.net && r.falls.some(f => f.k === sg.net.you)) toast('Bạn đã mất nước. Có thể ở lại xem hai nước kia phân thắng bại.');
+    if (st.checks.length) {
+      const k = st.checks.includes(sg.pos.turn) ? sg.pos.turn : st.checks[0], king = sg.pos.kings[k];
+      VIEW.check(king); VIEW.alarm(king); if (mover >= 0) VIEW.heroShadow(mover); SFX.drum();
+      banner(people.length === 1 && k === people[0] ? 'Chiếu tướng!' : `${KNAME[k]} bị chiếu!`, 'check');
+    }
+    if (st.repeat === 1) toast('Thế cờ lặp lại lần 2. Lần 3 thì hòa');
+    sgNext();
+  }
+  // play a move: the record now, the animation in turn
+  function sgCommit(m) {
+    const sg = G.sg, net = sg.net, gen = G.gen;
+    // against the clock the animations cost time: no close-ups, none at all when one's own time runs short
+    const timed = !!(net && net.clock), mover = sg.pos.turn;
+    const opts = { via: SG.via(m), closeUp: !timed, fast: timed && net.you >= 0 && sgClockOf(net.you) < 60000 };
+    if (timed && mover === net.you) { net.clock.left[mover] = sgClockOf(mover); net.clock.running = -1; net.clock.at = performance.now(); }   // the server's reply restarts it
+    const { r } = sgRecord(m);
     G.lastMover = mover; renderMoves();
     enqueue(async () => {
       if (gen !== G.gen) return;
-      await VIEW.play(m, { via: SG.via(m) });              // along the bends of the lines, not across them
+      await VIEW.play(m, opts);                             // along the bends of the lines, not across them
       if (gen !== G.gen) return;
       VIEW.check(-1);
-      for (const f of r.falls) {
-        VIEW.defeat(f.king); VIEW.heroShadow(f.by); SFX.drum();
-        banner(`${KNAME[f.k]} diệt vong!`, 'check');
-        toast(`${f.mate ? 'Bị chiếu bí' : 'Hết nước đi'}: tàn quân ${KNAME[f.k]} về tay ${KNAME[f.by]}`);
-        await sleep(1600);
-        if (gen !== G.gen) return;
-      }
-      if (r.falls.length) VIEW.setBoard(sgBoard(), sg.captured);   // the fallen general leaves, his army changes colours
-      if (st.over) { sgEnd(st); return; }
-      if (lost) { sgEnd({ over: true, winner: -1, reason: 'fallen', k: r.falls.length ? r.falls[r.falls.length - 1].k : people[0] }); return; }
-      if (st.checks.length) {
-        const k = st.checks.includes(sg.pos.turn) ? sg.pos.turn : st.checks[0], king = sg.pos.kings[k];
-        VIEW.check(king); VIEW.alarm(king); VIEW.heroShadow(mover); SFX.drum();
-        banner(sg.seats[k] === 0 && people.length === 1 ? 'Chiếu tướng!' : `${KNAME[k]} bị chiếu!`, 'check');
-      }
-      if (st.repeat === 1) toast('Thế cờ lặp lại lần 2. Lần 3 thì hòa');
-      sgNext();
+      await sgAfter(r, mover, gen);
     });
     updateStatus();
   }
+  // a kingdom leaves the game (resigned, out of time, walked away): its army leaves the board
+  function sgOut(k, why) {
+    const gen = G.gen, { r } = sgRecordOut(k, why);
+    renderMoves();
+    enqueue(async () => {
+      if (gen !== G.gen) return;
+      VIEW.check(-1); VIEW.setBoard(sgBoard(), G.sg.captured); clearSel();
+      banner(`${KNAME[k]} ${OUT_WHY[why] || 'rút lui'}`, 'check'); SFX.drum();
+      await sleep(1200);
+      if (gen !== G.gen) return;
+      await sgAfter(r, -1, gen);
+    });
+    updateStatus();
+  }
+
+  // ---------- the end ----------
   function sgEnd(st) {
-    if (G.over && G.over.shown) return;
+    if (G.over && G.over.shown) { if (st.places && !G.over.places) Object.assign(G.over, { places: st.places }); return; }
     aiId++; G.thinking = false;
     const [title, sub, result] = sgEndText(st);
     G.over = Object.assign({}, st, { shown: true, sg: true, title, sub, result });
@@ -518,10 +597,11 @@
     if (st.winner >= 0) VIEW.heroShadow(st.winner, true);
     if (result === 'win') SFX.win(); else if (result === 'lose') SFX.lose(); else SFX.gong();
     updateStatus();
-    setTimeout(() => showEnd(true), 1000);
+    setTimeout(() => { if (G.mode === 'sanguo' && G.over && G.over.sg) showEnd(true); }, 1000);
   }
   function sgEndText(st) {
     const sg = G.sg, people = sgPeople(), solo = sgSolo(), rounds = `sau ${Math.ceil(sgMoves().length / 3)} vòng`;
+    if (st.reason === 'aborted') return ['Ván bị hủy', 'Có nước không đi nước đầu trong 30 giây', 'draw'];
     if (st.reason === 'unite') {
       const w = st.winner, name = KNAME[w];
       if (solo >= 0) return w === solo ? ['Nhất thống thiên hạ!', `${name} thu phục cả hai nước ${rounds}`, 'win'] : ['Thất bại', `${name} thống nhất thiên hạ ${rounds}`, 'lose'];
@@ -530,12 +610,22 @@
     if (st.reason === 'fallen') return ['Thất bại', `${KNAME[st.k]} đã mất nước ${rounds}`, 'lose'];
     if (st.reason === 'resign') return ['Thất bại', `${KNAME[st.k]} xin hàng ${rounds}`, 'lose'];
     const left = [0, 1, 2].filter(k => sg.pos.alive[k]).map(k => KNAME[k]).join(', ');
+    if (solo >= 0 && !sg.pos.alive[solo]) return ['Thất bại', `${KNAME[solo]} đã mất nước · ${left} hòa nhau`, 'lose'];
     return [sg.pos.living() === 3 ? 'Thế chân vạc' : 'Hòa cờ', `${REASON[st.reason]} · ${left} bất phân thắng bại`, 'draw'];
   }
+  // a ranked result: the rating changes arrive with it, or a little later
+  function sgRated(m) {
+    if (!G.over || !m.delta) return;
+    G.over.delta = m.delta; G.over.rating = m.rating;
+    if (!$('#end').hidden) renderEnd();
+    ACCOUNT.refresh();
+  }
+
+  // ---------- on this device: undo, hints, resigning ----------
   // back to the last position a person was to play in, before their last move
   function sgUndo() {
     const sg = G.sg;
-    if (G.animating) return;
+    if (G.animating || sg.net) return;
     let i = sg.hist.length - 1;
     while (i >= 0 && sg.seats[sg.hist[i].pos.turn]) i--;
     if (i < 0) return;
@@ -544,14 +634,12 @@
     sg.hist.length = i; sg.pos = h.pos; sg.keys.length = h.keys; sg.quiet = h.quiet; sg.log.length = h.log; sg.captured.length = h.captured;
     G.over = null; G.gen = (G.gen || 0) + 1;
     if (sgPeople().length > 1) { sg.viewer = sg.pos.turn; VIEW.setViewer(sg.viewer); }
-    VIEW.setBoard(sgBoard(), sg.captured); clearSel(); VIEW.hint(-1, -1);
-    const lm = sgMoves().pop(); VIEW.lastMove(lm ? SG.from(lm.m) : -1, lm ? SG.to(lm.m) : -1);
-    VIEW.check(sg.pos.inCheck() ? sg.pos.kings[sg.pos.turn] : -1);
+    sgShowBoard();
     showEnd(false); renderMoves(); updateStatus(); SFX.pick();
   }
   function sgHint() {
     const sg = G.sg;
-    if (G.over || sg.seats[sg.pos.turn] || G.thinking || G.animating) return;
+    if (G.over || sg.net || sg.seats[sg.pos.turn] || G.thinking || G.animating) return;
     const b = $('#bHint'), at = sg.pos; b.disabled = true; b.textContent = 'Đang tìm…';
     ask({ sg: SG.pack(at), time: 1200 }).then(r => {
       b.disabled = false; b.textContent = 'Gợi ý';
@@ -560,26 +648,27 @@
       toast('Gợi ý: ' + SG.notation(at, r.move));
     });
   }
-  // the only person left at the table gives up the game; with several, the kingdom to move gives up and its army
-  // leaves the board
+  // online: my kingdom leaves the game. Here: the only person left gives up the game; with several, the kingdom to
+  // move gives up and its army leaves the board
   function sgResign() {
-    const sg = G.sg, alive = sgPeople().filter(k => sg.pos.alive[k]), k = sg.pos.turn;
-    if (G.over || !alive.length) return;
+    const sg = G.sg;
+    if (G.over) return;
+    if (sg.net) { if (sg.net.you >= 0 && sg.pos.alive[sg.net.you]) send({ t: 'resign' }); return; }
+    const alive = sgPeople().filter(k => sg.pos.alive[k]), k = sg.pos.turn;
+    if (!alive.length) return;
     if (alive.length === 1) { sgEnd({ over: true, winner: -1, reason: 'resign', k: alive[0] }); return; }
     if (sg.seats[k] || G.animating || G.thinking) { toast('Xin hàng khi đến lượt nước mình'); return; }
-    sg.hist.push({ pos: sg.pos, keys: sg.keys.length, quiet: sg.quiet, log: sg.log.length, captured: sg.captured.length });
-    const p = sg.pos.clone(); p.fall(k, -1); sg.pos = p;
-    sg.log.push({ fall: { k, by: -1 } });
-    VIEW.setBoard(sgBoard(), sg.captured); clearSel(); VIEW.check(-1);
-    banner(`${KNAME[k]} xin hàng`, 'check'); renderMoves();
-    const st = SG.status(sg.pos, sg.keys, sg.quiet);
-    if (st.over) { sgEnd(st); return; }
-    sgNext();
+    sgOut(k, 'resign');
   }
   function sgTap(s) {
     const sg = G.sg, pos = sg.pos, me = pos.turn;
-    if (G.over || G.thinking || G.animating || sg.seats[me]) return;
-    if (G.sel >= 0 && G.targets.includes(s)) { const m = SG.mv(G.sel, s); clearSel(); VIEW.hint(-1, -1); sgCommit(m); return; }
+    if (!sgCanAct()) return;
+    if (G.sel >= 0 && G.targets.includes(s)) {
+      const m = SG.mv(G.sel, s); clearSel(); VIEW.hint(-1, -1);
+      if (sg.net) send({ t: 'move', m, ply: sg.net.n });
+      sgCommit(m);
+      return;
+    }
     const pc = pos.b[s];
     if (pc && SG.OWN(pc) === me && s !== G.sel) {
       const t = pos.legal().filter(m => SG.from(m) === s).map(SG.to);
@@ -588,37 +677,152 @@
     } else if (G.sel >= 0) clearSel();
     else if (pc) SFX.error();
   }
-  const sgCanAct = () => G.mode === 'sanguo' && !G.over && !G.thinking && !G.animating && !G.sg.seats[G.sg.pos.turn];
+  const sgCanAct = () => G.mode === 'sanguo' && !G.over && !G.thinking && !G.animating && sgPeople().includes(G.sg.pos.turn)
+    && (!G.sg.net || (G.netState === 'ok' && (G.sg.net.n > 0 || G.sg.net.players.every(Boolean))));   // online: three at the table to begin
+
+  // ---------- online: messages from the room ----------
+  function sgNetMsg(m) {
+    const sg = G.sg, net = sg && sg.net;
+    if (!net) return;
+    switch (m.t) {
+      case 'state': {
+        const first = net.you < 0 && m.you >= 0;
+        Object.assign(net, { you: m.you, players: m.players, info: m.info, rated: !!m.rated, tc: m.tc || null, rematch: m.rematch });
+        sgTiming(m);
+        G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
+        G.sg = sgFresh([0, 0, 0], net); net.n = 0;
+        for (const h of m.hist) typeof h === 'number' ? sgRecord(h) : sgRecordOut(h.out, h.why);
+        G.sg.viewer = m.you >= 0 ? m.you : 0;
+        sgHeroesNet(m.heroes);
+        VIEW.setViewer(G.sg.viewer, false);
+        G.over = null;
+        if (m.over) { const [title, sub, result] = sgEndText(m.over); G.over = Object.assign({}, m.over, { shown: true, sg: true, title, sub, result }); }
+        sgShowBoard(); showEnd(!!m.over); renderMoves(); updateStatus();
+        if (!sgMoves().length && !m.over && (first || m.fresh)) {
+          SFX.gong(); banner(m.you >= 0 ? `Bạn cầm quân ${KNAME[m.you]}` : 'Bạn đang xem trận', 'open');
+          const others = [0, 1, 2].filter(k => k !== m.you && net.info[k]);
+          if (net.rated && others.length) toast(`Trận xếp hạng Tam Quốc: ${others.map(k => `${KNAME[k]} ${net.info[k].name} · ${net.info[k].rating}`).join(', ')}`);
+        }
+        break;
+      }
+      case 'move':
+        sgTiming(m);
+        if (m.ply === net.n) sgCommit(m.m); else if (m.ply > net.n) send({ t: 'sync' });
+        break;
+      case 'out':
+        sgTiming(m);
+        if (m.ply === net.n) sgOut(m.k, m.why); else if (m.ply > net.n) send({ t: 'sync' });
+        break;
+      case 'presence':
+        net.players = m.players; if (m.info) net.info = m.info;
+        if (m.heroes) sgHeroesNet(m.heroes);
+        sgTiming(m); updateStatus(); break;
+      case 'over': sgTiming(m); enqueue(async () => { sgEnd(m); sgRated(m); }); break;
+      case 'rated': sgRated(m); break;
+      case 'rematch': net.rematch = m.want; renderEnd(); break;
+      case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
+    }
+  }
+  // each player brings their hero; a kingdom without one is led by its ruler
+  function sgHeroesNet(h) { G.heroes = { 0: h[0] || RULERS[0], 1: h[1] || RULERS[1], 2: h[2] || RULERS[2] }; VIEW.setHeroes(G.heroes); }
+  // clocks as the room sent them, counted down from when the message arrived
+  function sgTiming(m) {
+    const net = G.sg.net, t = performance.now();
+    if ('clock' in m) net.clock = m.clock ? { left: m.clock.left.slice(), running: m.clock.running, at: t } : null;
+    if ('deadline' in m) net.deadline = m.deadline ? { ...m.deadline, until: t + m.deadline.ms } : null;
+  }
+  function sgClockOf(k) {
+    const c = G.sg.net && G.sg.net.clock;
+    if (!c) return Infinity;
+    let v = c.left[k];
+    if (c.running === k && !G.over) v -= performance.now() - c.at;
+    return Math.max(0, v);
+  }
+  function sgDeadlineText() {
+    const net = G.sg.net, d = net.deadline, s = Math.max(0, Math.ceil((d.until - performance.now()) / 1000)), name = KNAME[d.side];
+    if (d.kind === 'abort') return d.side === net.you ? `Đi nước đầu trong ${s} giây, không thì ván bị hủy` : `Chờ ${name} đi nước đầu · ${s}s`;
+    return d.side === net.you ? `Bạn đang mất kết nối · ${s}s` : `${name} mất kết nối · rời ván sau ${s}s`;
+  }
+  // a player's name (signed in) or role, with the rating in ranked games; names are escaped, this goes in as HTML
+  function sgWho(k) {
+    const net = G.sg.net, p = net.info[k];
+    if (!p) return k === net.you ? 'Bạn' : net.players[k] ? 'Người chơi' : 'Chưa vào';
+    return ACCOUNT.esc(p.name) + (k === net.you ? ' (bạn)' : '') + (net.rated && p.rating ? ` <small>${p.rating}</small>` : '');
+  }
+
+  // ---------- the panel ----------
   function sgStatus() {
-    const sg = G.sg, pos = sg.pos, turn = pos.turn, solo = sgSolo();
+    const sg = G.sg, net = sg.net, pos = sg.pos, turn = pos.turn, solo = sgSolo();
     let text;
     if (G.over) text = G.over.title;
+    else if (net && G.netState === 'connecting') text = 'Đang kết nối phòng…';
+    else if (net && G.netState === 'lost') text = 'Mất kết nối, đang nối lại…';
+    else if (net && net.deadline) text = sgDeadlineText();
+    else if (net && !net.players.every(Boolean) && !sgMoves().length) text = `Đang chờ đủ ba người vào phòng (${net.players.filter(Boolean).length}/3)…`;
     else if (G.animating && !G.thinking) text = `${KNAME[G.lastMover]} đang đi quân…`;
     else if (G.thinking) text = `Máy ${KNAME[turn]} đang tính nước…`;
-    else if (sg.seats[turn]) text = `Máy ${KNAME[turn]} chuẩn bị đi…`;
-    else text = solo >= 0 ? `Lượt bạn · ${KNAME[turn]}` : `Lượt ${KNAME[turn]}`;
+    else if (sgAIk(turn)) text = `Máy ${KNAME[turn]} chuẩn bị đi…`;
+    else if (net && net.you < 0) text = `Đang xem · Lượt ${KNAME[turn]}`;
+    else if (net && !pos.alive[net.you]) text = `Bạn đã mất nước · Lượt ${KNAME[turn]}`;
+    else text = solo === turn ? `Lượt bạn · ${KNAME[turn]}` : `Lượt ${KNAME[turn]}`;
     const st = $('#status'); st.textContent = text; st.classList.toggle('mine', sgCanAct());
     // the three kingdoms in the panel: Shu in the red slot, Wu in the green one, Wei in the black one
-    ['#plRed', '#plGreen', '#plBlack'].forEach((id, k) => {
-      const el = $(id), hero = HEROES.byId[G.heroes[k]];
+    PL.forEach((id, k) => {
+      const el = $(id), hero = HEROES.byId[G.heroes[k]], who = el.querySelector('.who');
       el.hidden = false;
       el.querySelector('.chip').textContent = hero ? hero.han : SG.SEAL[k]; el.querySelector('.chip').title = hero ? hero.name : '';
       el.querySelector('.lab').textContent = KNAME[k];
       el.querySelector('.nm small').textContent = hero ? hero.name : '';
-      el.querySelector('.who').textContent = !pos.alive[k] ? 'Đã mất nước' : sg.seats[k] ? `Máy · ${(SG_LEVELS[sg.level] || SG_LEVELS[1]).name}` : solo >= 0 ? 'Bạn' : 'Người';
-      el.querySelector('.who').title = '';
+      if (!pos.alive[k]) who.textContent = 'Đã mất nước';
+      else if (net) who.innerHTML = sgWho(k);
+      else who.textContent = sgAIk(k) ? `Máy · ${(SG_LEVELS[sg.level] || SG_LEVELS[1]).name}` : solo >= 0 ? 'Bạn' : 'Người';
+      const ttl = net && net.info[k] && CAMPAIGN.TITLES[net.info[k].title];
+      who.title = ttl ? `Danh hiệu: ${ttl}` : '';
       el.classList.toggle('turn', !G.over && pos.alive[k] && (G.animating ? G.lastMover : turn) === k);
       el.classList.toggle('out', !pos.alive[k]);
-      el.classList.remove('away');
+      el.classList.toggle('away', !!net && !net.players[k]);
     });
     const people = sgPeople();
-    $('#bUndo').disabled = !sg.hist.some(h => !sg.seats[h.pos.turn]);
-    $('#bHint').disabled = !!G.over || !!sg.seats[turn];
+    $('#bUndo').disabled = !!net || !sg.hist.some(h => !sg.seats[h.pos.turn]);
+    $('#bHint').disabled = !!G.over || !!net || !!sg.seats[turn];
     $('#bResign').disabled = !!G.over || !people.some(k => pos.alive[k]);
     $('#bResign').textContent = $('#bResign').classList.contains('warn') ? 'Chắc chắn?' : 'Xin hàng';
-    $('#bDraw').hidden = true; $('#drawAsk').hidden = true; $('#room').hidden = true; $('#goal').hidden = true;
-    $('#bNew').textContent = 'Ván mới';
+    $('#bDraw').hidden = true; $('#drawAsk').hidden = true; $('#goal').hidden = true;
+    const room = $('#room');
+    room.hidden = !net;
+    if (net) {
+      const tc = net.tc ? TC_NAME[`${net.tc.base}+${net.tc.inc}`] || '' : '';
+      $('#roomKind').textContent = net.rated ? `Xếp hạng Tam Quốc · ${tc}` : tc ? `Phòng Tam Quốc · ${tc}` : 'Phòng Tam Quốc';
+      $('#roomCode').textContent = G.room; $('#roomLink').textContent = roomLink();
+      $('#roomCode').hidden = $('#roomLink').hidden = $('#bCopy').hidden = net.rated;
+    }
+    $('#bNew').textContent = !net ? 'Ván mới' : net.rated ? 'Trận mới' : 'Đấu lại';
     renderClocks();
+  }
+  function sgClocks() {
+    const net = G.sg.net, on = !!(net && net.clock);
+    PL.forEach((id, k) => {
+      const el = $(id + ' .clk'), v = sgClockOf(k);
+      el.textContent = on && G.sg.pos.alive[k] ? fmtClock(v) : '';
+      el.classList.toggle('run', on && net.clock.running === k && !G.over);
+      el.classList.toggle('low', on && v < 30000);
+    });
+  }
+  // the end screen, online: rematch (everyone moves one seat round) or a new ranked game, and rating changes
+  function sgRenderEnd() {
+    const net = G.sg.net, again = $('#bAgain'), o = G.over;
+    again.hidden = net.you < 0; again.disabled = false;
+    if (net.rated) {
+      again.textContent = 'Tìm trận mới';
+      const me = net.you;
+      $('#endNote').textContent = o.reason === 'aborted' ? 'Ván không tính điểm.' : !o.delta ? 'Đang cập nhật điểm xếp hạng…'
+        : me >= 0 ? `Điểm Tam Quốc: ${o.rating[me]} (${ACCOUNT.sign(o.delta[me])})` : [0, 1, 2].map(k => `${KNAME[k]} ${o.rating[k]} (${ACCOUNT.sign(o.delta[k])})`).join(' · ');
+    } else {
+      const want = net.rematch.filter(Boolean).length, mine = net.you >= 0 && net.rematch[net.you];
+      again.textContent = mine ? 'Đang chờ những người khác…' : 'Đấu lại (xoay ghế)';
+      again.disabled = mine;
+      $('#endNote').textContent = want ? `${want}/3 người muốn đấu lại.` : '';
+    }
   }
 
   // ---------- input on the board ----------
@@ -763,7 +967,7 @@
   function layoutMode() {
     document.body.dataset.mode = G.mode;
     VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0);
-    $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && sgPeople().length));
+    $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
   function showMenu(on) {
     $('#menu').hidden = !on;
@@ -783,7 +987,8 @@
     $('#end').dataset.result = result; $('#end .han').textContent = { win: '勝', lose: '敗', draw: '和' }[result] || '';
     const again = $('#bAgain');
     again.hidden = G.mode === 'online' && !G.you;
-    if (G.mode === 'online' && G.rated) {
+    if (sgNet()) sgRenderEnd();
+    else if (G.mode === 'online' && G.rated) {
       again.textContent = 'Tìm trận mới'; again.disabled = false;
       $('#endNote').textContent = ratingNote();
     } else if (G.mode === 'online') {
@@ -792,7 +997,7 @@
       again.disabled = !!mine;
       $('#endNote').textContent = theirs && !mine ? 'Đối thủ muốn đấu lại.' : mine ? 'Đã gửi lời mời đấu lại.' : '';
     } else { again.textContent = 'Ván mới'; again.disabled = false; $('#endNote').textContent = ''; }
-    $('#bEndUndo').hidden = !(G.mode === 'ai' || (G.mode === 'sanguo' && sgPeople().length && G.sg.hist.some(h => !G.sg.seats[h.pos.turn])));
+    $('#bEndUndo').hidden = !(G.mode === 'ai' || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length && G.sg.hist.some(h => !G.sg.seats[h.pos.turn])));
     renderEndCampaign();
   }
   function renderEndCampaign() {
@@ -826,6 +1031,11 @@
     }
     if (G.mode === 'online' && G.rated) { seek(); return; }
     if (G.mode === 'online') { send({ t: 'rematch' }); G.rematch[G.you] = true; renderEnd(); return; }
+    if (sgNet()) {
+      const net = G.sg.net;
+      if (net.rated) seek('sg'); else if (net.you >= 0) { send({ t: 'rematch' }); net.rematch[net.you] = true; renderEnd(); }
+      return;
+    }
     if (G.mode === 'sanguo') { sgStart(); return; }
     startAI();
   }
@@ -849,6 +1059,7 @@
   };
   [0, 1, 2].forEach(k => seg('#seat' + k, pref.sgSeats[k], v => { pref.sgSeats[k] = v; savePref(); renderSgNote(); }));
   seg('#segSgLevel', pref.sgLevel, v => { pref.sgLevel = v; savePref(); });
+  seg('#segSgTc', pref.sgTc, v => { pref.sgTc = v; savePref(); });
   renderSgNote();
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; SFX.init(); SFX.pick(); menuView(b.dataset.go); });
   addEventListener('keydown', e => {
@@ -882,7 +1093,7 @@
     if (!heroAllowed(b.dataset.id)) { SFX.init(); SFX.error(); toast(`${HEROES.byId[b.dataset.id].name}: ${CAMPAIGN.requirement('hero', b.dataset.id)}`); return; }
     pref.hero = b.dataset.id; savePref(); renderHeroes(); savePick({ hero: pref.hero });
     SFX.init(); SFX.pick();
-    if (G.mode === 'online') { toast('Chủ tướng mới sẽ ra trận từ phòng online tiếp theo'); return; }
+    if (G.mode === 'online' || sgNet()) { toast('Chủ tướng mới sẽ ra trận từ phòng online tiếp theo'); return; }
     if (G.mode === 'sanguo') {
       const k = sgPeople()[0];
       if (k === undefined) return;
@@ -923,7 +1134,7 @@
   $('#bCampaign').addEventListener('click', () => { SFX.init(); SFX.pick(); CAMPAIGN_UI.open(); });
   $('#bEndRetry').addEventListener('click', () => { if (G.lv) startCampaign(G.lv.id); });
   $('#bEndMap').addEventListener('click', () => { showEnd(false); CAMPAIGN_UI.open(); });
-  $('#bRanked').addEventListener('click', seek);
+  $('#bRanked').addEventListener('click', () => seek());
   $('#bSeekCancel').addEventListener('click', stopSeek);
   $('#bRanks').addEventListener('click', () => ACCOUNT.openRanks(0));
   // on signing in: first the campaign progress (it decides what may be picked), then the account's hero and stage;
@@ -944,11 +1155,18 @@
       syncedFor = id;
       CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
     }
-    $('#bRanked').disabled = !u;
+    $('#bRanked').disabled = $('#bSgRanked').disabled = !u;
+    $('#sgRankedNote').textContent = u ? `Ghép ba người có điểm Tam Quốc gần nhau${u.sg_rating ? ` (bạn: ${u.sg_rating})` : ''}. Mỗi nước 10 phút, cộng 5 giây sau mỗi nước.` : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
     $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
   });
   $('#bPlayAI').addEventListener('click', () => startAI());
   $('#bPlaySg').addEventListener('click', () => sgStart());
+  $('#bSgCreate').addEventListener('click', () => sgOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.sgTc] || ''));
+  const joinSg = () => { const r = cleanRoom($('#inSgRoom').value); if (r.length < 4) { toast('Nhập mã phòng 4 ký tự'); $('#inSgRoom').focus(); return; } sgOnline(r); };
+  $('#bSgJoin').addEventListener('click', joinSg);
+  $('#inSgRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinSg(); });
+  $('#bSgRanked').addEventListener('click', () => seek('sg'));
+  $('#bSgRanks').addEventListener('click', () => ACCOUNT.openRanks(2));
   $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || ''));
   const joinTyped = () => { const r = cleanRoom($('#inRoom').value); if (r.length < 4) { toast('Nhập mã phòng 4 ký tự'); $('#inRoom').focus(); return; } goOnline(r); };
   $('#bJoin').addEventListener('click', joinTyped);
@@ -966,7 +1184,7 @@
   });
   $('#bDrawYes').addEventListener('click', () => send({ t: 'draw' }));
   $('#bDrawNo').addEventListener('click', () => { send({ t: 'draw-no' }); G.drawOffer = 0; updateStatus(); });
-  $('#bNew').addEventListener('click', () => { if (G.mode === 'campaign') startCampaign(G.lv.id); else if (G.mode === 'sanguo') sgStart(); else if (G.mode === 'online') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
+  $('#bNew').addEventListener('click', () => { if (G.mode === 'campaign') startCampaign(G.lv.id); else if (G.mode === 'sanguo' && !G.sg.net) sgStart(); else if (G.mode === 'online' || G.mode === 'sanguo') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
   $('#bAgain').addEventListener('click', again);
   $('#bEndMenu').addEventListener('click', () => { showEnd(false); showMenu(true); });
   $('#bEndClose').addEventListener('click', () => showEnd(false));
@@ -1046,13 +1264,15 @@
     try { const r = await fetch('info', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { }
     const online = !!info && info.online === true;
     G.online = online;
-    $('#rankedBox').hidden = $('#bRanks').hidden = !(online && info.accounts);
+    $('#rankedBox').hidden = $('#bRanks').hidden = $('#sgRankedBox').hidden = !(online && info.accounts);
+    $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
     $('#onlineBox').classList.toggle('off', !online);
     $('#onlineSum').textContent = !online ? 'Cần chạy qua Cloudflare Worker' : info.accounts ? 'Xếp hạng hoặc phòng với bạn bè' : 'Phòng chơi với bạn bè';
     $('#onlineNote').textContent = online ? 'Tạo phòng rồi gửi link cho bạn bè, hoặc nhập mã phòng để vào.' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
-    const invited = cleanRoom(new URLSearchParams(location.search).get('room'));
-    if (online && invited.length >= 4) goOnline(invited);
+    const q = new URLSearchParams(location.search), invited = cleanRoom(q.get('room')), invitedSg = cleanRoom(q.get('tq'));
+    if (online && invitedSg.length >= 4) sgOnline(invitedSg);
+    else if (online && invited.length >= 4) goOnline(invited);
     else showMenu(true);
   }
   boot();

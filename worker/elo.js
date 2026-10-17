@@ -20,3 +20,30 @@ export function rate(red, black, winner) {
 export const windowOf = (since, now) => 100 + 20 * (now - since) / 1000;
 export const fits = (a, b, now) => a.user.id !== b.user.id
   && Math.abs(a.user.rating - b.user.rating) <= Math.min(windowOf(a.since, now), windowOf(b.since, now));
+
+// ---------- the three-kingdom game ----------
+// Each pair of players is scored as a game between them: the better place wins, the same place draws. Everyone
+// plays two such games at once, so each counts for half the usual K.
+// players: [{ rating, games }] by kingdom, places: 1-3 by kingdom → rating change of each
+export function rate3(players, places) {
+  return players.map((a, i) => Math.round(players.reduce((sum, b, j) => {
+    if (i === j) return sum;
+    const s = places[i] < places[j] ? 1 : places[i] === places[j] ? 0.5 : 0;
+    return sum + (kFactor(a.rating, a.games) / 2) * (s - expected(a.rating, b.rating));
+  }, 0)));
+}
+// three seekers (sorted by how long they have waited) who all fit each other: the one waiting longest, with the
+// two closest to each other in rating among those that fit; null when there are none
+export function trio(list, now) {
+  for (const x of list) {
+    let best = null, spread = Infinity;
+    for (const y of list) for (const z of list) {
+      if (x === y || x === z || y.since > z.since || y === z) continue;
+      if (!fits(x, y, now) || !fits(x, z, now) || !fits(y, z, now)) continue;
+      const r = [x, y, z].map(s => s.user.rating), d = Math.max(...r) - Math.min(...r);
+      if (d < spread) { spread = d; best = [x, y, z]; }
+    }
+    if (best) return best;
+  }
+  return null;
+}
