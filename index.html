@@ -417,16 +417,15 @@
 
 <div id="menu" class="overlay" hidden>
   <div class="card">
-    <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục – Ngụy tranh hùng trên bàn cờ</p></div></div>
+    <div class="logo"><span class="seal">象棋</span><div><h1>Cờ Tướng 3D</h1><p>Thục, Ngô, Ngụy tranh hùng trên bàn cờ</p></div></div>
 
     <!-- home: one line per way to play; each opens its own page -->
     <div class="view" data-view="home">
       <button class="btn gold wide" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
       <div class="modes">
         <button class="mode main" id="bCampaign" type="button"><span class="hz">戰</span><span><b>Chinh chiến Tam Quốc</b><small id="campNote"></small></span><span class="chev">›</span></button>
-        <button class="mode" type="button" data-go="ai"><span class="hz">弈</span><span><b>Đánh với máy</b><small id="aiNote"></small></span><span class="chev">›</span></button>
-        <button class="mode" type="button" data-go="sanguo"><span class="hz">三</span><span><b>Tam Quốc tranh hùng</b><small id="sgNote"></small></span><span class="chev">›</span></button>
-        <button class="mode" type="button" data-go="online"><span class="hz">友</span><span><b>Chơi online</b><small id="onlineSum">Phòng chơi với bạn bè</small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="xq"><span class="hz">二</span><span><b>2 người chơi · Cờ tướng</b><small id="aiNote"></small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="sanguo"><span class="hz">三</span><span><b>3 người chơi · Tam Quốc</b><small id="sgNote"></small></span><span class="chev">›</span></button>
         <button class="mode" type="button" data-go="army"><span class="hz" id="armyHz">帥</span><span><b>Chủ tướng &amp; bối cảnh</b><small id="armyNote"></small></span><span class="chev">›</span></button>
       </div>
       <section id="account" hidden>
@@ -441,45 +440,55 @@
       </section>
     </div>
 
-    <div class="view" data-view="ai" hidden>
-      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đánh với máy</h2></div>
+    <div class="view" data-view="xq" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>2 người chơi · Cờ tướng</h2></div>
       <section>
-        <h2>Cầm quân</h2>
+        <h2>Đánh với máy</h2>
         <div class="seg" id="segSide"><button type="button" data-v="1">Đỏ (đi trước)</button><button type="button" data-v="-1">Đen</button></div>
-        <h2>Độ khó</h2>
         <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+        <button class="btn primary wide" id="bPlayAI" type="button">Vào trận với máy</button>
       </section>
-      <button class="btn primary wide" id="bPlayAI" type="button">Vào trận</button>
+      <section id="onlineBox">
+        <h2>Online</h2>
+        <div id="rankedBox" hidden>
+          <button class="btn primary wide" id="bRanked" type="button">Tìm trận xếp hạng · 10 phút</button>
+          <p class="note" id="rankedNote"></p>
+          <button class="linkish" id="bRanks" type="button" hidden>Xem bảng xếp hạng</button>
+        </div>
+        <div class="seg" id="segTc" title="Thời gian mỗi bên"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
+        <button class="btn gold" id="bCreate" type="button">Tạo phòng 2 người</button>
+        <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
+        <p class="note" id="onlineNote"></p>
+      </section>
     </div>
 
     <div class="view" data-view="sanguo" hidden>
-      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Tam Quốc tranh hùng</h2></div>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>3 người chơi · Tam Quốc</h2></div>
+      <p class="note">Thục, Ngô, Ngụy chung một bàn lục giác ghép từ ba nửa bàn cờ. Diệt hai nước kia để nhất thống thiên hạ.</p>
       <section>
-        <p class="note">Cờ tướng ba người: Thục, Ngô, Ngụy chung một bàn lục giác ghép từ ba nửa bàn cờ. Diệt hai nước kia để nhất thống thiên hạ.</p>
-        <h2>Ai cầm quân</h2>
+        <h2>Đánh với máy</h2>
         <div class="seats">
           <div class="seat"><span class="hz k0">蜀</span><b>Thục <small class="note">đi trước</small></b><div class="seg" id="seat0"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
           <div class="seat"><span class="hz k1">吳</span><b>Ngô</b><div class="seg" id="seat1"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
           <div class="seat"><span class="hz k2">魏</span><b>Ngụy</b><div class="seg" id="seat2"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
         </div>
-        <p class="note">Nhiều người cùng chơi trên một máy thì bàn cờ tự xoay về phía nước đến lượt.</p>
-        <h2>Độ khó của máy</h2>
+        <p class="note">Chọn Người cho nhiều nước để chơi chung một máy: bàn cờ tự xoay về phía nước đến lượt.</p>
         <div class="seg" id="segSgLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
-        <button class="btn primary wide" id="bPlaySg" type="button">Vào trận trên máy này</button>
+        <button class="btn primary wide" id="bPlaySg" type="button">Vào trận với máy</button>
       </section>
       <section id="sgOnlineBox">
         <h2>Online</h2>
         <div id="sgRankedBox" hidden>
-          <button class="btn primary wide" id="bSgRanked" type="button">Tìm trận xếp hạng · 3 người</button>
+          <button class="btn primary wide" id="bSgRanked" type="button">Tìm trận xếp hạng · 10 phút</button>
           <p class="note" id="sgRankedNote"></p>
-          <button class="linkish" id="bSgRanks" type="button">Xem bảng xếp hạng Tam Quốc</button>
+          <button class="linkish" id="bSgRanks" type="button">Xem bảng xếp hạng</button>
         </div>
         <div class="seg" id="segSgTc" title="Thời gian mỗi nước"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
         <button class="btn gold" id="bSgCreate" type="button">Tạo phòng 3 người</button>
         <div class="join"><input id="inSgRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng Tam Quốc"><button class="btn" id="bSgJoin" type="button">Vào phòng</button></div>
-        <p class="note">Tạo phòng rồi gửi link cho hai người bạn. Người tạo phòng cầm Thục; mỗi lần đấu lại, cả ba xoay một ghế.</p>
+        <p class="note">Tạo phòng rồi gửi link cho hai người bạn, hoặc nhập mã phòng để vào. Người tạo phòng cầm Thục; mỗi lần đấu lại, cả ba xoay một ghế.</p>
       </section>
-      <details class="foot"><summary>Luật chơi</summary>
+      <details class="foot"><summary>Luật chơi Tam Quốc</summary>
         <ul class="rules">
           <li>Ba nước đi lần lượt Thục, Ngô, Ngụy (ngược chiều kim đồng hồ). Quân đi như cờ tướng.</li>
           <li>Qua sông bên trái là đất nước bên trái, qua sông bên phải là đất nước bên phải. Đường giữa thông vào cả hai nước.</li>
@@ -489,23 +498,6 @@
           <li>Nước cuối cùng còn Tướng nhất thống thiên hạ. 50 vòng không ăn quân, hoặc lặp thế ba lần, thì hòa.</li>
         </ul>
       </details>
-    </div>
-
-    <div class="view" data-view="online" id="onlineBox" hidden>
-      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Chơi online</h2></div>
-      <section id="rankedBox" hidden>
-        <h2>Xếp hạng</h2>
-        <button class="btn primary wide" id="bRanked" type="button">Tìm trận · 10 phút</button>
-        <p class="note" id="rankedNote"></p>
-        <button class="linkish" id="bRanks" type="button" hidden>Xem bảng xếp hạng</button>
-      </section>
-      <section>
-        <h2>Với bạn bè</h2>
-        <div class="seg" id="segTc" title="Thời gian mỗi bên"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
-        <button class="btn gold" id="bCreate" type="button">Tạo phòng mới</button>
-        <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
-        <p class="note" id="onlineNote"></p>
-      </section>
     </div>
 
     <div class="view" data-view="army" hidden>
