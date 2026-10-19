@@ -1,7 +1,8 @@
 // scene.js — the 3D view: renderer, the stage around the table (stages.js), orbit camera, tapping on points, highlights and the
 // battle animations (a warrior rises from the piece, marches, strikes, the defeated piece flies to the tray).
 // Holds no game rules: game.js tells it what to show. Two layouts: the ordinary board, and the hexagon of the
-// three-kingdom game (sanguo.js).
+// three-kingdom game (sanguo.js). Before a room's game, the hall: the board is put away and the players' generals stand
+// side by side on pedestals.
 'use strict';
 const VIEW = (() => {
   THREE.ColorManagement.legacyMode = false;
@@ -53,6 +54,10 @@ const VIEW = (() => {
     fit: [9.0, 9.4, 9.6], edge: SG.BOARD_R - 0.3, shadow: 11.5, far: 42,
   };
   let L = CLASSIC, layoutName = 'classic', boardMesh = null;
+  let hall = null;                         // the hall, while it is shown: { group, figs } (see setHall)
+  const HALL_SCALE = 3.2;                  // size of the generals on their pedestals
+  // pedestals apart, and their size: closer and smaller on a portrait phone, so the camera can come nearer
+  const hallGap = () => (portrait() ? 1.75 : 2.8), hallPed = () => (portrait() ? 0.68 : 1);
   let trays = { 1: [], '-1': [] };         // pieces captured by each side (meshes)
   let armyOn = false, viewer = 1, menu = false, busy = false;
   let heroes = { 1: '', '-1': '' };        // hero leading each side (heroes.js id, '' = the plain general)
@@ -84,6 +89,17 @@ const VIEW = (() => {
   // board's centre (towards the viewer) so the board sits higher, clear of the panel
   const LOW = 0.3;                         // the low angle that shows the stage's horizon (menu, showcase)
   function resetCamera() {
+    if (hall) {
+      // the hall: the generals seen from the front at eye level, all of them in frame; on a portrait phone they stand in
+      // the upper half, above the controls
+      const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - inset) / H, n = Math.max(2, hall.figs.length), gap = hallGap();
+      hall.figs.forEach((f, i) => { f.base.position.x = (i - (n - 1) / 2) * gap; f.ped.scale.set(hallPed(), 1, hallPed()); });
+      // the page's dock covers the bottom of the screen: the camera stands back a little and looks low, so the
+      // generals and their name cards stand clear above it
+      cam.tTheta = 0; cam.tPhi = 0.12; cam.tDist = Math.max(2.6 / v, ((n * gap) / 2 + 0.5 * hallPed()) / (v * a)) * (portrait() ? 1.05 : 1.3);
+      HOME.set(0, portrait() ? -1.4 : 0.3, 0); if (cam.tZoom === 1) tFocus.copy(HOME);
+      return;
+    }
     // the menu circles low to show off the stage; in play the camera looks down on the board
     const y = L.yaw(viewer), lean = portrait() ? 1.5 : 0;
     cam.tTheta = y; cam.tPhi = menu ? LOW : portrait() ? 1.2 : 0.98; cam.tDist = fitDist();
@@ -207,7 +223,7 @@ const VIEW = (() => {
     root.add(disc); war.position.y = DISC_H; war.rotation.y = rest(piece); root.add(war);
     disc.rotation.y = L.yaw(viewer);
     war.visible = armyOn; war.scale.setScalar(armyOn ? 1 : 0.001);
-    root.position.copy(pos(s)); root.userData.sq = s;
+    root.position.copy(pos(s)); root.userData.sq = s; root.visible = !hall;
     scene.add(root);
     return { piece, root, disc, war, sq: s };
   }
@@ -224,7 +240,7 @@ const VIEW = (() => {
   function addToTray(piece, animFrom, by = L.taker(piece)) {
     const d = MODELS.disc(piece, true), list = trays[by];
     d.rotation.y = L.yaw(viewer);
-    const p = L.tray(by, list.length); list.push(d); scene.add(d);
+    const p = L.tray(by, list.length); list.push(d); d.visible = !hall; scene.add(d);
     if (!animFrom) { d.position.copy(p); return Promise.resolve(); }
     const a = animFrom.clone();
     d.position.copy(a);
@@ -504,7 +520,7 @@ const VIEW = (() => {
     scene.background = new THREE.Color(stage.background || stage.fog);
     scene.fog.color.set(stage.fog);
     SFX.ambience(stage.ambience); SFX.music(stageId);
-    if (!menu) showcase();
+    if (!menu && !hall) showcase();
   }
   // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
   let showcaseRun = 0;
@@ -593,6 +609,70 @@ const VIEW = (() => {
     }).then(() => { scene.remove(pivot); plane.geometry.dispose(); m.dispose(); });
   }
 
+  // ---------- the hall ----------
+  // list: one entry per seat, left to right: { piece (a general as models.js draws it), hero, ready } or { empty: true }.
+  // null puts the hall away and brings the board back. A changed general swaps in with a puff of smoke.
+  function showTable(on) {
+    if (boardMesh) boardMesh.visible = on;
+    for (const u of units.values()) u.root.visible = on;
+    for (const side of Object.keys(trays)) for (const d of trays[side]) d.visible = on;
+  }
+  function hallSpot(i) {
+    const base = new THREE.Group(), ped = new THREE.Group(); base.add(ped);
+    const stone = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.15, 1.6, 28), new THREE.MeshStandardMaterial({ color: '#4a3a2e', roughness: 0.85 }));
+    stone.position.y = -0.82; stone.castShadow = stone.receiveShadow = true; ped.add(stone);
+    const trim = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.08, 28), new THREE.MeshStandardMaterial({ color: '#c9a23a', metalness: 0.6, roughness: 0.35 }));
+    trim.position.y = -0.03; trim.receiveShadow = true; ped.add(trim);
+    const ring = ringMesh(0.72, 0.94, '#e3b448', 0.55); ring.position.y = 0.012; ped.add(ring);
+    const light = new THREE.PointLight('#ffdcae', 1.1, 7, 2); light.position.set(0, 3.2, 1.6); base.add(light);
+    hall.group.add(base);
+    return { i, base, ped, ring, war: null, key: null, ready: false, empty: true };
+  }
+  function setHall(list) {
+    if (!scene) return;
+    if (!list) {
+      if (!hall) return;
+      scene.remove(hall.group); hall = null;
+      showTable(true); dragged = false; cam.tZoom = 1; resetCamera();
+      return;
+    }
+    if (!hall) {
+      hall = { group: new THREE.Group(), figs: [] }; scene.add(hall.group);
+      showTable(false); clearMarks(); lastMove(-1, -1); hint(-1, -1); check(-1);
+      showing++; homeTheta = null; dragged = false; cam.tZoom = 1;
+    }
+    const n = list.length;
+    while (hall.figs.length > n) hall.group.remove(hall.figs.pop().base);
+    list.forEach((p, i) => {
+      const f = hall.figs[i] || (hall.figs[i] = hallSpot(i));
+      const key = p.empty ? '' : `${p.piece}|${p.hero || ''}`;
+      if (f.key !== key) {
+        const had = f.key !== null;
+        if (f.war) f.base.remove(f.war);
+        f.war = null; f.key = key; f.empty = !!p.empty;
+        if (!p.empty) {
+          const w = MODELS.warrior(p.piece, p.hero || '');
+          w.userData.flag.visible = false; w.rotation.y = 0; w.scale.setScalar(0.001);
+          f.base.add(w); f.war = w;
+          tween(380, k => w.scale.setScalar(Math.max(0.001, HALL_SCALE * backOut(k))));
+        }
+        if (had) { const at = f.base.position.clone().setY(1); smoke(at, 10, '#b8a890', 1.6); sparks(at, '#ffd27a', 18, 0.3); SFX.place(); }
+      }
+      f.ready = !!p.ready;
+      f.ring.material.color.set(p.empty ? '#6a5a4a' : f.ready ? '#5fe0a0' : '#e3b448');
+    });
+    resetCamera();
+  }
+  // where each pedestal's front edge is on the screen, for the name cards (pixels from the top left)
+  const spot = new THREE.Vector3();
+  function hallSpots() {
+    if (!hall) return [];
+    return hall.figs.map(f => {
+      spot.copy(f.base.position).add(new THREE.Vector3(0, -0.05, hallPed())).project(camera);
+      return { x: ((spot.x + 1) / 2) * W, y: ((1 - spot.y) / 2) * H };
+    });
+  }
+
   // ---------- layout ----------
   // 'classic' or 'sanguo': swaps the board, empties it and its trays; setBoard and setHeroes follow
   function setLayout(name) {
@@ -605,7 +685,7 @@ const VIEW = (() => {
     if (!scene) return;                                  // before init(): the board is built from L then
     clearMarks(); lastMove(-1, -1); hint(-1, -1); check(-1);
     if (boardMesh) scene.remove(boardMesh);
-    boardMesh = L.board(); scene.add(boardMesh);
+    boardMesh = L.board(); boardMesh.visible = !hall; scene.add(boardMesh);
     Object.assign(keyLight.shadow.camera, { left: -L.shadow, right: L.shadow, top: L.shadow, bottom: -L.shadow });
     keyLight.shadow.camera.updateProjectionMatrix();
     cam.tZoom = 1; tFocus.copy(HOME); dragged = false; resetCamera();
@@ -649,7 +729,15 @@ const VIEW = (() => {
       f.rotation.y = Math.atan2(camera.position.x - tmp.x, camera.position.z - tmp.z) - u.war.rotation.y;
     }
     // camera
-    if (menu) cam.tTheta += dt * 0.08;
+    if (menu && !hall) cam.tTheta += dt * 0.08;
+    // the hall: the generals breathe; one who is ready raises their weapon
+    if (hall) for (const f of hall.figs) {
+      if (!f.war) { f.ring.material.opacity = 0.25 + 0.2 * Math.sin(t / 380); continue; }
+      const j = f.war.userData.j;
+      f.war.position.y = Math.sin(t / 650 + f.i * 1.7) * 0.025;
+      if (j.armR) j.armR.rotation.x += ((j.restArm || 0) - (f.ready ? 2.4 : 0) - j.armR.rotation.x) * Math.min(1, dt * 5);
+      f.ring.material.opacity = f.ready ? 0.6 + 0.3 * Math.sin(t / 260) : 0.55;
+    }
     const kk = Math.min(1, dt * 5);
     cam.theta += (cam.tTheta - cam.theta) * kk; cam.phi += (cam.tPhi - cam.phi) * kk; cam.dist += (cam.tDist - cam.dist) * kk;
     const kz = Math.min(1, dt * 3); cam.zoom += (cam.tZoom - cam.zoom) * kz; focus.lerp(tFocus, kz);
@@ -663,7 +751,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px) { if (px === inset) return; inset = px; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },

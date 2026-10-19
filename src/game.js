@@ -335,7 +335,7 @@
     clearTimeout(retryT);
     const sg = G.mode === 'sanguo', ws = new WebSocket(`${wsBase()}/ws${sg ? '/sg' : ''}?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero() })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero(), stage: myStage() })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (sg) sgNetMsg(m); else onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -351,6 +351,8 @@
         const firstSeat = !G.you && m.you;
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
         G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
+        G.heroes = m.heroes || { 1: '', '-1': '' };
+        if (hallUpdate(m)) { updateStatus(); break; }
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
         rebuild(m.moves || []);
         G.heroes = m.heroes || { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes);
@@ -388,6 +390,7 @@
         break;
       }
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
+      case 'kicked': leaveRoom(); toast('Chủ phòng đã mời bạn ra khỏi phòng'); break;
     }
   }
 
@@ -465,7 +468,7 @@
     VIEW.setMenu(false); VIEW.setViewer(G.sg.viewer); sgShowBoard();
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init(); SFX.gong(); banner('Tam Quốc tranh hùng', 'open');
-    if (people.length === 1) toast(`Bạn cầm quân ${KNAME[people[0]]}. Thục đi trước, rồi Ngô, rồi Ngụy.`);
+    if (people.length === 1) toast(`Bạn cầm quân ${KNAME[people[0]]}. Luật chơi: nút quyển sách ở góc trên.`);
     updateStatus();
     const gen = G.gen;
     setTimeout(() => { if (G.mode === 'sanguo' && G.gen === gen && !sgMoves().length) sgNext(); }, 900);
@@ -693,7 +696,8 @@
         G.sg = sgFresh([0, 0, 0], net); net.n = 0;
         for (const h of m.hist) typeof h === 'number' ? sgRecord(h) : sgRecordOut(h.out, h.why);
         G.sg.viewer = m.you >= 0 ? m.you : 0;
-        sgHeroesNet(m.heroes);
+        sgHeroesNet(m.heroes); net.heroesRaw = m.heroes;
+        if (hallUpdate(m)) { updateStatus(); break; }
         VIEW.setViewer(G.sg.viewer, false);
         G.over = null;
         if (m.over) { const [title, sub, result] = sgEndText(m.over); G.over = Object.assign({}, m.over, { shown: true, sg: true, title, sub, result }); }
@@ -721,6 +725,7 @@
       case 'rated': sgRated(m); break;
       case 'rematch': net.rematch = m.want; renderEnd(); break;
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
+      case 'kicked': leaveRoom(); toast('Chủ phòng đã mời bạn ra khỏi phòng'); break;
     }
   }
   // each player brings their hero; a kingdom without one is led by its ruler
@@ -825,6 +830,130 @@
     }
   }
 
+  // ---------- the hall (sảnh chờ) of a friendly room, before each game: worker/hall.js ----------
+  // G.hall: { phase, host, ready, seated, stage } as the room last sent it. While the phase is 'lobby' the board is put
+  // away and the players' generals stand on pedestals (VIEW.setHall); everyone picks a general, the host picks the
+  // battlefield and the time, the others say they are ready, the host starts.
+  let hallTab = 'hero';                                     // the dock's tab: 'hero', 'stage' or 'room'
+  let hallOpen = false, hallRaf = 0, kickArm = { side: null, at: 0 };   // kickArm: a 'Mời ra' pressed once, to confirm
+  const hallOf = m => ({ phase: m.phase || 'play', host: m.host, ready: m.ready || {}, seated: m.seated || {}, stage: m.stage || '', public: m.public !== false });
+  const inHall = () => hallOpen && (G.mode === 'online' || sgNet());
+  // the room as the hall shows it, for either game: seats left to right and who this page is
+  function hallModel() {
+    const h = G.hall;
+    if (G.mode === 'sanguo') {
+      const net = G.sg.net;
+      return { ...h, kind: '3 người chơi · Tam Quốc', sides: [0, 1, 2], me: net.you >= 0 ? net.you : null, players: net.players, info: net.info,
+        label: k => KNAME[k], piece: k => 20 + 10 * k + SG.K, hero: k => G.heroes[k], raw: k => (net.heroesRaw || [])[k] || '' };
+    }
+    return { ...h, kind: '2 người chơi · Cờ tướng', sides: [1, -1], me: G.you || null, players: G.players, info: G.info,
+      label: k => `${SIDE[k]} · ${ARMY[k]}`, piece: k => k * XQ.K, hero: k => G.heroes[k] || '', raw: k => G.heroes[k] || '' };
+  }
+  // what still keeps the game from starting (as the server will judge it)
+  function hallWaiting(r) {
+    if (r.sides.some(k => !r.seated[k])) return 'Chờ đủ người vào phòng';
+    if (r.sides.some(k => !r.players[k])) return 'Có người đang mất kết nối';
+    if (r.sides.some(k => k !== r.host && !r.ready[k])) return 'Chờ mọi người sẵn sàng';
+    return '';
+  }
+  // called with each state from the room: true while the room is in its hall (the board then waits)
+  function hallUpdate(m) {
+    G.hall = hallOf(m);
+    if (G.hall.phase !== 'lobby') {
+      if (hallOpen) hallClose();
+      VIEW.setStage(G.hall.stage || myStage());               // the game is played where the host chose
+      return false;
+    }
+    G.over = null; showEnd(false);
+    if (!hallOpen) {
+      hallOpen = true; document.body.classList.add('in-hall'); $('#hall').hidden = false; VIEW.setInset(0);   // no side panel here
+      SFX.init(); SFX.gong();
+      const loop = () => { if (!hallOpen) return; hallPlaceCards(); hallRaf = requestAnimationFrame(loop); };
+      hallRaf = requestAnimationFrame(loop);
+    }
+    VIEW.setStage(G.hall.stage || myStage());
+    renderHall();
+    return true;
+  }
+  function hallClose() {
+    hallOpen = false; cancelAnimationFrame(hallRaf);
+    document.body.classList.remove('in-hall'); $('#hall').hidden = true; $('#hallCards').innerHTML = '';
+    $('#hallHeroes').innerHTML = $('#hallStages').innerHTML = '';
+    VIEW.setHall(null); layoutMode();
+  }
+  function renderHall() {
+    const r = hallModel(), me = r.me, host = me !== null && me === r.host, waiting = hallWaiting(r);
+    VIEW.setHall(r.sides.map(k => (r.seated[k] ? { piece: r.piece(k), hero: r.hero(k), ready: k !== r.host && r.ready[k] } : { empty: true })));
+    // a card under each pedestal: name, side, and where they stand
+    $('#hallCards').innerHTML = r.sides.map(k => {
+      const p = r.info[k], seated = r.seated[k], hero = HEROES.byId[r.hero(k)];
+      const name = !seated ? 'Đang chờ…' : (p ? ACCOUNT.esc(p.name) : k === me ? 'Bạn' : 'Người chơi') + (k === me && p ? ' (bạn)' : '');
+      const tag = !seated ? ['wait', 'Ghế trống'] : !r.players[k] ? ['away', 'Mất kết nối'] : k === r.host ? ['host', '主 Chủ phòng'] : r.ready[k] ? ['ready', 'Sẵn sàng'] : ['', 'Chưa sẵn sàng'];
+      const kick = host && seated && k !== me ? `<button class="kick" type="button" data-side="${k}">${kickArm.side === k && Date.now() - kickArm.at < 3000 ? 'Chắc chắn?' : 'Mời ra'}</button>` : '';
+      return `<div class="hcard${k === me ? ' you' : ''}${seated ? '' : ' empty'}"><b>${name}</b><small>${r.label(k)}${seated ? ' · ' + (hero ? hero.name : 'Tướng quân') : ''}</small><span class="tag ${tag[0]}">${tag[1]}</span>${kick}</div>`;
+    }).join('');
+    hallPlaceCards();
+    $('#hallKind').textContent = `Sảnh chờ · ${r.kind}`;
+    $('#hallCode').textContent = G.room;
+    $('#status').textContent = waiting ? `Sảnh chờ · ${waiting.toLowerCase()}` : host ? 'Sảnh chờ · có thể bắt đầu' : 'Sảnh chờ · chờ chủ phòng bắt đầu';
+    $('#status').classList.toggle('mine', host && !waiting);
+    // the dock: one's own general (a seat is needed), the battlefield (the host's to set) in the other tab
+    // tabs: one's own general (a seat is needed); the battlefield and the room's settings, the host's to set
+    const stage = STAGES.byId[r.stage] || STAGES.byId[myStage()], tabs = { hero: me !== null, stage: host, room: host };
+    if (!tabs[hallTab]) hallTab = tabs.hero ? 'hero' : 'stage';
+    for (const [t, id] of [['hero', '#hallTabHero'], ['stage', '#hallTabStage'], ['room', '#hallTabRoom']]) { $(id).hidden = !tabs[t]; $(id).classList.toggle('on', hallTab === t); }
+    $('#hallRoomOpts').hidden = !(tabs.room && hallTab === 'room');
+    hallStrip($('#hallHeroes'), tabs.hero && hallTab === 'hero', () => heroPicks(r.raw(me)));
+    hallStrip($('#hallStages'), tabs.stage && hallTab === 'stage', () => stagePicks(stage.id));
+    $('#hallStageNote').textContent = `Bối cảnh: ${stage.name}${host ? '' : ' · chủ phòng chọn'}`;
+    const tc = G.mode === 'sanguo' ? G.sg.net.tc : G.tc;
+    $('#hallTc').querySelectorAll('button').forEach(b => b.classList.toggle('on', (TC[+b.dataset.v] || '') === (tc ? `${tc.base / 60000}+${tc.inc / 1000}` : '')));
+    $('#hallInfo').textContent = `${r.public ? 'Công khai' : 'Riêng tư'} · ${tc ? TC_NAME[`${tc.base}+${tc.inc}`] : 'Không giờ'}`;
+    $('#hallInfo').title = r.public ? 'Phòng hiện trong danh sách phòng đang mở: ai cũng vào được' : 'Chỉ ai có link hoặc mã phòng mới vào được';
+    $('#hallPublic').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === (r.public ? 1 : 0)));
+
+    // the button: start (host), ready or not (the others); people watching only watch
+    const go = $('#bHallGo');
+    go.hidden = me === null;
+    if (host) { go.textContent = 'Bắt đầu'; go.disabled = !!waiting; go.classList.add('primary'); go.classList.remove('gold'); }
+    else if (me !== null) { const on = !!r.ready[me]; go.textContent = on ? 'Đã sẵn sàng' : 'Sẵn sàng'; go.title = on ? 'Bấm để hủy sẵn sàng' : ''; go.disabled = false; go.classList.toggle('gold', on); go.classList.toggle('primary', !on); }
+    $('#hallWait').textContent = me === null ? 'Phòng đã đủ người, bạn đang xem.' : host ? (waiting || 'Mọi người đã sẵn sàng!') : r.ready[me] ? 'Chờ chủ phòng bắt đầu… (bấm để hủy)' : '';
+  }
+  // a strip of seals in the dock: shown or not, redrawn without losing where it was scrolled to; the first time it
+  // shows, the picked one is brought into view
+  function hallStrip(el, on, html) {
+    el.hidden = !on;
+    if (!on) return;
+    const x = el.scrollLeft, first = !el.children.length;
+    el.innerHTML = html();
+    if (first) { const b = el.querySelector('.on'); if (b) el.scrollLeft = b.offsetLeft - el.clientWidth / 2 + b.offsetWidth / 2; }
+    else el.scrollLeft = x;
+  }
+  function hallPlaceCards() {
+    const spots = VIEW.hallSpots(), cards = $('#hallCards').children;
+    for (let i = 0; i < cards.length && i < spots.length; i++) { cards[i].style.left = spots[i].x + 'px'; cards[i].style.top = spots[i].y + 'px'; }
+  }
+  // the pickers, shared with the menu's: generals, battlefields
+  const heroPicks = cur => [{ id: '', name: 'Tướng quân', han: '帥' }, ...HEROES.list].map(h => {
+    const ok = heroAllowed(h.id);
+    return `<button type="button" data-id="${h.id}" class="${h.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${h.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('hero', h.id)}"`}><span class="hz">${ok ? h.han : '鎖'}</span><span>${h.name}</span></button>`;
+  }).join('');
+  const stagePicks = cur => STAGES.list.map(s => {
+    const ok = stageAllowed(s.id);
+    return `<button type="button" data-id="${s.id}" class="${s.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('stage', s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
+  }).join('');
+  // leave the room for the menu: the room is told, and frees the seat (a game under way is given up)
+  function leaveRoom() {
+    if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });
+    disconnect(); if (hallOpen) hallClose();
+    G.mode = 'menu'; G.over = null; G.hall = null; G.fen0 = XQ.START;
+    history.replaceState(null, '', location.pathname);
+    VIEW.setLayout('classic'); reset(); clearSel();
+    G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
+    VIEW.setBoard(G.pos.b, []); VIEW.setStage(myStage());
+    showEnd(false); renderMoves(); layoutMode(); updateStatus(); showMenu(true);
+  }
+
   // ---------- input on the board ----------
   function clearSel() { G.sel = -1; G.targets = []; VIEW.select(-1, []); }
   const myTurn = () => G.mode !== 'menu' && !G.over && !G.thinking && G.pos.turn === G.me && (G.mode !== 'online' || G.you === G.me);
@@ -885,6 +1014,7 @@
     $('#moveCount').textContent = G.log.length ? `${Math.ceil(G.log.length / 2)} nước` : '';
   }
   function updateStatus() {
+    if (inHall()) { renderHall(); return; }
     if (G.mode === 'sanguo') { sgStatus(); return; }
     const st = $('#status'), turn = G.pos.turn;
     let text = '';
@@ -966,7 +1096,7 @@
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
-    VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0);
+    VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 && !hallOpen ? 332 : 0);
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
   function showMenu(on) {
@@ -977,8 +1107,78 @@
   // the menu's pages: 'home' lists the ways to play, the others hold each one's options
   function menuView(name) {
     document.querySelectorAll('#menu .view').forEach(v => { v.hidden = v.dataset.view !== name; });
+    $('#menu .legal').hidden = name !== 'home';             // the legal links only beside the short home page
     $('#menu').scrollTop = 0;
+    clearTimeout(roomsT); loadRooms();
   }
+  // ---------- the open friendly rooms (worker/lobby.js, rooms.js) ----------
+  // The Phòng chơi page of each game: a filter (a free seat, playing, all, each with how many rooms it holds), a search
+  // by code or host's name, a page of rooms at a time with Xem thêm for more, and Vào nhanh into the best free seat.
+  // Fetched every few seconds while that page is open; the page before it only shows the counts.
+  let roomsT = 0, roomsAsk = 0;
+  const ROOM_STATUS = { waiting: 'Chờ kiện tướng', playing: 'Đang chiến đấu' }, TC_LABEL = { '10+5': '10′ + 5s', '5+3': '5′ + 3s' };
+  const ROOM_F = ['open', 'playing', 'all'], ROOM_PAGE = 20;
+  const roomUi = {   // by game: the filter picked, how many rooms are shown, and the page's elements
+    xq: { f: 0, n: ROOM_PAGE, list: '#roomList', sum: '#roomSum', filter: '#roomFilter', more: '#roomMore', quick: '#roomQuick', input: '#inRoom', note: '#xqRoomsNote', join: goOnline },
+    sg: { f: 0, n: ROOM_PAGE, list: '#sgRoomList', sum: '#sgRoomSum', filter: '#sgRoomFilter', more: '#sgRoomMore', quick: '#sgRoomQuick', input: '#inSgRoom', note: '#sgRoomsNote', join: code => sgOnline(code) },
+  };
+  const askRooms = async q => (await fetch('rooms?' + new URLSearchParams(q), { cache: 'no-store' })).json();
+  async function loadRooms() {
+    const page = ['xq', 'xq-rooms', 'sanguo', 'sg-rooms'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
+    if ($('#menu').hidden || !page || !G.online) return;
+    const v = page.startsWith('xq') ? 'xq' : 'sg', ui = roomUi[v], full = page.endsWith('rooms'), id = ++roomsAsk;
+    try {
+      const r = await askRooms(full ? { v, f: ROOM_F[ui.f], q: $(ui.input).value.trim(), n: ui.n } : { v, n: 0 });
+      if (id !== roomsAsk) return;                          // a newer question went out meanwhile
+      const c = r.counts;
+      if (full) renderRooms(ui, r); else $(ui.note).textContent = c.all ? `${c.all} phòng đang mở${c.open ? ` · ${c.open} còn chỗ` : ''} · hoặc tạo phòng mới` : 'Chưa có phòng nào: tạo phòng mời bạn bè';
+    } catch (e) { if (full) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>'; }
+    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, 4000);
+  }
+  function renderRooms(ui, { rooms: list, total, counts: c }) {
+    const searching = !!$(ui.input).value.trim();
+    $(ui.sum).textContent = `${c.all} phòng · ${c.open} còn chỗ`;
+    $(ui.filter).querySelectorAll('button').forEach((b, i) => {
+      b.classList.toggle('on', i === ui.f);
+      b.innerHTML = `${['Còn chỗ', 'Đang chiến đấu', 'Tất cả'][i]}<i>${c[ROOM_F[i]]}</i>`;
+    });
+    $(ui.more).hidden = total <= list.length;
+    $(ui.more).textContent = `Xem thêm (còn ${total - list.length} phòng)`;
+    const box = $(ui.list), y = box.scrollTop;
+    if (!list.length) {
+      box.innerHTML = `<p class="note">${searching ? 'Không có phòng nào khớp.' : ui.f === 0 ? 'Chưa có phòng nào còn chỗ. Tạo phòng mới, hoặc xem các phòng đang chiến đấu.' : 'Chưa có phòng nào.'}</p>`;
+      return;
+    }
+    box.innerHTML = list.map(r => {
+      const code = cleanRoom(r.code), open = r.status === 'waiting' && r.seated < r.max, stage = STAGES.byId[r.stage];
+      const bits = [r.host ? `Chủ phòng ${ACCOUNT.esc(r.host)}` : '', stage ? stage.name : '', TC_LABEL[r.tc] || 'Không giờ'].filter(Boolean).join(' · ');
+      return `<button type="button" class="room-row" data-code="${code}" data-v="${r.v === 'sg' ? 'sg' : 'xq'}"><span class="st ${r.status === 'playing' ? 'playing' : 'waiting'}">${ROOM_STATUS[r.status] || ''}</span>`
+        + `<span class="ri"><b>Phòng ${code}</b><small>${bits}</small></span><span class="cnt">${r.count | 0}/${r.max | 0}</span><span class="go">${open ? 'Vào' : 'Xem'}</span></button>`;
+    }).join('');
+    box.scrollTop = y;                                      // a refresh keeps the list where it was scrolled to
+  }
+  for (const [v, ui] of Object.entries(roomUi)) {
+    $(ui.filter).addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      SFX.init(); SFX.pick(); ui.f = +b.dataset.v; ui.n = ROOM_PAGE; $(ui.list).scrollTop = 0; loadRooms();
+    });
+    $(ui.more).addEventListener('click', () => { SFX.init(); SFX.pick(); ui.n += ROOM_PAGE; loadRooms(); });
+    let typing = 0;
+    $(ui.input).addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(() => { ui.n = ROOM_PAGE; loadRooms(); }, 300); });
+    // into the best free seat: the fullest room still in its hall
+    $(ui.quick).addEventListener('click', async () => {
+      SFX.init(); SFX.pick();
+      try {
+        const r = (await askRooms({ v, f: 'open', n: 1 })).rooms[0];
+        if (r) ui.join(cleanRoom(r.code)); else toast('Chưa có phòng nào còn chỗ. Tạo phòng mới để mời mọi người!');
+      } catch (e) { toast('Không tải được danh sách phòng'); }
+    });
+  }
+  $('#menu').addEventListener('click', e => {
+    const b = e.target.closest('.room-row'); if (!b || b.dataset.code.length < 4) return;
+    SFX.init(); SFX.pick();
+    if (b.dataset.v === 'sg') sgOnline(b.dataset.code); else goOnline(b.dataset.code);
+  });
   function renderEnd() {
     const [title, sub] = endText();
     $('#endTitle').textContent = title; $('#endSub').textContent = sub;
@@ -997,6 +1197,7 @@
       again.disabled = !!mine;
       $('#endNote').textContent = theirs && !mine ? 'Đối thủ muốn đấu lại.' : mine ? 'Đã gửi lời mời đấu lại.' : '';
     } else { again.textContent = 'Ván mới'; again.disabled = false; $('#endNote').textContent = ''; }
+    $('#bEndLeave').hidden = !(G.mode === 'online' || sgNet());
     $('#bEndUndo').hidden = !(G.mode === 'ai' || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length && G.sg.hist.some(h => !G.sg.seats[h.pos.turn])));
     renderEndCampaign();
   }
@@ -1050,7 +1251,11 @@
   // the home page's lines under the two- and three-player games: the computer game as set up, and whether online is there
   let onlineThere = false;
   const andOnline = () => (onlineThere ? ' · hoặc chơi online' : '');
-  const renderAINote = () => { $('#aiNote').textContent = `Với máy: quân ${pref.side > 0 ? 'Đỏ' : 'Đen'}, ${(['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường').toLowerCase()}${andOnline()}`; };
+  const renderAINote = () => {
+    const side = pref.side > 0 ? 'Đỏ' : 'Đen', level = ['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường';
+    $('#aiNote').textContent = `Với máy: quân ${side}, ${level.toLowerCase()}${andOnline()}`;
+    $('#xqAiNote').textContent = `Quân ${side} · ${level}`;
+  };
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); renderAINote(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
@@ -1058,17 +1263,21 @@
   // the three-kingdom page: who leads each kingdom, and how strong the computer is
   const renderSgNote = () => {
     const people = pref.sgSeats.map((v, k) => (v ? -1 : k)).filter(k => k >= 0);
+    const who = people.length === 1 ? `Bạn cầm ${KNAME[people[0]]}, hai nước kia là máy` : people.length ? `${people.length} người chung một máy` : 'Xem ba máy tranh hùng';
     $('#sgNote').textContent = (people.length === 1 ? `Với máy: bạn cầm ${KNAME[people[0]]}` : people.length ? `${people.length} người chung một máy` : 'Xem ba máy tranh hùng') + andOnline();
+    $('#sgAiNote').textContent = `${who} · ${['Dễ', 'Thường', 'Khó'][pref.sgLevel] || 'Thường'}`;
   };
   [0, 1, 2].forEach(k => seg('#seat' + k, pref.sgSeats[k], v => { pref.sgSeats[k] = v; savePref(); renderSgNote(); }));
-  seg('#segSgLevel', pref.sgLevel, v => { pref.sgLevel = v; savePref(); });
+  seg('#segSgLevel', pref.sgLevel, v => { pref.sgLevel = v; savePref(); renderSgNote(); });
   seg('#segSgTc', pref.sgTc, v => { pref.sgTc = v; savePref(); });
   renderSgNote();
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; SFX.init(); SFX.pick(); menuView(b.dataset.go); });
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && !$('#musicPop').hidden) { musicPop(false); $('#bMusic').focus(); return; }
+    if (e.key === 'Escape' && !$('#rules').hidden) { $('#rules').hidden = true; return; }
     if (e.key !== 'Escape' || $('#menu').hidden || !$('#campaign').hidden || !$('#ranks').hidden || !$('#seek').hidden) return;
-    if ($('#menu .view[data-view="home"]').hidden) menuView('home');
+    const back = document.querySelector('#menu .view:not([hidden]) .vhead [data-go]');
+    if (back) menuView(back.dataset.go);
     else if (G.mode !== 'menu') showMenu(false);
   });
   // the home page's line about the picked hero and battlefield
@@ -1081,11 +1290,7 @@
   // hero picker: the general piece of the player's side becomes this hero
   function renderHeroes() {
     const cur = myHero();
-    $('#heroes').innerHTML = [{ id: '', name: 'Tướng quân', han: '帥' }, ...HEROES.list]
-      .map(h => {
-        const ok = heroAllowed(h.id);
-        return `<button type="button" data-id="${h.id}" class="${h.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${h.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('hero', h.id)}"`}><span class="hz">${ok ? h.han : '鎖'}</span><span>${h.name}</span></button>`;
-      }).join('');
+    $('#heroes').innerHTML = heroPicks(cur);
     const h = HEROES.byId[cur];
     $('#heroNote').textContent = h ? `${h.name}${h.kingdom ? ' · nhà ' + h.kingdom : ''}: ${h.look}.`
       : 'Chọn một danh tướng: quân Tướng của bạn sẽ hóa thành người đó, và bóng của họ phủ lên bàn cờ khi bạn chiếu tướng.';
@@ -1096,6 +1301,7 @@
     if (!heroAllowed(b.dataset.id)) { SFX.init(); SFX.error(); toast(`${HEROES.byId[b.dataset.id].name}: ${CAMPAIGN.requirement('hero', b.dataset.id)}`); return; }
     pref.hero = b.dataset.id; savePref(); renderHeroes(); savePick({ hero: pref.hero });
     SFX.init(); SFX.pick();
+    if (inHall()) { send({ t: 'hero', hero: pref.hero }); return; }
     if (G.mode === 'online' || sgNet()) { toast('Chủ tướng mới sẽ ra trận từ phòng online tiếp theo'); return; }
     if (G.mode === 'sanguo') {
       const k = sgPeople()[0];
@@ -1111,10 +1317,7 @@
   // stage picker: where the board stands; applies at once, in or out of a game
   function renderStages() {
     const cur = myStage();
-    $('#segStage').innerHTML = STAGES.list.map(s => {
-      const ok = stageAllowed(s.id);
-      return `<button type="button" data-id="${s.id}" class="${s.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('stage', s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
-    }).join('');
+    $('#segStage').innerHTML = stagePicks(cur);
     $('#stageNote').textContent = STAGES.byId[cur].note;
     renderArmyNote();
   }
@@ -1159,10 +1362,46 @@
       CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
     }
     $('#bRanked').disabled = $('#bSgRanked').disabled = !u;
+    $('#xqRankNote').textContent = u ? `Điểm của bạn: ${u.rating} · mỗi bên 10 phút` : 'Đăng nhập để chơi xếp hạng';
+    $('#sgRankNote').textContent = u ? `Điểm Tam Quốc: ${u.sg_rating || 1200} · ghép ba người` : 'Đăng nhập để chơi xếp hạng';
     $('#sgRankedNote').textContent = u ? `Ghép ba người có điểm Tam Quốc gần nhau${u.sg_rating ? ` (bạn: ${u.sg_rating})` : ''}. Mỗi nước 10 phút, cộng 5 giây sau mỗi nước.` : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
     $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
   });
   $('#bPlayAI').addEventListener('click', () => startAI());
+  // the hall's controls
+  $('#hallHeroes').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    SFX.init();
+    if (!heroAllowed(b.dataset.id)) { SFX.error(); toast(`${HEROES.byId[b.dataset.id].name}: ${CAMPAIGN.requirement('hero', b.dataset.id)}`); return; }
+    SFX.pick(); pref.hero = b.dataset.id; savePref(); renderHeroes(); savePick({ hero: pref.hero });
+    send({ t: 'hero', hero: pref.hero });
+  });
+  $('#hallStages').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    SFX.init();
+    if (!stageAllowed(b.dataset.id)) { SFX.error(); toast(`${STAGES.byId[b.dataset.id].name}: ${CAMPAIGN.requirement('stage', b.dataset.id)}`); return; }
+    SFX.pick(); send({ t: 'stage', stage: b.dataset.id });
+  });
+  $('#hallPublic').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'public', on: b.dataset.v === '1' }); });
+  $('#hallTc').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'tc', tc: TC[+b.dataset.v] || '' }); });
+  $('#bHallGo').addEventListener('click', () => {
+    const r = hallModel();
+    SFX.init();
+    if (r.me === null) return;
+    if (r.me === r.host) send({ t: 'start' }); else { SFX.pick(); send({ t: 'ready', on: !r.ready[r.me] }); }
+  });
+  $('#bHallLeave').addEventListener('click', leaveRoom);
+  document.querySelectorAll('.htabs [data-tab]').forEach(b => b.addEventListener('click', () => { SFX.init(); SFX.pick(); hallTab = b.dataset.tab; renderHall(); }));
+  // the host asks a player to leave: press once, then again within 3 seconds
+  $('#hallCards').addEventListener('click', e => {
+    const b = e.target.closest('.kick'); if (!b) return;
+    const side = +b.dataset.side;
+    SFX.init();
+    if (kickArm.side !== side || Date.now() - kickArm.at > 3000) { kickArm = { side, at: Date.now() }; SFX.pick(); renderHall(); setTimeout(() => { if (inHall()) renderHall(); }, 3100); return; }
+    kickArm = { side: null, at: 0 };
+    send({ t: 'kick', side });
+  });
+  $('#bHallCopy').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(roomLink()).then(() => toast('Đã sao chép link mời')); });
   $('#bPlaySg').addEventListener('click', () => sgStart());
   $('#bSgCreate').addEventListener('click', () => sgOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.sgTc] || ''));
   const joinSg = () => { const r = cleanRoom($('#inSgRoom').value); if (r.length < 4) { toast('Nhập mã phòng 4 ký tự'); $('#inSgRoom').focus(); return; } sgOnline(r); };
@@ -1176,6 +1415,19 @@
   $('#inRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinTyped(); });
   $('#bResume').addEventListener('click', () => showMenu(false));
   $('#bMenu').addEventListener('click', () => { SFX.init(); showMenu(true); });
+  // the rules, in a dialog of their own: the tab of the game being played (or looked at in the menu) comes first
+  const rulesTab = n => {
+    $('#rulesTabs').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === n));
+    document.querySelectorAll('#rules .rpage').forEach(p => { p.hidden = +p.dataset.page !== n; });
+  };
+  $('#bRules').addEventListener('click', () => {
+    SFX.init(); SFX.pick();
+    const sg = G.mode === 'sanguo' || (!$('#menu').hidden && [...document.querySelectorAll('#menu .view')].some(v => !v.hidden && /^(sanguo|sg-)/.test(v.dataset.view)));
+    rulesTab(sg ? 1 : 0); $('#rules').hidden = false;
+  });
+  $('#rulesTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { SFX.pick(); rulesTab(+b.dataset.v); } });
+  $('#bRulesClose').addEventListener('click', () => { $('#rules').hidden = true; });
+  $('#rules').addEventListener('click', e => { if (e.target.id === 'rules') $('#rules').hidden = true; });
   $('#bUndo').addEventListener('click', undo);
   $('#bEndUndo').addEventListener('click', undo);
   $('#bHint').addEventListener('click', hint);
@@ -1190,6 +1442,7 @@
   $('#bNew').addEventListener('click', () => { if (G.mode === 'campaign') startCampaign(G.lv.id); else if (G.mode === 'sanguo' && !G.sg.net) sgStart(); else if (G.mode === 'online' || G.mode === 'sanguo') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
   $('#bAgain').addEventListener('click', again);
   $('#bEndMenu').addEventListener('click', () => { showEnd(false); showMenu(true); });
+  $('#bEndLeave').addEventListener('click', () => { showEnd(false); leaveRoom(); });
   $('#bEndClose').addEventListener('click', () => showEnd(false));
   $('#bCopy').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(roomLink()).then(() => toast('Đã sao chép link mời')); });
   $('#bArmy').addEventListener('click', () => { pref.army = !VIEW.army; savePref(); VIEW.setArmy(pref.army); $('#bArmy').classList.toggle('on', pref.army); SFX.init(); SFX.pick(); toast(pref.army ? 'Đội quân: mọi quân hiện chiến binh' : 'Quân cờ: chiến binh chỉ hiện khi ra trận'); });
@@ -1244,7 +1497,7 @@
   }
   $('#grip').addEventListener('click', e => { if (!e.detail) panelMin(!pref.panelMin); });   // keyboard
   addEventListener('pointerdown', () => SFX.init(), { once: true });
-  addEventListener('resize', () => VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 ? 332 : 0));
+  addEventListener('resize', () => VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 && !hallOpen ? 332 : 0));
 
   // test hook (only with #debug in the URL): the engine plays both sides
   if (location.hash === '#debug') window.__ct = {
@@ -1271,8 +1524,8 @@
     $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
     $('#onlineBox').classList.toggle('off', !online);
-    onlineThere = online; renderAINote(); renderSgNote();
-    $('#onlineNote').textContent = online ? 'Tạo phòng rồi gửi link cho bạn bè, hoặc nhập mã phòng để vào.' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
+    onlineThere = online; renderAINote(); renderSgNote(); loadRooms();   // a page opened before this was known
+    $('#onlineNote').textContent = $('#sgOnlineNote').textContent = online ? '' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const q = new URLSearchParams(location.search), invited = cleanRoom(q.get('room')), invitedSg = cleanRoom(q.get('tq'));
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
     else if (online && invited.length >= 4) goOnline(invited);
