@@ -12,6 +12,7 @@ export const fresh = () => ({
   tc: null, left: null, turnAt: 0, away: [0, 0, 0],          // clocks; when each ranked player lost their connection
   recorded: false, retryAt: 0,
   heroes: ['', '', ''],
+  phase: 'lobby', host: '', ready: [false, false, false], stage: '',   // the hall: see hall.js
 });
 
 // the game so far: the position, earlier position keys, plies without a capture, kingdoms in the order they fell

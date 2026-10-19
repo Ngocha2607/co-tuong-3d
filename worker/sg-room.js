@@ -2,8 +2,9 @@
 // Shu, Wu and Wei, checks every move with the page's own rules (sanguo.js), runs the three clocks, keeps the game in
 // storage and relays everything to everyone watching. Its rules live in sg-game.js.
 // A kingdom that resigns, runs out of time or (ranked) stays away leaves the game and the other two play on; the game
-// ends with one kingdom left, or drawn. Friendly rooms seat the first three browsers to arrive; ranked rooms are set
-// up by the Lobby with three signed-in players, and their result moves the three Tam Quốc ratings.
+// ends with one kingdom left, or drawn. Friendly rooms seat the first three browsers to arrive and begin in the hall
+// (hall.js), where the host starts the game; ranked rooms are set up by the Lobby with three signed-in players, and
+// their result moves the three Tam Quốc ratings.
 import { DurableObject } from 'cloudflare:workers';
 import SG from '../src/sanguo.js';
 import HEROES from '../src/heroes.js';
@@ -11,6 +12,7 @@ import * as C from './clock.js';
 import * as R from './sg-game.js';
 import { rate3 } from './elo.js';
 import { userOf } from './room.js';
+import * as H from './hall.js';
 
 const KINGDOMS = [0, 1, 2];
 
@@ -18,7 +20,11 @@ export class SgRoom extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.st = null;
-    this.ctx.blockConcurrencyWhile(async () => { this.st = { ...R.fresh(), ...((await this.ctx.storage.get('st')) || {}) }; });
+    this.ctx.blockConcurrencyWhile(async () => {
+      const saved = await this.ctx.storage.get('st');
+      this.st = { ...R.fresh(), ...(saved || {}) };
+      if (saved) this.st.phase = H.phaseOf(saved);
+    });
   }
 
   async fetch(req) {
@@ -26,6 +32,8 @@ export class SgRoom extends DurableObject {
     const [client, server] = Object.values(new WebSocketPair());
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ side: -1, user: userOf(req) });
+    const code = (new URL(req.url).searchParams.get('room') || '').toUpperCase();
+    if (code && !this.st.code) this.st.code = code;
     return new Response(null, { status: 101, webSocket: client });
   }
 
@@ -34,7 +42,7 @@ export class SgRoom extends DurableObject {
     const st = this.st;
     if (st.hist.length || st.seats.some(Boolean) || st.rated) return new Response('room taken', { status: 409 });
     const tc = C.CONTROLS[C.RANKED_TC];
-    this.st = { ...R.fresh(), code, rated: true, info, seats: info.map(u => 'u' + u.id), tc, left: R.fullClock(tc), turnAt: Date.now() };
+    this.st = { ...R.fresh(), code, rated: true, phase: 'play', info, seats: info.map(u => 'u' + u.id), tc, left: R.fullClock(tc), turnAt: Date.now() };
     await this.save(); await this.schedule();
     return new Response('ok');
   }
@@ -58,7 +66,18 @@ export class SgRoom extends DurableObject {
   }
   stateFor(ws, extra = {}) {
     const { hist, over, rematch, rated, info, tc, heroes } = this.st;
-    return { t: 'state', you: this.sideOf(ws), hist, over, rematch, rated, info, tc, heroes, players: this.presence(), ...this.timing(), ...extra };
+    return { t: 'state', you: this.sideOf(ws), hist, over, rematch, rated, info, tc, heroes, players: this.presence(), ...H.hallInfo(this.st, KINGDOMS), ...this.timing(), ...extra };
+  }
+  // everyone gets the whole state again (the hall changes rarely, and each page needs its own `you`)
+  async resync(extra) { for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, extra)); await this.announce(); }
+  // tell the list of open rooms (lobby.js) how this one stands, when that changed; present: who is connected
+  async announce(present = this.presence()) {
+    const st = this.st;
+    if (st.rated || !st.code) return;
+    const l = H.listing(st, KINGDOMS, present, 'sg'), body = JSON.stringify(H.listed(st, l) ? l : { code: st.code, v: 'sg', gone: true });
+    if (body === this.announced) return;
+    this.announced = body;
+    try { await this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby')).fetch('https://lobby/room', { method: 'POST', body }); } catch (e) { this.announced = ''; }
   }
 
   async schedule() {
@@ -143,28 +162,48 @@ export class SgRoom extends DurableObject {
       if (st.rated) side = user ? st.info.findIndex(u => u.id === user.id) : -1;
       else {
         const token = typeof m.token === 'string' ? m.token.slice(0, 40) : '';
+        if (H.isBanned(st, token, user)) { this.send(ws, { t: 'kicked' }); try { ws.close(1000, 'kicked'); } catch (e) { } return; }
         if (token) {
           side = st.seats.indexOf(token);
-          if (side < 0 && st.seats.indexOf(null) >= 0) { side = st.seats.indexOf(null); st.seats[side] = token; dirty = true; }
+          if (side < 0 && st.seats.indexOf(null) >= 0) { side = st.seats.indexOf(null); st.seats[side] = token; dirty = true; if (!st.host) st.host = token; }
         }
         if (side >= 0) {
           const info = user ? { id: user.id, name: user.name, title: user.title || '' } : null;
           if (JSON.stringify(info) !== JSON.stringify(st.info[side])) { st.info[side] = info; dirty = true; }
         }
-        // the player who opened the room picks the time control, before the first move
-        if (side === 0 && !st.hist.length && !st.tc && C.CONTROLS[m.tc]) { st.tc = C.CONTROLS[m.tc]; st.left = R.fullClock(st.tc); dirty = true; }
+        // the player who opened the room brings the time control and battlefield they had picked; the hall can change them
+        if (side >= 0 && side === H.hostSide(st, KINGDOMS) && st.phase === 'lobby' && st.game === 1) {
+          if (!st.tc && C.CONTROLS[m.tc]) { st.tc = C.CONTROLS[m.tc]; st.left = R.fullClock(st.tc); dirty = true; }
+          if (!st.stage && H.validStage(m.stage)) { st.stage = m.stage; dirty = true; }
+        }
       }
       if (side >= 0 && st.away[side]) { st.away[side] = 0; dirty = true; }
       const hero = HEROES.valid(m.hero) ? m.hero : '';
-      if (side >= 0 && st.heroes[side] !== hero && (!st.hist.length || !st.heroes[side])) { st.heroes[side] = hero; dirty = true; }
+      if (side >= 0 && st.heroes[side] !== hero && (st.phase === 'lobby' || !st.heroes[side])) { st.heroes[side] = hero; dirty = true; }
       ws.serializeAttachment({ ...a, side });
       if (dirty) { await this.save(); await this.schedule(); }
+      if (st.phase === 'lobby') { await this.resync(); return; }   // the hall shows everyone who came in
       this.send(ws, this.stateFor(ws));
       this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, ...this.timing() }, ws);
+      await this.announce();
       return;
     }
     const side = this.sideOf(ws);
     if (m.t === 'sync') { this.send(ws, this.stateFor(ws)); return; }
+    // a player walks out: their kingdom leaves a game under way; in a friendly room the seat is freed for someone else
+    // once no game holds it (the hall, or a game that is over)
+    if (m.t === 'leave') {
+      if (side < 0) return;
+      if (st.phase === 'play' && !st.over) await this.leave(side, 'resign', now);
+      ws.serializeAttachment({ ...ws.deserializeAttachment(), side: -1 });
+      if (!st.rated && (st.phase === 'lobby' || st.over)) { H.leave(st, KINGDOMS, side, this.presence(ws)); st.rematch[side] = false; }
+      await this.save();
+      for (const w of this.sockets(ws)) this.send(w, this.stateFor(w, { players: this.presence(ws) }));
+      await this.announce(this.presence(ws));
+      return;
+    }
+    if (['hero', 'stage', 'tc', 'ready', 'start', 'kick', 'public'].includes(m.t)) { if (side >= 0) await this.hall(side, m, now); return; }
+    if (st.phase !== 'play') { this.send(ws, this.stateFor(ws)); return; }   // nothing is played in the hall
 
     if (m.t === 'move') {
       if (side < 0 || st.over || !Number.isInteger(m.m) || m.ply !== st.hist.length) { this.send(ws, this.stateFor(ws)); return; }
@@ -194,12 +233,12 @@ export class SgRoom extends DurableObject {
       if (side < 0 || !st.over || st.rated) return;   // ranked players look for new opponents instead
       st.rematch[side] = true;
       if (st.rematch.every(Boolean)) {
-        // new game: everyone moves one seat round the table (so each in turn gets to go first), clocks as before
+        // new game: everyone moves one seat round the table (so each in turn gets to go first) and back to the hall
         const turn = a => KINGDOMS.map(k => a[(k + 2) % 3]);
-        this.st = { ...R.fresh(), seats: turn(st.seats), info: turn(st.info), heroes: turn(st.heroes), game: st.game + 1, tc: st.tc, left: R.fullClock(st.tc), turnAt: now };
+        this.st = { ...R.fresh(), seats: turn(st.seats), info: turn(st.info), heroes: turn(st.heroes), game: st.game + 1, tc: st.tc, left: R.fullClock(st.tc), turnAt: now, host: st.host, stage: st.stage, banned: st.banned, bannedIds: st.bannedIds };
         for (const w of this.ctx.getWebSockets()) { const a = w.deserializeAttachment(); if (a && a.side >= 0) w.serializeAttachment({ ...a, side: (a.side + 1) % 3 }); }
         await this.save(); await this.schedule();
-        for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, { fresh: true }));
+        await this.resync({ fresh: true });
         return;
       }
       await this.save();
@@ -207,11 +246,52 @@ export class SgRoom extends DurableObject {
     }
   }
 
+  // the hall: a general for oneself; the battlefield and the time (host only); ready (the others); asking a player to
+  // leave and starting the game (host only)
+  async hall(side, m, now) {
+    const st = this.st, host = H.hostSide(st, KINGDOMS);
+    if (st.phase !== 'lobby' || st.rated) return;
+    if (m.t === 'hero') { if (m.hero !== '' && !HEROES.valid(m.hero)) return; st.heroes[side] = m.hero; }
+    else if (m.t === 'ready') { if (side === host) return; st.ready[side] = !!m.on; }
+    else if (side !== host) return;
+    else if (m.t === 'stage') { if (!H.validStage(m.stage)) return; st.stage = m.stage; }
+    else if (m.t === 'public') st.public = !!m.on;
+    else if (m.t === 'tc') { st.tc = C.CONTROLS[m.tc] || null; st.left = R.fullClock(st.tc); }
+    else if (m.t === 'kick') {
+      if (!Number.isInteger(m.side) || !H.kick(st, KINGDOMS, side, m.side)) return;
+      // the player's pages are told, then watch no more
+      for (const w of this.ctx.getWebSockets()) {
+        if (this.sideOf(w) !== m.side) continue;
+        w.serializeAttachment({ ...w.deserializeAttachment(), side: -1 });
+        this.send(w, { t: 'kicked' });
+        try { w.close(1000, 'kicked'); } catch (e) { }
+      }
+    }
+    else if (m.t === 'start') {
+      const why = H.waitingFor(st, KINGDOMS, this.presence());
+      if (why) { this.broadcast({ t: 'error', msg: why }); return; }
+      st.phase = 'play'; st.turnAt = now; st.left = R.fullClock(st.tc);
+      await this.save(); await this.schedule();
+      await this.resync({ fresh: true });
+      return;
+    }
+    await this.save();
+    await this.resync();
+  }
+
   async webSocketClose(ws) { await this.left(ws); }
   async webSocketError(ws) { await this.left(ws); }
   async left(ws) {
     const st = this.st, side = this.sideOf(ws);
     if (side >= 0 && st.rated && !st.over && !this.presence(ws)[side]) { st.away[side] = Date.now(); await this.save(); await this.schedule(); }
+    if (st.phase === 'lobby') {                             // in the hall someone who left is no longer ready
+      if (side >= 0 && !this.presence(ws)[side] && st.ready[side]) { st.ready[side] = false; await this.save(); }
+      if (side >= 0 && H.handOver(st, KINGDOMS, this.presence(ws))) await this.save();   // the host left: someone else runs the hall
+      for (const w of this.sockets(ws)) this.send(w, this.stateFor(w, { players: this.presence(ws) }));
+      await this.announce(this.presence(ws));
+      return;
+    }
     this.broadcast({ t: 'presence', players: this.presence(ws), info: st.info, ...this.timing() }, ws);
+    await this.announce(this.presence(ws));
   }
 }

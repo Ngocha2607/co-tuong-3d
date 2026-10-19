@@ -106,6 +106,12 @@
   .seat .hz { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; box-shadow: inset 0 0 0 2px currentColor; font: 700 17px/1 var(--han); }
   .seat .hz.k0 { color: #a3201a; } .seat .hz.k1 { color: #17663a; } .seat .hz.k2 { color: #1b1b1b; }
   .rules { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--dim); font-size: 13px; }
+  #rules .card { position: relative; width: min(560px, 100%); display: grid; gap: 14px; }
+  #rules .rtitle { margin: 0; font: 700 24px/1.2 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  #rules .rules { gap: 8px; font-size: 14px; line-height: 1.55; color: var(--ink); }
+  #rules .rules li::marker { color: var(--gold); }
+  #rules .rules b { color: var(--gold); }
+  #bRulesClose { position: absolute; top: 20px; right: 18px; }
   #moves .empty { display: block; color: var(--dim); border: 0; }
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .btn { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.06); font-weight: 600; cursor: pointer; transition: background 150ms, border-color 150ms; }
@@ -182,6 +188,70 @@
   #drawAsk { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); font-weight: 700; }
   #drawAsk .btn { padding: 7px 12px; }
 
+  /* ---------- the open rooms in the menu ---------- */
+  .rhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .rhead small { color: var(--dim); font-size: 12px; }
+  .rfilter button { white-space: nowrap; }
+  .rfilter button i { font-style: normal; opacity: 0.7; margin-left: 3px; font-variant-numeric: tabular-nums; }
+  .join input.search { font: 600 14px/1 var(--ui); letter-spacing: 0.02em; text-transform: none; }
+  .rooms { display: grid; gap: 6px; max-height: 340px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--gold-soft) transparent; }
+  .room-row { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.05); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+  .room-row:hover { border-color: var(--gold); }
+  .room-row .st { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .room-row .st.waiting { background: rgba(70, 224, 176, 0.16); color: var(--jade); }
+  .room-row .st.playing { background: rgba(224, 87, 76, 0.18); color: #ff9a8a; }
+  .room-row .ri { min-width: 0; }
+  .room-row .ri b { display: block; font-size: 13.5px; letter-spacing: 0.04em; }
+  .room-row .ri small { display: block; color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .room-row .cnt { font: 700 15px/1 var(--ui); font-variant-numeric: tabular-nums; }
+  .room-row .go { padding: 4px 10px; border-radius: 8px; background: var(--gold); color: #2a1408; font-weight: 700; font-size: 12.5px; }
+
+  /* ---------- the hall of a room: controls on the right (at the bottom on phones), a card under each pedestal ---------- */
+  #hall { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
+  #hall > * { pointer-events: auto; }
+  body.in-hall #panel { display: none; }
+  /* the room's badge: kind, code, and the host's two switches */
+  .hroom { position: absolute; left: 16px; top: 64px; width: 200px; display: grid; gap: 8px; padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); }
+  .hroom small { color: var(--gold); font-weight: 700; letter-spacing: 0.04em; font-size: 12px; }
+  .hcode { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .hcode b { font: 700 26px/1 var(--serif); letter-spacing: 0.2em; }
+  .hcode .icon { width: 34px; height: 34px; }
+  .seg.mini { padding: 3px; gap: 2px; border-radius: 10px; }
+  .seg.mini button { padding: 5px 4px; font-size: 12px; border-radius: 8px; }
+  .hroom .note { font-size: 12px; }
+  .hopts { grid-column: 1; grid-row: 2; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; padding: 4px 2px 6px; }
+  .hopts label { display: grid; gap: 5px; color: var(--dim); font-size: 12px; font-weight: 600; min-width: 220px; }
+  /* the dock: tabs over a strip of seals to pick from, the big button on the right */
+  .hdock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(1000px, calc(100% - 32px)); display: grid; grid-template-columns: minmax(0, 1fr) 220px; grid-template-rows: auto auto; gap: 8px 16px; padding: 10px 14px 12px; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(30, 17, 11, 0.86), rgba(14, 8, 6, 0.94)); backdrop-filter: blur(8px); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+  .htabs { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .htabs button { padding: 5px 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--dim); font: 700 12px/1.2 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; }
+  .htabs button.on { background: var(--gold); border-color: var(--gold); color: #2a1408; }
+  #hallStageNote { margin-left: auto; color: var(--dim); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hstrip { grid-column: 1; grid-row: 2; display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--gold-soft) transparent; scroll-snap-type: x proximity; }
+  .hstrip button { flex: 0 0 76px; scroll-snap-align: start; display: grid; justify-items: center; align-content: start; gap: 5px; padding: 7px 4px 6px; border-radius: 12px; border: 1px solid transparent; background: rgba(0, 0, 0, 0.28); color: var(--dim); font: 600 11.5px/1.15 var(--ui); text-align: center; cursor: pointer; }
+  .hstrip button:hover { border-color: var(--gold-soft); color: var(--ink); }
+  .hstrip button .hz { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 2px currentColor; font: 700 22px/1 var(--han); }
+  .hstrip button.on { border-color: var(--gold); background: rgba(227, 180, 72, 0.16); color: var(--ink); }
+  .hstrip button.on .hz { box-shadow: inset 0 0 0 2px currentColor, 0 0 0 3px var(--gold); }
+  .hstrip button.locked { opacity: 0.45; }
+  .hstrip button.locked .hz { background: #3a2c22; color: var(--dim); }
+  .hgo { grid-column: 2; grid-row: 1 / span 2; display: grid; align-content: center; gap: 6px; }
+  .hgo .btn { padding: 15px 14px; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
+  .hgo .linkish { justify-self: center; font-size: 13px; }
+  #hallWait { margin: 0; text-align: center; color: var(--dim); font-size: 12px; min-height: 15px; }
+  #hallCards { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  .hcard { position: absolute; transform: translate(-50%, 0); display: grid; justify-items: center; gap: 2px; min-width: 130px; max-width: 190px; padding: 8px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); text-align: center; backdrop-filter: blur(6px); }
+  .hcard b { font: 700 15px/1.2 var(--serif); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hcard small { color: var(--dim); font-size: 12px; }
+  .hcard.you { border-color: var(--gold); }
+  .hcard.empty { opacity: 0.6; border-style: dashed; }
+  .hcard .tag { white-space: nowrap; margin-top: 2px; padding: 2px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: rgba(245, 233, 212, 0.08); color: var(--dim); }
+  .hcard .tag.ready { background: rgba(70, 224, 176, 0.18); color: var(--jade); }
+  .hcard .tag.host { background: rgba(227, 180, 72, 0.2); color: var(--gold); }
+  .hcard .tag.away { color: #ff8a7a; }
+  .hcard .kick { pointer-events: auto; margin-top: 4px; padding: 3px 10px; border-radius: 8px; border: 1px solid rgba(255, 138, 122, 0.45); background: rgba(122, 23, 18, 0.55); color: #ffd0c8; font: 600 11.5px/1.2 var(--ui); cursor: pointer; }
+  .hcard .kick:hover { border-color: #ff8a7a; }
+
   /* ---------- banner, toast ---------- */
   #banner { position: fixed; left: 0; right: 0; top: 30%; display: flex; justify-content: center; pointer-events: none; z-index: 6; opacity: 0; }
   #banner span { padding: 12px 40px; font: 700 clamp(30px, 6vw, 64px)/1 var(--serif); letter-spacing: 0.06em; color: #fff3dc; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35), 0 0 30px rgba(227, 180, 72, 0.5); background: linear-gradient(90deg, transparent, rgba(20, 10, 6, 0.75) 20%, rgba(20, 10, 6, 0.75) 80%, transparent); }
@@ -211,11 +281,15 @@
   .join input { min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.3); color: var(--ink); font: 700 16px/1 var(--ui); letter-spacing: 0.25em; text-transform: uppercase; }
   .join input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
   .note { margin: 0; color: var(--dim); font-size: 13px; }
-  #onlineBox.off .btn, #onlineBox.off .join, #sgOnlineBox.off .btn, #sgOnlineBox.off .join, #sgOnlineBox.off .seg { opacity: 0.4; pointer-events: none; }
+  #onlineBox.off .mode, #sgOnlineBox.off .mode { opacity: 0.4; pointer-events: none; }
+  .view > .note:empty { display: none; }
   .foot { margin: 12px 0 0; color: var(--dim); font-size: 12px; }
-  .foot a { color: var(--dim); }
   details.foot summary { cursor: pointer; width: max-content; }
   details.foot[open] summary { margin-bottom: 4px; color: var(--ink); }
+  /* the legal links: small, in the bottom corner of the screen, outside the menu card */
+  .legal { position: fixed; left: 16px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); margin: 0; font-size: 11.5px; color: var(--dim); opacity: 0.7; z-index: 1; }
+  .legal a { color: var(--dim); text-decoration: none; }
+  .legal a:hover { color: var(--ink); text-decoration: underline; }
   /* menu pages: home lists the ways to play, each opens its own page with a back arrow */
   .view { display: grid; gap: 10px; }
   .view > section:first-of-type { border-top: 0; padding-top: 0; }
@@ -348,6 +422,23 @@
     #goal { padding: 7px 10px; }
     #goal p, #goal #goalHelp { display: none; }
     .lvs { grid-template-columns: 1fr; }
+    .hroom { left: 8px; right: 8px; top: calc(96px + env(safe-area-inset-top, 0px)); width: auto; grid-template-columns: auto 1fr; align-items: center; gap: 6px 10px; padding: 8px 10px; }
+    .hroom small { grid-column: 1 / -1; }
+    .hcode b { font-size: 20px; }
+    .hcode .icon { width: 30px; height: 30px; }
+    .hroom .note { grid-column: 2; justify-self: end; }
+    .hopts label { min-width: 0; flex: 1 1 100%; }
+    .hdock { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); transform: none; width: auto; grid-template-columns: 1fr; padding: 8px 10px 10px; gap: 6px; }
+    .hgo { grid-column: 1; grid-row: auto; grid-template-columns: 1fr auto; align-items: center; }
+    .hgo #hallWait { grid-column: 1 / -1; }
+    .hgo .btn { padding: 12px; font-size: 15px; }
+    .hstrip button { flex-basis: 64px; }
+    .hstrip button .hz { width: 38px; height: 38px; font-size: 19px; }
+    #hallStageNote { font-size: 11.5px; }
+    .hcard { min-width: 0; max-width: 31vw; padding: 5px 8px; }
+    .hcard b { font-size: 13px; }
+    .hcard small { display: none; }
+    .hcard .tag { padding: 2px 7px; font-size: 10.5px; }
     .rewards { grid-template-columns: 1fr; }
     #campaign .camp-head h2, #brief h2 { font-size: 22px; }
     #room .link { display: none; }
@@ -375,6 +466,7 @@
       </div>
     </div>
     <button class="icon" id="bSound" type="button" title="Âm thanh" aria-label="Âm thanh"><svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg></button>
+    <button class="icon" id="bRules" type="button" title="Luật chơi" aria-label="Luật chơi"><svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8.5 7.5h7M8.5 11h5"/></svg></button>
     <button class="icon" id="bMenu" type="button" title="Menu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
 </header>
@@ -412,6 +504,25 @@
   </div>
 </aside>
 
+<div id="hall" hidden>
+  <div class="hroom">
+    <small id="hallKind">Sảnh chờ</small>
+    <div class="hcode"><b id="hallCode"></b><button class="icon" id="bHallCopy" type="button" title="Sao chép link mời" aria-label="Sao chép link mời"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button></div>
+    <p class="note" id="hallInfo"></p>
+  </div>
+  <div class="hdock">
+    <div class="htabs"><button type="button" data-tab="hero" id="hallTabHero">Chủ tướng</button><button type="button" data-tab="stage" id="hallTabStage">Bối cảnh</button><button type="button" data-tab="room" id="hallTabRoom">Phòng</button><span id="hallStageNote"></span></div>
+    <div class="hstrip" id="hallHeroes"></div>
+    <div class="hstrip" id="hallStages" hidden></div>
+    <div class="hopts" id="hallRoomOpts" hidden>
+      <label>Ai được vào<div class="seg mini" id="hallPublic"><button type="button" data-v="1">Công khai</button><button type="button" data-v="0">Riêng tư</button></div></label>
+      <label>Thời gian mỗi bên<div class="seg mini" id="hallTc"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div></label>
+    </div>
+    <div class="hgo"><p id="hallWait"></p><button class="btn primary" id="bHallGo" type="button">Sẵn sàng</button><button class="linkish" id="bHallLeave" type="button">Rời phòng</button></div>
+  </div>
+</div>
+<div id="hallCards" aria-live="polite"></div>
+
 <div id="banner" aria-hidden="true"></div>
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -440,64 +551,112 @@
       </section>
     </div>
 
+    <!-- the two-player game: a line for each way to play it, each opening its own page -->
     <div class="view" data-view="xq" hidden>
       <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>2 người chơi · Cờ tướng</h2></div>
+      <div class="modes">
+        <button class="mode" type="button" data-go="xq-ai"><span class="hz">弈</span><span><b>Đánh với máy</b><small id="xqAiNote"></small></span><span class="chev">›</span></button>
+      </div>
+      <div class="modes" id="onlineBox">
+        <button class="mode" type="button" data-go="xq-rooms"><span class="hz">友</span><span><b>Phòng chơi</b><small id="xqRoomsNote">Xem phòng đang mở hoặc tạo phòng mời bạn bè</small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="xq-ranked" id="rankedBox" hidden><span class="hz">榜</span><span><b>Đấu xếp hạng</b><small id="xqRankNote"></small></span><span class="chev">›</span></button>
+      </div>
+      <p class="note" id="onlineNote"></p>
+    </div>
+    <div class="view" data-view="xq-ai" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="xq" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đánh với máy</h2></div>
       <section>
-        <h2>Đánh với máy</h2>
+        <h2>Cầm quân</h2>
         <div class="seg" id="segSide"><button type="button" data-v="1">Đỏ (đi trước)</button><button type="button" data-v="-1">Đen</button></div>
+        <h2>Độ khó</h2>
         <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
-        <button class="btn primary wide" id="bPlayAI" type="button">Vào trận với máy</button>
       </section>
-      <section id="onlineBox">
-        <h2>Online</h2>
-        <div id="rankedBox" hidden>
-          <button class="btn primary wide" id="bRanked" type="button">Tìm trận xếp hạng · 10 phút</button>
-          <p class="note" id="rankedNote"></p>
-          <button class="linkish" id="bRanks" type="button" hidden>Xem bảng xếp hạng</button>
-        </div>
+      <button class="btn primary wide" id="bPlayAI" type="button">Vào trận</button>
+    </div>
+    <div class="view" data-view="xq-rooms" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="xq" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Phòng chơi · 2 người</h2></div>
+      <section>
+        <div class="rhead"><h2>Phòng đang mở</h2><small id="roomSum"></small></div>
+        <div class="seg mini rfilter" id="roomFilter"><button type="button" data-v="0">Còn chỗ</button><button type="button" data-v="1">Đang chiến đấu</button><button type="button" data-v="2">Tất cả</button></div>
+        <div class="join"><input class="search" id="inRoom" type="text" maxlength="20" placeholder="Mã phòng hoặc tên chủ phòng" autocomplete="off" spellcheck="false" aria-label="Tìm phòng hoặc nhập mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
+        <div class="rooms" id="roomList"><p class="note">Đang tải…</p></div>
+        <button class="linkish" id="roomMore" type="button" hidden>Xem thêm</button>
+      </section>
+      <div class="row2"><button class="btn primary" id="roomQuick" type="button">Vào nhanh</button><button class="btn gold" type="button" data-go="xq-create">Tạo phòng mới</button></div>
+    </div>
+    <div class="view" data-view="xq-create" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="xq-rooms" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Tạo phòng 2 người</h2></div>
+      <section>
+        <h2>Thời gian mỗi bên</h2>
         <div class="seg" id="segTc" title="Thời gian mỗi bên"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
-        <button class="btn gold" id="bCreate" type="button">Tạo phòng 2 người</button>
-        <div class="join"><input id="inRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng"><button class="btn" id="bJoin" type="button">Vào phòng</button></div>
-        <p class="note" id="onlineNote"></p>
+        <p class="note">Bạn làm chủ phòng: trong sảnh chờ còn đổi được thời gian, bối cảnh, và chọn phòng công khai hay riêng tư. Gửi link mời cho bạn bè, hoặc chờ người vào từ danh sách phòng.</p>
+      </section>
+      <button class="btn primary wide" id="bCreate" type="button">Tạo phòng</button>
+    </div>
+    <div class="view" data-view="xq-ranked" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="xq" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đấu xếp hạng · 2 người</h2></div>
+      <section>
+        <button class="btn primary wide" id="bRanked" type="button">Tìm trận · 10 phút</button>
+        <p class="note" id="rankedNote"></p>
+        <button class="linkish" id="bRanks" type="button" hidden>Xem bảng xếp hạng</button>
       </section>
     </div>
 
+    <!-- the three-player game, laid out the same way -->
     <div class="view" data-view="sanguo" hidden>
       <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>3 người chơi · Tam Quốc</h2></div>
       <p class="note">Thục, Ngô, Ngụy chung một bàn lục giác ghép từ ba nửa bàn cờ. Diệt hai nước kia để nhất thống thiên hạ.</p>
+      <div class="modes">
+        <button class="mode" type="button" data-go="sg-ai"><span class="hz">弈</span><span><b>Đánh với máy</b><small id="sgAiNote"></small></span><span class="chev">›</span></button>
+      </div>
+      <div class="modes" id="sgOnlineBox">
+        <button class="mode" type="button" data-go="sg-rooms"><span class="hz">友</span><span><b>Phòng chơi</b><small id="sgRoomsNote">Xem phòng đang mở hoặc tạo phòng mời bạn bè</small></span><span class="chev">›</span></button>
+        <button class="mode" type="button" data-go="sg-ranked" id="sgRankedBox" hidden><span class="hz">榜</span><span><b>Đấu xếp hạng</b><small id="sgRankNote"></small></span><span class="chev">›</span></button>
+      </div>
+      <p class="note" id="sgOnlineNote"></p>
+    </div>
+    <div class="view" data-view="sg-ai" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="sanguo" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đánh với máy · 3 người</h2></div>
       <section>
-        <h2>Đánh với máy</h2>
+        <h2>Ai cầm quân</h2>
         <div class="seats">
           <div class="seat"><span class="hz k0">蜀</span><b>Thục <small class="note">đi trước</small></b><div class="seg" id="seat0"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
           <div class="seat"><span class="hz k1">吳</span><b>Ngô</b><div class="seg" id="seat1"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
           <div class="seat"><span class="hz k2">魏</span><b>Ngụy</b><div class="seg" id="seat2"><button type="button" data-v="0">Người</button><button type="button" data-v="1">Máy</button></div></div>
         </div>
         <p class="note">Chọn Người cho nhiều nước để chơi chung một máy: bàn cờ tự xoay về phía nước đến lượt.</p>
+        <h2>Độ khó</h2>
         <div class="seg" id="segSgLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
-        <button class="btn primary wide" id="bPlaySg" type="button">Vào trận với máy</button>
       </section>
-      <section id="sgOnlineBox">
-        <h2>Online</h2>
-        <div id="sgRankedBox" hidden>
-          <button class="btn primary wide" id="bSgRanked" type="button">Tìm trận xếp hạng · 10 phút</button>
-          <p class="note" id="sgRankedNote"></p>
-          <button class="linkish" id="bSgRanks" type="button">Xem bảng xếp hạng</button>
-        </div>
+      <button class="btn primary wide" id="bPlaySg" type="button">Vào trận</button>
+    </div>
+    <div class="view" data-view="sg-rooms" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="sanguo" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Phòng chơi · 3 người</h2></div>
+      <section>
+        <div class="rhead"><h2>Phòng đang mở</h2><small id="sgRoomSum"></small></div>
+        <div class="seg mini rfilter" id="sgRoomFilter"><button type="button" data-v="0">Còn chỗ</button><button type="button" data-v="1">Đang chiến đấu</button><button type="button" data-v="2">Tất cả</button></div>
+        <div class="join"><input class="search" id="inSgRoom" type="text" maxlength="20" placeholder="Mã phòng hoặc tên chủ phòng" autocomplete="off" spellcheck="false" aria-label="Tìm phòng Tam Quốc hoặc nhập mã phòng"><button class="btn" id="bSgJoin" type="button">Vào phòng</button></div>
+        <div class="rooms" id="sgRoomList"><p class="note">Đang tải…</p></div>
+        <button class="linkish" id="sgRoomMore" type="button" hidden>Xem thêm</button>
+      </section>
+      <div class="row2"><button class="btn primary" id="sgRoomQuick" type="button">Vào nhanh</button><button class="btn gold" type="button" data-go="sg-create">Tạo phòng mới</button></div>
+    </div>
+    <div class="view" data-view="sg-create" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="sg-rooms" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Tạo phòng 3 người</h2></div>
+      <section>
+        <h2>Thời gian mỗi nước</h2>
         <div class="seg" id="segSgTc" title="Thời gian mỗi nước"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
-        <button class="btn gold" id="bSgCreate" type="button">Tạo phòng 3 người</button>
-        <div class="join"><input id="inSgRoom" type="text" maxlength="8" placeholder="MÃ PHÒNG" autocomplete="off" spellcheck="false" aria-label="Mã phòng Tam Quốc"><button class="btn" id="bSgJoin" type="button">Vào phòng</button></div>
-        <p class="note">Tạo phòng rồi gửi link cho hai người bạn, hoặc nhập mã phòng để vào. Người tạo phòng cầm Thục; mỗi lần đấu lại, cả ba xoay một ghế.</p>
+        <p class="note">Bạn làm chủ phòng và cầm Thục; mỗi lần đấu lại, cả ba xoay một ghế. Trong sảnh chờ còn đổi được thời gian, bối cảnh, và chọn phòng công khai hay riêng tư.</p>
       </section>
-      <details class="foot"><summary>Luật chơi Tam Quốc</summary>
-        <ul class="rules">
-          <li>Ba nước đi lần lượt Thục, Ngô, Ngụy (ngược chiều kim đồng hồ). Quân đi như cờ tướng.</li>
-          <li>Qua sông bên trái là đất nước bên trái, qua sông bên phải là đất nước bên phải. Đường giữa thông vào cả hai nước.</li>
-          <li>Tốt sang đất nước khác thì tiến về phía cung nước đó hoặc đi ngang. Tượng, Sĩ, Tướng không rời đất nhà.</li>
-          <li>Không được để Tướng mình bị bất kỳ nước nào chiếu, kể cả lộ mặt Tướng. Tướng không bị ăn, chỉ bị dồn.</li>
-          <li>Đến lượt mà không còn nước đi (bị chiếu bí hay hết nước) thì mất nước: Tướng rời bàn, tàn quân về tay người vừa đi nước cuối.</li>
-          <li>Nước cuối cùng còn Tướng nhất thống thiên hạ. 50 vòng không ăn quân, hoặc lặp thế ba lần, thì hòa.</li>
-        </ul>
-      </details>
+      <button class="btn primary wide" id="bSgCreate" type="button">Tạo phòng</button>
+    </div>
+    <div class="view" data-view="sg-ranked" hidden>
+      <div class="vhead"><button class="icon" type="button" data-go="sanguo" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đấu xếp hạng · 3 người</h2></div>
+      <section>
+        <button class="btn primary wide" id="bSgRanked" type="button">Tìm trận · 10 phút</button>
+        <p class="note" id="sgRankedNote"></p>
+        <button class="linkish" id="bSgRanks" type="button">Xem bảng xếp hạng</button>
+      </section>
     </div>
 
     <div class="view" data-view="army" hidden>
@@ -513,10 +672,8 @@
         <p class="note" id="stageNote"></p>
       </section>
     </div>
-
-    <details class="foot"><summary>Cách điều khiển</summary>Chạm một quân để xem nước đi, chạm điểm sáng để đi. Kéo để xoay bàn, cuộn chuột hoặc chụm hai ngón để phóng to, nhấp đúp để đặt lại góc nhìn.</details>
-    <p class="foot"><a href="privacy" target="_blank">Chính sách bảo mật</a> · <a href="terms" target="_blank">Điều khoản sử dụng</a></p>
   </div>
+  <p class="legal"><a href="privacy" target="_blank">Chính sách bảo mật</a> · <a href="terms" target="_blank">Điều khoản sử dụng</a></p>
 </div>
 
 <div id="end" class="overlay" hidden>
@@ -532,6 +689,7 @@
       <button class="btn" id="bEndRetry" type="button" hidden>Đánh lại</button>
       <button class="btn" id="bEndUndo" type="button">Đi lại</button>
       <button class="btn" id="bEndMap" type="button" hidden>Bản đồ chiến dịch</button>
+      <button class="btn" id="bEndLeave" type="button" hidden>Rời phòng</button>
       <button class="btn" id="bEndMenu" type="button">Về menu</button>
     </div>
   </div>
@@ -556,6 +714,45 @@
     <ul class="rewards" id="campRewards"></ul>
     <div id="campTitleBox" hidden><label for="campTitle">Danh hiệu</label><select id="campTitle"></select></div>
     <p class="note" id="campTitleNote"></p>
+  </div>
+</div>
+
+<div id="rules" class="overlay dialog" hidden>
+  <div class="card">
+    <button class="icon" id="bRulesClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h2 class="rtitle">Luật chơi</h2>
+    <div class="seg" id="rulesTabs"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Tam Quốc</button><button type="button" data-v="2">Điều khiển</button></div>
+    <div class="rpage" data-page="0">
+      <ul class="rules">
+        <li>Đỏ đi trước. Tướng và Sĩ không ra khỏi cung; hai Tướng không được đối mặt trên một cột trống.</li>
+        <li>Mã bị cản chân, Tượng bị cản mắt và không qua sông. Pháo ăn quân phải cách đúng một ngòi. Tốt qua sông mới được đi ngang.</li>
+        <li>Chiếu bí hoặc làm đối phương hết nước đi là thắng (hết nước cũng thua, dù không bị chiếu).</li>
+        <li>60 nước liền không ai ăn quân thì hòa.</li>
+        <li><b>Lặp thế cờ lần thứ ba</b>: bên nào nước nào cũng chiếu thì thua (chiếu dai); không ai chiếu dai mà bên nào nước nào cũng đuổi cùng một quân thì thua (đuổi dai); còn lại là hòa. Lần lặp thứ hai trang sẽ nhắc trước.</li>
+        <li><b>Online</b>: cầu hòa được sau khi hai bên đã đi nước đầu. Đồng hồ chạy từ sau nước đầu của mỗi bên; hết giờ là thua, trừ khi bên kia chỉ còn Sĩ, Tượng thì hòa.</li>
+        <li><b>Xếp hạng</b>: không đi nước đầu trong 30 giây thì ván bị hủy; đến lượt mà mất kết nối quá 60 giây thì thua.</li>
+      </ul>
+    </div>
+    <div class="rpage" data-page="1" hidden>
+      <ul class="rules">
+        <li>Ba nước Thục, Ngô, Ngụy chung một bàn lục giác ghép từ ba nửa bàn cờ, đi lần lượt Thục, Ngô, Ngụy (ngược chiều kim đồng hồ). Quân đi như cờ tướng.</li>
+        <li>Qua sông bên trái là đất nước bên trái, qua sông bên phải là đất nước bên phải. Đường giữa của ba nước gặp nhau ở tam giác trung tâm và thông vào cả hai nước.</li>
+        <li>Tốt sang đất nước khác thì tiến về phía cung nước đó hoặc đi ngang. Tượng, Sĩ, Tướng không rời đất nhà.</li>
+        <li>Không được để Tướng mình bị bất kỳ nước nào chiếu, kể cả lộ mặt Tướng. Tướng không bị ăn, chỉ bị dồn.</li>
+        <li>Đến lượt mà không còn nước đi (bị chiếu bí hay hết nước) thì <b>mất nước</b>: Tướng rời bàn, tàn quân về tay người vừa đi nước cuối.</li>
+        <li>Nước cuối cùng còn Tướng <b>nhất thống thiên hạ</b>. 50 vòng không ăn quân, hoặc lặp thế ba lần, thì hòa.</li>
+        <li><b>Online</b>: xin hàng, hết giờ hay bỏ ván thì nước đó rút quân khỏi bàn, hai nước kia đánh tiếp.</li>
+        <li><b>Xếp hạng</b>: điểm Tam Quốc tính riêng. Mỗi cặp người chơi tính như một ván (ai về trên thì thắng, cùng hạng thì hòa), hệ số K giảm một nửa.</li>
+      </ul>
+    </div>
+    <div class="rpage" data-page="2" hidden>
+      <ul class="rules">
+        <li>Chạm một quân để xem nước đi, chạm điểm sáng để đi.</li>
+        <li>Kéo để xoay bàn; cuộn chuột hoặc chụm hai ngón để phóng to, thu nhỏ; nhấp đúp hoặc nút ↻ để đặt lại góc nhìn.</li>
+        <li>Nút ⚔ bật chế độ đội quân: mọi quân hiện thành chiến binh.</li>
+        <li>Trên điện thoại, vuốt bảng dưới xuống để thu gọn, vuốt lên để mở lại.</li>
+      </ul>
+    </div>
   </div>
 </div>
 

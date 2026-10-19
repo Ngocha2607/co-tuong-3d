@@ -5,6 +5,8 @@ import * as elo from '../worker/elo.js';
 import * as C from '../worker/clock.js';
 import { verifyGoogle, makeSession, readSession, b64u, cookieOf } from '../worker/auth.js';
 import * as R from '../worker/sg-game.js';
+import * as H from '../worker/hall.js';
+import * as Rooms from '../worker/rooms.js';
 import SG from '../src/sanguo.js';
 
 let failed = 0;
@@ -109,6 +111,93 @@ await test('three-kingdom room: clocks start after everyone moved once, then cha
   assert.strictEqual(R.charge(st, 1, 22000), false);
   st.away = [0, 21000, 0]; st.left = [9000, 600000, 9000];
   assert.deepStrictEqual(R.deadline(st), { at: 21000 + C.ABANDON_MS, kind: 'abandon', side: 1 });
+});
+
+// ---------- the hall of a friendly room ----------
+await test('hall: the host starts once every seat is taken, present and (the others) ready', () => {
+  const sides = [0, 1, 2], all = [true, true, true];
+  const st = { seats: ['a', 'b', null], host: 'a', ready: [false, false, false] };
+  assert.strictEqual(H.hostSide(st, sides), 0);
+  assert.strictEqual(H.waitingFor(st, sides, all), 'Chờ đủ người vào phòng');
+  st.seats[2] = 'c';
+  assert.strictEqual(H.waitingFor(st, sides, [true, false, true]), 'Có người đang mất kết nối');
+  assert.strictEqual(H.waitingFor(st, sides, all), 'Chờ mọi người sẵn sàng');
+  st.ready = [false, true, true];
+  assert.strictEqual(H.waitingFor(st, sides, all), '');          // the host needs no ready of their own
+  // after a rematch the seats turn: the host keeps the room wherever they sit
+  const turned = { seats: { 1: 'b', '-1': 'a' }, host: 'a', ready: { 1: true, '-1': false } };
+  assert.strictEqual(H.hostSide(turned, [1, -1]), -1);
+  assert.strictEqual(H.waitingFor(turned, [1, -1], { 1: true, '-1': true }), '');
+  assert.ok(H.validStage('room') && !H.validStage('nowhere'));
+});
+await test('hall: the host walks out, the next player still there takes the room over', () => {
+  const st = { seats: ['a', 'b', 'c'], host: 'a', ready: [false, true, true] };
+  assert.strictEqual(H.handOver(st, [0, 1, 2], [true, true, true]), false);
+  assert.ok(H.handOver(st, [0, 1, 2], [false, true, true]));
+  assert.strictEqual(st.host, 'b'); assert.deepStrictEqual(st.ready, [false, false, true]);
+  const alone = { seats: { 1: 'a', '-1': 'b' }, host: 'a', ready: { 1: false, '-1': true } };
+  assert.strictEqual(H.handOver(alone, [1, -1], { 1: false, '-1': false }), false);   // nobody left to take it
+});
+await test('hall: only the host asks a player to leave, who may not sit in that room again', () => {
+  const st = { phase: 'lobby', seats: ['a', 'b', 'c'], host: 'a', ready: [false, true, true], info: [null, { id: 7 }, null], heroes: ['', 'quan-vu', ''] };
+  assert.strictEqual(H.kick(st, [0, 1, 2], 1, 2), false);          // not the host
+  assert.strictEqual(H.kick(st, [0, 1, 2], 0, 0), false);          // the host stays
+  assert.ok(H.kick(st, [0, 1, 2], 0, 1));
+  assert.deepStrictEqual([st.seats, st.ready, st.info[1], st.heroes[1]], [['a', null, 'c'], [false, false, true], null, '']);
+  assert.ok(H.isBanned(st, 'b') && H.isBanned(st, 'new browser', { id: 7 }) && !H.isBanned(st, 'z', { id: 8 }));
+  assert.strictEqual(H.kick({ ...st, phase: 'play', seats: ['a', 'x', 'c'] }, [0, 1, 2], 0, 1), false);   // not during a game
+  const two = { phase: 'lobby', seats: { 1: 'a', '-1': 'b' }, host: 'a', ready: { 1: false, '-1': true }, info: { 1: null, '-1': null }, heroes: { 1: '', '-1': '' } };
+  assert.ok(H.kick(two, [1, -1], 1, -1));
+  assert.deepStrictEqual(two.seats, { 1: 'a', '-1': null });
+});
+await test('hall: a player leaves of their own accord; a host leaving hands the room on', () => {
+  const st = { phase: 'lobby', seats: ['a', 'b', 'c'], host: 'a', ready: [false, true, true], info: [{ id: 1 }, null, null], heroes: ['lu-bo', '', ''] };
+  assert.ok(H.leave(st, [0, 1, 2], 2, [true, true, true]));
+  assert.deepStrictEqual([st.seats, st.host, H.isBanned(st, 'c')], [['a', 'b', null], 'a', false]);   // no ban: they may come back
+  assert.ok(H.leave(st, [0, 1, 2], 0, [false, true, false]));
+  assert.deepStrictEqual([st.seats, st.host, st.ready, st.heroes[0]], [[null, 'b', null], 'b', [false, false, false], '']);
+  assert.ok(H.leave(st, [0, 1, 2], 1, [false, false, false]));
+  assert.strictEqual(st.host, '');                                  // nobody left: the next to sit runs the room
+  assert.strictEqual(H.leave(st, [0, 1, 2], 1, [false, false, false]), false);
+});
+await test('room list: players here out of the seats, waiting or playing, public rooms with someone in them', () => {
+  const st = { code: 'ABCD', phase: 'lobby', seats: { 1: 'a', '-1': 'b' }, host: 'a', info: { 1: { name: 'Hà' }, '-1': null }, stage: 'xich-bich', tc: { base: 600000, inc: 5000 } };
+  const l = H.listing(st, [1, -1], { 1: true, '-1': false }, 'xq');
+  assert.deepStrictEqual(l, { code: 'ABCD', v: 'xq', max: 2, count: 1, seated: 2, status: 'waiting', host: 'Hà', stage: 'xich-bich', tc: '10+5' });
+  assert.ok(H.listed(st, l));
+  assert.ok(!H.listed({ ...st, public: false }, l));
+  assert.ok(!H.listed({ ...st, rated: true }, l));
+  assert.ok(!H.listed(st, { ...l, count: 0 }));
+  assert.strictEqual(H.listing({ ...st, phase: 'play' }, [1, -1], {}, 'xq').status, 'playing');
+});
+await test('room list: many rooms, a page at a time, open ones first and the fullest of those first', () => {
+  const now = 10_000_000, rooms = [];
+  for (let i = 0; i < 600; i++) {
+    const v = i % 2 ? 'sg' : 'xq', max = v === 'sg' ? 3 : 2, status = i % 5 === 0 ? 'playing' : 'waiting';
+    rooms.push({ code: 'R' + String(i).padStart(4, '0'), v, max, seated: status === 'playing' ? max : 1 + (i % max), count: 1, status, host: i === 7 ? 'Hà Linh' : 'Khách', stage: 'room', tc: '', at: now - i * 1000 });
+  }
+  rooms.push({ code: 'OLD1', v: 'sg', max: 3, seated: 1, count: 1, status: 'waiting', host: '', at: now - Rooms.STALE_MS - 1 });   // gone quiet
+  const sg = Rooms.pick(rooms, { v: 'sg', f: 'open' }, now);
+  assert.strictEqual(sg.rooms.length, Rooms.PAGE);
+  assert.deepStrictEqual(sg.counts, { open: 160, playing: 60, all: 300 });   // a hall already full (3/3) is no open seat
+  assert.ok(sg.rooms.every(Rooms.isOpen));
+  assert.ok(sg.rooms[0].seated === 2 && sg.rooms[sg.rooms.length - 1].seated >= sg.rooms[sg.rooms.length - 1].seated);
+  for (let i = 1; i < sg.rooms.length; i++) assert.ok(Rooms.order(sg.rooms[i - 1], sg.rooms[i]) <= 0);
+  const next = Rooms.pick(rooms, { v: 'sg', f: 'open', from: 20, n: 20 }, now);
+  assert.ok(!next.rooms.some(r => sg.rooms.includes(r)));          // the next page holds other rooms
+  assert.strictEqual(Rooms.pick(rooms, { v: 'xq', f: 'playing', n: '50' }, now).rooms.length, 50);
+  assert.strictEqual(Rooms.pick(rooms, { v: 'xq', n: 999 }, now).rooms.length, Rooms.MAX_PAGE);
+  assert.deepStrictEqual(Rooms.pick(rooms, { v: 'sg', f: 'all', q: 'hà li' }, now).rooms.map(r => r.code), ['R0007']);   // by the host's name
+  assert.deepStrictEqual(Rooms.pick(rooms, { v: 'sg', q: 'r0011' }, now).rooms.map(r => r.code), ['R0011']);           // by the code
+  assert.strictEqual(Rooms.pick(rooms, { v: 'sg', n: 0 }, now).rooms.length, 0);                                         // counts only
+  assert.ok(!Rooms.pick(rooms, { v: 'sg', f: 'all', n: 50, q: 'old' }, now).rooms.length);
+});
+await test('hall: rooms saved before it existed keep playing, empty ones wait', () => {
+  assert.strictEqual(H.phaseOf({ moves: [1, 2] }), 'play');
+  assert.strictEqual(H.phaseOf({ hist: [3] }), 'play');
+  assert.strictEqual(H.phaseOf({ rated: true, moves: [] }), 'play');
+  assert.strictEqual(H.phaseOf({ moves: [] }), 'lobby');
+  assert.strictEqual(H.phaseOf({ phase: 'lobby', moves: [1] }), 'lobby');
 });
 
 // a stand-in for Google: our own RSA key signs the tokens

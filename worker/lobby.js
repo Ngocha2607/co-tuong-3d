@@ -5,6 +5,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { userOf } from './room.js';
 import { fits, trio } from './elo.js';
+import { pick, STALE_MS } from './rooms.js';
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const code = first => first + Array.from(crypto.getRandomValues(new Uint8Array(7)), b => CHARS[b % CHARS.length]).join('');
@@ -12,6 +13,9 @@ const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.f
 
 export class Lobby extends DurableObject {
   async fetch(req) {
+    const path = new URL(req.url).pathname;
+    if (path === '/room') return this.roomSays(await req.json());
+    if (path === '/rooms') return Response.json(await this.openRooms(Object.fromEntries(new URL(req.url).searchParams)), { headers: { 'cache-control': 'no-store' } });
     const user = userOf(req);
     if (!user) return new Response('sign in first', { status: 401 });
     const [client, server] = Object.values(new WebSocketPair());
@@ -21,6 +25,30 @@ export class Lobby extends DurableObject {
   }
 
   send(ws, o) { try { ws.send(JSON.stringify(o)); } catch (e) { } }
+
+  // ---------- the list of open friendly rooms ----------
+  // Each room tells how it stands (hall.js listing) whenever that changes, or that it is gone. Every room is kept under
+  // its own key ('r:<game>:<code>', so one room's news writes one small value however many rooms there are) and in
+  // memory, where the menu's frequent questions are answered (rooms.js picks the page). Entries not heard of for
+  // 3 hours are dropped: a room that went away without saying so.
+  async roomMap() {
+    if (!this.loading) this.loading = this.ctx.storage.list({ prefix: 'r:' }).then(m => { this.rooms = new Map(m); });
+    await this.loading;
+    return this.rooms;
+  }
+  async roomSays(r) {
+    if (!r || typeof r.code !== 'string' || !/^[A-Z0-9]{4,8}$/.test(r.code) || !['xq', 'sg'].includes(r.v)) return new Response('bad', { status: 400 });
+    const map = await this.roomMap(), key = `r:${r.v}:${r.code}`;
+    if (r.gone) { map.delete(key); await this.ctx.storage.delete(key); }
+    else { const e = { ...r, at: Date.now() }; map.set(key, e); await this.ctx.storage.put(key, e); }
+    return new Response('ok');
+  }
+  async openRooms(q) {
+    const map = await this.roomMap(), now = Date.now(), stale = [];
+    for (const [k, r] of map) if (now - r.at > STALE_MS) { map.delete(k); stale.push(k); }
+    for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));   // at most 128 keys a call
+    return pick([...map.values()], q, now);
+  }
   // everyone searching in queue v, longest waiting first
   seekers(v) {
     return this.ctx.getWebSockets().map(ws => ({ ws, a: ws.deserializeAttachment() })).filter(s => s.a && s.a.since && (!v || (s.a.v || 'xq') === v))

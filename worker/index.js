@@ -32,6 +32,7 @@ export default {
       const rooms = p === '/ws/sg' ? env.SGROOMS : env.ROOMS;
       return rooms.get(rooms.idFromName(room)).fetch(withUser(req, user));
     }
+    if (p === '/rooms') return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch('https://lobby/rooms' + url.search);   // open friendly rooms
     if (p === '/info') {
       const accounts = authReady(env);
       return Response.json({ online: true, accounts, clientId: accounts ? env.GOOGLE_CLIENT_ID : '', ranked: RANKED_TC }, { headers: { 'cache-control': 'no-store' } });
