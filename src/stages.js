@@ -1,6 +1,6 @@
 // stages.js — where the game is played: the board always sits on its table in the middle, the stage is everything
 // around it (sky, ground, distant scenery, its own light and fog, moving details). Built from code like the rest.
-// Each stage: build(ctx) -> { group, sky, fog, fogSpan, light, ambience, update(t, dt, camera) }; scene.js adds the
+// Each stage: build(ctx) -> { group, sky, fog, fogSpan, light, update(t, dt, camera) }; scene.js adds the
 // group and applies the light. ctx: { glowTex, low } (low = fewer particles on small or weak devices).
 // Scenery the camera may pass through (trees, tents) carries userData.clear, a radius: scene.js hides it while it
 // stands between the camera and the board.
@@ -63,7 +63,7 @@ const STAGES = (() => {
     const motes = specks(ctx, ctx.low ? 80 : 160, '#ffb36a', 0.09, [12, 0, 8], 0.55);   // dust in the lantern light
     group.add(motes);
     return {
-      group, sky: null, background: '#140d0a', fog: '#140d0a', fogSpan: 26, ambience: '',
+      group, sky: null, background: '#140d0a', fog: '#140d0a', fogSpan: 26,
       light: { hemi: ['#ffe2c0', '#2a1408', 0.8], key: ['#ffe9cc', 1.9], rim: ['#7fa4ff', 0.45] },
       update(t, dt) {
         for (const L of lanterns) { L.l.rotation.z = Math.sin(t / 1300 + L.ph) * 0.06; L.pl.intensity = 1.55 + Math.sin(t / 170 + L.ph) * 0.08 + Math.sin(t / 53 + L.ph) * 0.05; }
@@ -143,7 +143,7 @@ const STAGES = (() => {
     group.add(embers);
     const ep = embers.geometry.attributes.position;
     return {
-      group, sky: skyDome('#12060a', '#8a2a12', '#1a0808'), fog: '#2a0e0a', fogSpan: 60, ambience: 'river-fire',
+      group, sky: skyDome('#12060a', '#8a2a12', '#1a0808'), fog: '#2a0e0a', fogSpan: 60,
       light: { hemi: ['#ff9a6a', '#1a0606', 0.55], key: ['#ffc9a0', 1.35], rim: ['#ff6a3a', 0.6] },
       update(t, dt) {
         fires[0].intensity = 2.4 + Math.sin(t / 90) * 0.35 + Math.sin(t / 37) * 0.25;
@@ -222,7 +222,7 @@ const STAGES = (() => {
     let next = 4000, start = 0, from = new THREE.Vector3(), dir = new THREE.Vector3();
     const look = new THREE.Vector3();
     return {
-      group, sky: skyDome('#03050c', '#1f2c4c', '#070a10'), fog: '#0c1426', fogSpan: 58, ambience: 'night-wind',
+      group, sky: skyDome('#03050c', '#1f2c4c', '#070a10'), fog: '#0c1426', fogSpan: 58,
       light: { hemi: ['#5a6c9a', '#0a0c10', 0.75], key: ['#b8c8ff', 1.25], rim: ['#ff9a5a', 0.35] },
       update(t, dt, camera) {
         for (const f of fires) f.scale.setScalar(1.6 + Math.sin(t / 70 + f.id) * 0.25 + Math.sin(t / 29) * 0.12);
@@ -347,7 +347,7 @@ const STAGES = (() => {
       mist.push({ m, v: rnd(0.6, 1.4) });
     }
     return {
-      group, sky: skyDome('#4e5664', '#c4b49c', '#3a3630'), fog: '#77706a', fogSpan: 55, ambience: 'pass-war',
+      group, sky: skyDome('#4e5664', '#c4b49c', '#3a3630'), fog: '#77706a', fogSpan: 55,
       light: { hemi: ['#b8c0cc', '#3a3428', 0.9], key: ['#fff0dc', 1.45], rim: ['#9ab0ff', 0.3] },
       update(t, dt, camera) {
         faceBanners([lv, ...brothers], camera);
@@ -396,7 +396,7 @@ const STAGES = (() => {
     }
     const flies = specks(ctx, ctx.low ? 50 : 120, '#ffd890', 0.12, [30, -1, 6], 0.5); group.add(flies);   // dust motes in the low sun
     return {
-      group, sky: skyDome('#5a6a86', '#e2b070', '#4a3c26'), fog: '#9a7c58', fogSpan: 62, ambience: 'dust-wind',
+      group, sky: skyDome('#5a6a86', '#e2b070', '#4a3c26'), fog: '#9a7c58', fogSpan: 62,
       light: { hemi: ['#d8c098', '#3a2a18', 0.85], key: ['#ffd49a', 1.6], rim: ['#ffb070', 0.45] },
       update(t, dt, camera) {
         for (const R of riders) {
@@ -465,7 +465,7 @@ const STAGES = (() => {
     group.add(petals);
     const pp = pg.attributes.position;
     return {
-      group, sky: skyDome('#7aa4d6', '#f2e4d6', '#5a7a3a'), fog: '#d6d8d4', fogSpan: 70, ambience: 'spring',
+      group, sky: skyDome('#7aa4d6', '#f2e4d6', '#5a7a3a'), fog: '#d6d8d4', fogSpan: 70,
       light: { hemi: ['#fff4e8', '#4a5a30', 1.0], key: ['#fff2dc', 1.7], rim: ['#ffd6e0', 0.4] },
       update(t, dt) {
         for (let i = 0; i < n; i++) {
@@ -563,7 +563,7 @@ const STAGES = (() => {
     const sun = glow(ctx, '#ffd9a0', 30, 0.8); sun.material.fog = false; sun.position.set(60, 16, -55); group.add(sun);
     const birds = [bird(group), bird(group)];
     return {
-      group, sky: skyDome('#5d86c0', '#f3d9a8', '#8a9aa6'), fog: '#c4ccd2', fogSpan: 80, ambience: 'mountain',
+      group, sky: skyDome('#5d86c0', '#f3d9a8', '#8a9aa6'), fog: '#c4ccd2', fogSpan: 80,
       light: { hemi: ['#e8f0ff', '#3a4a2a', 0.95], key: ['#fff0d8', 1.6], rim: ['#ffc890', 0.45] },
       update(t, dt, camera) {
         drift(clouds, dt, 90); drift(high, dt * 0.5, 90);
@@ -644,7 +644,7 @@ const STAGES = (() => {
     const flies = specks(ctx, ctx.low ? 40 : 90, '#e8ff9a', 0.2, [24, -1, 4], 0.85); group.add(flies);
     const fp = flies.geometry.attributes.position, home = Float32Array.from(fp.array);
     return {
-      group, sky: skyDome('#5e7e66', '#d8d2a0', '#2e4424'), fog: '#71825a', fogSpan: 55, ambience: 'jungle',
+      group, sky: skyDome('#5e7e66', '#d8d2a0', '#2e4424'), fog: '#71825a', fogSpan: 55,
       light: { hemi: ['#e0f0c8', '#2a3a1a', 0.9], key: ['#fff0c8', 1.45], rim: ['#c8ff9a', 0.35] },
       update(t, dt, camera) {
         drift(mist, dt * 0.6, 70);
@@ -706,7 +706,7 @@ const STAGES = (() => {
     for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, m = add(group, new THREE.ConeGeometry(rnd(12, 20), rnd(10, 18), 5), flat('#6a5a4a'), Math.cos(a) * 82, -13.4, Math.sin(a) * 82); m.rotation.y = rnd(0, 3); }
     const dust = specks(ctx, ctx.low ? 60 : 140, '#ffd8a0', 0.13, [34, -12, 4], 0.5); group.add(dust);
     return {
-      group, sky: skyDome('#3e4466', '#eca266', '#7a6a48'), fog: '#b08a66', fogSpan: 80, ambience: 'zither',
+      group, sky: skyDome('#3e4466', '#eca266', '#7a6a48'), fog: '#b08a66', fogSpan: 80,
       light: { hemi: ['#ffe0c0', '#3a2a1a', 0.85], key: ['#ffc890', 1.5], rim: ['#8aa0ff', 0.35] },
       update(t, dt, camera) {
         for (const F of flags) F.f.rotation.y = Math.sin(t / 560 + F.ph) * 0.35;

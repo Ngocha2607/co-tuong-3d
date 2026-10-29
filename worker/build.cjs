@@ -29,7 +29,7 @@ function walk(rel) {
   }
 }
 walk('src');
-if (fs.existsSync(path.join(root, 'music'))) walk('music');   // the battlefields' music tracks (optional)
+if (fs.existsSync(path.join(root, 'music'))) walk('music');   // the battlefields' music tracks
 walk('icons');                                                // home-screen icons (manifest, apple-touch-icon)
 for (const page of ['index.html', 'privacy.html', 'terms.html', 'manifest.webmanifest']) copy(page);
 (function prune(dir) {

@@ -105,18 +105,21 @@ Máy chủ chỉ lưu mã tài khoản Google (`sub`) và tên hiển thị. Kh�
 
 ## Nhạc nền
 
-Mỗi bối cảnh có thể có nhạc riêng: đặt file vào thư mục `music/` (tạo nếu chưa có), đặt tên theo mã bối cảnh:
+Mỗi bối cảnh có một bài đàn tranh riêng trong thư mục `music/`, đặt tên theo mã bối cảnh. Mỗi file là một đoạn 2 phút cắt từ album *Hòa Tấu Đàn Tranh – Cực Độ Ma Tranh (2015)*, chỗ cuối nối êm (crossfade 4 giây) vào chỗ đầu để phát lặp, và được chỉnh cùng độ to (−18 LUFS, mp3 128 kbps):
 
-| Bối cảnh | File |
-|---|---|
-| Quân trướng | `music/room.mp3` |
-| Đào viên | `music/dao-vien.mp3` |
-| Hổ Lao quan | `music/ho-lao.mp3` |
-| Trường Bản | `music/truong-ban.mp3` |
-| Xích Bích | `music/xich-bich.mp3` |
-| Ngũ Trượng Nguyên | `music/ngu-truong.mp3` |
+| Bối cảnh | File | Đoạn trong file gốc |
+|---|---|---|
+| Quân trướng | `music/room.mp3` | 0:20 – 2:20 |
+| Đào viên | `music/dao-vien.mp3` | 51:15 – 53:15 |
+| Hổ Lao quan | `music/ho-lao.mp3` | 6:27 – 8:27 |
+| Trường Bản | `music/truong-ban.mp3` | 47:03 – 49:03 |
+| Xích Bích | `music/xich-bich.mp3` | 1:00:22 – 1:02:22 |
+| Ngũ Trượng Nguyên | `music/ngu-truong.mp3` | 32:44 – 34:44 |
+| Định Quân Sơn | `music/dinh-quan.mp3` | 1:09:35 – 1:11:35 |
+| Nam Man | `music/nam-man.mp3` | 20:24 – 22:24 |
+| Tây Thành | `music/tay-thanh.mp3` | 56:06 – 58:06 |
 
-Bối cảnh nào chưa có file thì dùng tiếng đàn tranh tự tạo như cũ, nên có thể thêm dần từng bài. Nhạc phát lặp, nhỏ dần rồi lớn dần khi đổi bối cảnh, và theo nút Nhạc nền trên thanh công cụ. Nên dùng file mp3 128 kbps, 1–3 MB, chỗ cuối bài nối êm vào chỗ đầu. Chỉ dùng nhạc bạn có quyền phát công khai (tự làm, mua license, hoặc giấy phép CC0 / miễn phí bản quyền).
+Nhạc phát lặp, nhỏ dần rồi lớn dần khi đổi bối cảnh, và theo nút Nhạc nền trên thanh công cụ. Muốn thay bài nào thì chép đè file cùng tên (mp3 128 kbps, 1–3 MB). Chỉ dùng nhạc bạn có quyền phát công khai (tự làm, mua license, hoặc giấy phép CC0 / miễn phí bản quyền).
 
 ## Luật
 
@@ -158,7 +161,7 @@ Trong ván có tính giờ, hoạt cảnh không lia camera cận cảnh, và kh
 | `src/stage-list.js` | Danh sách bối cảnh (tên, chữ Hán, phần thưởng), dùng chung cho trang web và server |
 | `src/stages.js` | Các bối cảnh quanh bàn cờ: bầu trời, mặt đất, cảnh xa, ánh sáng, sương mù, chuyển động |
 | `src/scene.js` | Cảnh 3D: camera, chọn quân, hiệu ứng, hoạt cảnh giao chiến; hai kiểu bàn (thường và lục giác Tam Quốc) |
-| `src/audio.js` | Âm thanh, nhạc nền ngũ cung và âm thanh nền của từng bối cảnh, tổng hợp bằng Web Audio |
+| `src/audio.js` | Âm thanh tổng hợp bằng Web Audio; phát nhạc nền `music/` |
 | `src/game.js` | Ván cờ, ván Tam Quốc, menu, chế độ online, đồng hồ, tìm trận xếp hạng, biên bản |
 | `src/account.js` | Nút đăng nhập Google, tên và điểm của người chơi, bảng xếp hạng, hồ sơ |
 | `worker/index.js` | Cloudflare Worker: định tuyến tới file tĩnh, API và các Durable Object |
