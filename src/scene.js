@@ -8,7 +8,7 @@ const VIEW = (() => {
   THREE.ColorManagement.legacyMode = false;
   const { DISC_H } = MODELS;
   const { N, R, B } = XQ;
-  let renderer, scene, camera, W = 1, H = 1, inset = 0;   // inset: px covered by the side panel on the right (negative: a column on the left)
+  let renderer, scene, camera, W = 1, H = 1, inset = 0, lift = 0;   // inset: px covered by the side panel on the right (negative: a column on the left); lift: px covered at the bottom
   const units = new Map();                 // square -> unit { piece, root, disc, war, sq }
 
   // ---------- layouts ----------
@@ -80,9 +80,9 @@ const VIEW = (() => {
   const cam = { theta: 0, phi: 0.98, dist: 16, tTheta: 0, tPhi: 0.98, tDist: 16, zoom: 1, tZoom: 1 };
   const HOME = new THREE.Vector3(0, -0.4, 0), focus = HOME.clone(), tFocus = HOME.clone();   // close-ups move the focus
   function fitDist() {
-    const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - Math.abs(inset)) / H;
+    const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - Math.abs(inset)) / H, room = (H - lift) / H;
     // portrait screens fit the board's width only; the trays beside it may leave the frame
-    return Math.max(L.fit[0] / v, (portrait() ? L.fit[1] : L.fit[2]) / (v * a)) * 1.02;
+    return Math.max(L.fit[0] / (v * room), (portrait() ? L.fit[1] : L.fit[2]) / (v * a)) * 1.02;
   }
   const portrait = () => W / H < 0.8;
   // on a portrait phone the controls cover the bottom of the screen: look more from above and aim below the
@@ -164,8 +164,8 @@ const VIEW = (() => {
   function resize() {
     W = innerWidth; H = innerHeight;
     renderer.setSize(W, H, false); camera.aspect = W / H;
-    // centre the board in the part of the screen the panel leaves free
-    if (inset) camera.setViewOffset(W, H, inset / 2, 0, W, H); else camera.clearViewOffset();
+    // centre the board in the part of the screen the panel (or the menu's dock) leaves free
+    if (inset || lift) camera.setViewOffset(W, H, inset / 2, lift / 2, W, H); else camera.clearViewOffset();
     camera.updateProjectionMatrix();
     cam.tDist = Math.max(cam.tDist, fitDist() * 0.6);
     if (!dragged) resetCamera();                         // re-frame on rotation (portrait <-> landscape)
@@ -753,7 +753,7 @@ const VIEW = (() => {
   return Object.assign(S, {
     init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
-    setInset(px) { if (px === inset) return; inset = px; if (renderer) resize(); },
+    setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },
   });
 })();

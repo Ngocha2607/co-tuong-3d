@@ -31,7 +31,7 @@
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // a signed-in player's hero and stage follow them: each pick is saved to the account
   const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0 };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq' };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!Array.isArray(pref.sgSeats) || pref.sgSeats.length !== 3 || pref.sgSeats.some(v => v !== 0 && v !== 1)) pref.sgSeats = [0, 1, 1];
   if (!HEROES.valid(pref.hero)) pref.hero = '';
@@ -1099,12 +1099,14 @@
     frameBoard();
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
-  // the board's framing: clear of the side panel in a game (on the right), of the menu's column over the menu (on the left),
-  // as wide as the page shown in it
+  // the board's framing: clear of the side panel in a game (on the right); over the menu, risen clear of the home
+  // page's dock, or else clear of the menu's column (on the left), as wide as the page shown in it
   function frameBoard() {
-    if (innerWidth <= 760 || hallOpen) VIEW.setInset(0);
-    else if (G.mode !== 'menu') VIEW.setInset(332);
-    else if ($('#menu').hidden) VIEW.setInset(0);
+    const menu = !$('#menu').hidden, home = menu && curView === 'home' && !document.body.dataset.page;
+    if (hallOpen) VIEW.setInset(0);
+    else if (G.mode !== 'menu') VIEW.setInset(innerWidth > 760 ? 332 : 0);
+    else if (home) VIEW.setInset(0, Math.max(0, Math.round(innerHeight - $('#menu .dock').getBoundingClientRect().top)));
+    else if (!menu || innerWidth <= 760) VIEW.setInset(0);
     else VIEW.setInset(-Math.round($(`#${document.body.dataset.page || 'menu'} .card`).getBoundingClientRect().right));
   }
   function showMenu(on) {
@@ -1286,7 +1288,17 @@
   seg('#segSgTc', pref.sgTc, v => { pref.sgTc = v; savePref(); });
   renderSgNote();
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; SFX.init(); SFX.pick(); menuView(b.dataset.go); });
-  // a game card's picture plays the computer at once, as set up on that game's Với máy page
+  // the home dock's tabs: which game its buttons are for, remembered
+  function gameTab(v) {
+    document.querySelectorAll('#gameTabs button').forEach(b => { const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    document.querySelectorAll('.dock .game').forEach(g => { g.hidden = g.dataset.game !== v; });
+  }
+  $('#gameTabs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.dataset.v === pref.game) return;
+    SFX.init(); SFX.pick(); pref.game = b.dataset.v; savePref(); gameTab(pref.game);
+  });
+  gameTab(pref.game === 'sg' ? 'sg' : 'xq');
+  // Chơi ngay plays the computer at once, as set up on that game's Với máy page (its ⚙)
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-play]'); if (!b) return; SFX.init(); $(b.dataset.play === 'sg' ? '#bPlaySg' : '#bPlayAI').click(); });
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && !$('#musicPop').hidden) { musicPop(false); $('#bMusic').focus(); return; }
@@ -1429,7 +1441,7 @@
   };
   $('#bRules').addEventListener('click', () => {
     SFX.init(); SFX.pick();
-    const sg = G.mode === 'sanguo' || (!$('#menu').hidden && [...document.querySelectorAll('#menu .view')].some(v => !v.hidden && /^(sanguo|sg-)/.test(v.dataset.view)));
+    const sg = G.mode === 'sanguo' || (!$('#menu').hidden && (/^sg-/.test(curView) || (curView === 'home' && pref.game === 'sg')));
     rulesTab(sg ? 1 : 0); $('#rules').hidden = false;
   });
   // the navbar over the menu: the ways to play, the campaign, the leaderboard, heroes and battlefields, the rules
@@ -1561,9 +1573,9 @@
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();
     $('#boot').remove();
-    // the game cards' pictures: the heroes rendered once, just after the board is up
+    // the dock's heroes: rendered once, just after the board is up
     setTimeout(() => {
-      const art = PORTRAITS.render(440, 300);
+      const art = PORTRAITS.render(400, 340);
       if (art) [['#artXq', art.xq], ['#artSg', art.sg]].forEach(([el, url]) => { $(el).src = url; $(el).hidden = false; });
     }, 50);
     let info = null;
