@@ -111,7 +111,7 @@ Mỗi bối cảnh có một bài đàn tranh riêng trong thư mục `music/`, 
 |---|---|---|
 | Quân trướng | `music/room.mp3` | 0:20 – 2:20 |
 | Đào viên | `music/dao-vien.mp3` | 51:15 – 53:15 |
-| Hổ Lao quan | `music/ho-lao.mp3` | 6:27 – 8:27 |
+| Hổ Lao quan | `music/ho-lao.mp3` | 37:15 – 39:15 |
 | Trường Bản | `music/truong-ban.mp3` | 47:03 – 49:03 |
 | Xích Bích | `music/xich-bich.mp3` | 1:00:22 – 1:02:22 |
 | Ngũ Trượng Nguyên | `music/ngu-truong.mp3` | 32:44 – 34:44 |
