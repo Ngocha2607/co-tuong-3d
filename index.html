@@ -321,37 +321,40 @@
   .vhead { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
   .card .vhead h2 { font: 700 21px/1.2 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
   .view > section .seg + h2 { margin-top: 6px; }
-  /* the home page's game cards: the heroes' picture (portraits.js) over the kingdoms' glow, then the ways to play */
-  .games { display: grid; gap: 12px; }
-  .game { border-radius: 14px; border: 1px solid var(--line); background: rgba(26, 15, 10, 0.78); backdrop-filter: blur(6px); overflow: hidden; }
-  .game .art { position: relative; display: block; width: 100%; height: 116px; padding: 0; border: 0; overflow: hidden; color: var(--ink); text-align: left; cursor: pointer;
-    background: radial-gradient(ellipse 55% 85% at 22% 100%, rgba(200, 49, 42, 0.5), transparent 70%), radial-gradient(ellipse 55% 85% at 78% 100%, rgba(58, 83, 120, 0.6), transparent 70%), linear-gradient(180deg, #2a1810, #120a07); }
-  .game.sg .art { background: radial-gradient(ellipse 40% 85% at 15% 100%, rgba(200, 49, 42, 0.5), transparent 70%), radial-gradient(ellipse 40% 85% at 50% 100%, rgba(90, 96, 112, 0.55), transparent 70%), radial-gradient(ellipse 40% 85% at 85% 100%, rgba(46, 122, 79, 0.55), transparent 70%), linear-gradient(180deg, #2a1810, #120a07); }
-  .game .art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: right bottom; transform-origin: right bottom; transition: transform 400ms; z-index: 1; }
-  .game .art:hover img { transform: scale(1.06); }
-  .game .art:focus-visible, .act:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
-  .game .wm { position: absolute; top: 8px; right: 10px; writing-mode: vertical-rl; font: 700 17px/1 var(--han); letter-spacing: 0.15em; color: rgba(227, 180, 72, 0.22); }
-  /* the left of the picture is the card's: its name at the top, Chơi ngay at the bottom; the heroes stand right of it */
-  .game .cap { position: absolute; left: 0; top: 0; z-index: 2; padding: 10px 12px; }
-  .game .cap b { display: block; font: 700 18px/1.1 var(--serif); text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
-  .game .cap small { color: var(--gold); font-weight: 600; font-size: 11.5px; }
-  .game .play { position: absolute; z-index: 2; left: 12px; bottom: 10px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(180deg, #d63b2f, #a3201a); border: 1px solid #e0574c; color: #fff4e2; font-weight: 700; font-size: 12px; box-shadow: 0 6px 18px rgba(200, 49, 42, 0.4); transition: transform 150ms; }
-  .game .art:hover .play { transform: scale(1.06); }
-  /* the ways to play, a bar of equal buttons under the picture: the character and name, the setting or count below */
-  .acts { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border-top: 1px solid var(--line); }
-  .acts > div { display: contents; }
-  .act { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 7px 3px 6px; border: 0; border-left: 1px solid var(--line); background: none; color: var(--ink); cursor: pointer; transition: background 150ms; }
-  .acts > .act:first-child { border-left: 0; }
-  .act:hover { background: rgba(245, 233, 212, 0.08); }
-  .act b { display: flex; align-items: center; gap: 5px; font: 700 12.5px/1.2 var(--serif); white-space: nowrap; }
-  .act .hz { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 1.5px currentColor; font: 700 10.5px/1 var(--han); }
-  .act small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11px; }
-  /* side by side where the screen is wide enough, the column widening for them */
-  @media (min-width: 1100px) {
-    #menu[data-at="home"] .card { width: min(600px, 100%); }
-    .games { grid-template-columns: 1fr 1fr; }
-  }
-  #bResume { margin-bottom: 2px; }
+  /* the home page: the board free in the middle, a dock at the bottom; over the menu proper the scene takes the
+     clicks around the dock, so the board can be turned */
+  #menu[data-at="home"] { align-items: flex-end; justify-content: center; padding-bottom: calc(34px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(0deg, rgba(14, 8, 6, 0.9) 0%, rgba(14, 8, 6, 0.45) 24%, rgba(14, 8, 6, 0) 46%); }
+  body[data-mode="menu"] #menu[data-at="home"] { pointer-events: none; }
+  body[data-mode="menu"] #menu[data-at="home"] :is(.card, .legal) { pointer-events: auto; }
+  #menu[data-at="home"] .card { width: min(820px, 100%); margin: 0 auto; }
+  #menu[data-at="home"] .legal { left: 50%; transform: translateX(-50%); white-space: nowrap; }
+  .dock { position: relative; display: grid; gap: 10px; padding: 10px 14px 14px 178px; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(180deg, rgba(30, 17, 11, 0.9), rgba(14, 8, 6, 0.96)); backdrop-filter: blur(8px); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45); }
+  .dock .note:empty { display: none; }
+  .dtop { display: flex; align-items: center; gap: 10px; }
+  .dtabs { display: flex; gap: 6px; }
+  .dtabs button { display: flex; align-items: center; gap: 7px; padding: 4px 14px 4px 4px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--dim); font: 700 13px/1.2 var(--ui); cursor: pointer; transition: background 150ms, color 150ms; }
+  .dtabs button:hover { color: var(--ink); border-color: var(--gold-soft); }
+  .dtabs button.on { background: var(--gold); border-color: var(--gold); color: #2a1408; }
+  .dtabs .hz, .act .hz { flex: none; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 1.5px currentColor; font: 700 13px/1 var(--han); width: 24px; height: 24px; }
+  #bResume { margin-left: auto; padding: 6px 14px; }
+  /* a game's row: Chơi ngay and its ⚙, Phòng chơi, Xếp hạng; its heroes stand in the dock's left, above its top edge */
+  .game { display: grid; grid-template-columns: minmax(0, 1.5fr) 50px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  #onlineBox, #sgOnlineBox { display: contents; }
+  .game .art { position: absolute; left: 8px; bottom: 10px; width: 164px; height: 176px; pointer-events: none; }
+  .game .art img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)); }
+  .game .play { display: grid; align-content: center; gap: 2px; padding: 9px 16px; border-radius: 12px; border: 1px solid #e0574c; background: linear-gradient(180deg, #d63b2f, #a3201a); color: #fff4e2; text-align: left; cursor: pointer; box-shadow: 0 6px 20px rgba(200, 49, 42, 0.35); transition: filter 150ms, transform 150ms; }
+  .game .play:hover { filter: brightness(1.1); }
+  .game .play:active { transform: translateY(1px); }
+  .game .play b { font: 700 17px/1.15 var(--serif); letter-spacing: 0.02em; }
+  .game .play small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ffd9c9; font-size: 12px; }
+  .game .gear { width: auto; height: auto; border-radius: 12px; }
+  .act { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(245, 233, 212, 0.05); color: var(--ink); text-align: left; cursor: pointer; transition: border-color 150ms, background 150ms; }
+  .act:hover { border-color: var(--gold); background: rgba(245, 233, 212, 0.09); }
+  .act > span:last-child { display: grid; min-width: 0; }
+  .act b { font: 700 14px/1.2 var(--serif); white-space: nowrap; }
+  .act small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11.5px; }
+  .dtabs button:focus-visible, .game .play:focus-visible, .act:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   #account { margin-top: 4px; padding: 14px 0 0; border-top: 1px solid var(--line); }
   .me .meta { flex: 1; min-width: 0; }
   .me .meta small { display: block; }
@@ -438,7 +441,15 @@
     #top { padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px; gap: 8px; flex-wrap: wrap; }
     .brand b { display: none; }
     body.in-menu .brand b { display: block; }   /* no status beside it over the menu: room for the name */
-    .game .art { height: 108px; }
+    /* the dock on a phone: the tabs over Chơi ngay (its ⚙ inside it), then Phòng chơi and Xếp hạng; the heroes stand
+       on the dock's top edge, at its right */
+    #menu[data-at="home"] { padding: 0 8px calc(30px + env(safe-area-inset-bottom, 0px)); }
+    .dock { padding: 10px; gap: 8px; }
+    .game { position: relative; grid-template-columns: 1fr 1fr; }
+    .game .play { grid-column: 1 / -1; padding-right: 60px; }
+    .game .gear { position: absolute; top: 6px; right: 6px; width: 44px; height: 44px; }
+    .game .art { left: auto; right: 6px; bottom: calc(100% + 34px); width: 150px; height: 104px; }
+    .act { padding: 8px 10px; }
     #status { order: 3; flex-basis: 100%; text-align: center; font-size: 14px; }
     .tools { margin-left: auto; }
     .icon { width: 36px; height: 36px; }
@@ -602,33 +613,34 @@
 <div id="menu" class="overlay" hidden>
   <div class="card">
 
-    <!-- home: a card for each game, its picture (portraits.js, a click plays the computer at once) over a bar of the
-         ways to play it, each opening its own page -->
+    <!-- home: a dock at the bottom, the board free above it. Tabs pick the game; its heroes (portraits.js) stand on
+         the dock's edge beside Chơi ngay (the computer, as set up behind ⚙), Phòng chơi and Xếp hạng -->
     <div class="view" data-view="home">
-      <button class="btn gold wide" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
-      <div class="games">
-        <article class="game xq">
-          <button class="art" type="button" data-play="xq" aria-label="Cờ tướng: chơi ngay với máy"><img id="artXq" alt="" hidden><span class="wm">楚河漢界</span><span class="cap"><b>Cờ tướng</b><small>2 người chơi</small></span><span class="play">▶ Chơi ngay</span></button>
-          <div class="acts">
-            <button class="act" type="button" data-go="xq-ai"><b><span class="hz">弈</span>Với máy</b><small id="xqAiNote"></small></button>
-            <div id="onlineBox">
-              <button class="act" type="button" data-go="xq-rooms"><b><span class="hz">友</span>Phòng chơi</b><small id="xqRoomsNote">Mời bạn bè</small></button>
-              <button class="act" type="button" data-go="xq-ranked" id="rankedBox" hidden><b><span class="hz">榜</span>Xếp hạng</b><small id="xqRankNote"></small></button>
-            </div>
+      <div class="dock">
+        <div class="dtop">
+          <div class="dtabs" id="gameTabs" role="tablist"><button type="button" role="tab" data-v="xq"><span class="hz">象</span>Cờ tướng</button><button type="button" role="tab" data-v="sg"><span class="hz">三</span>Tam Quốc</button></div>
+          <button class="btn gold" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
+        </div>
+        <div class="game xq" data-game="xq">
+          <div class="art" aria-hidden="true"><img id="artXq" alt="" hidden></div>
+          <button class="play" type="button" data-play="xq"><b>▶ Chơi ngay</b><small>Với máy · <span id="xqAiNote"></span></small></button>
+          <button class="icon gear" type="button" data-go="xq-ai" title="Tùy chỉnh ván với máy" aria-label="Tùy chỉnh ván với máy"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
+          <div id="onlineBox">
+            <button class="act rooms" type="button" data-go="xq-rooms"><span class="hz">友</span><span><b>Phòng chơi</b><small id="xqRoomsNote">Mời bạn bè</small></span></button>
+            <button class="act rank" type="button" data-go="xq-ranked" id="rankedBox" hidden><span class="hz">榜</span><span><b>Xếp hạng</b><small id="xqRankNote"></small></span></button>
           </div>
-        </article>
-        <article class="game sg">
-          <button class="art" type="button" data-play="sg" aria-label="Tam Quốc: chơi ngay với máy"><img id="artSg" alt="" hidden><span class="wm">三國</span><span class="cap"><b>Tam Quốc</b><small>3 người chơi</small></span><span class="play">▶ Chơi ngay</span></button>
-          <div class="acts">
-            <button class="act" type="button" data-go="sg-ai"><b><span class="hz">弈</span>Với máy</b><small id="sgAiNote"></small></button>
-            <div id="sgOnlineBox">
-              <button class="act" type="button" data-go="sg-rooms"><b><span class="hz">友</span>Phòng chơi</b><small id="sgRoomsNote">Mời bạn bè</small></button>
-              <button class="act" type="button" data-go="sg-ranked" id="sgRankedBox" hidden><b><span class="hz">榜</span>Xếp hạng</b><small id="sgRankNote"></small></button>
-            </div>
+        </div>
+        <div class="game sg" data-game="sg" hidden>
+          <div class="art" aria-hidden="true"><img id="artSg" alt="" hidden></div>
+          <button class="play" type="button" data-play="sg"><b>▶ Chơi ngay</b><small>Với máy · <span id="sgAiNote"></span></small></button>
+          <button class="icon gear" type="button" data-go="sg-ai" title="Tùy chỉnh ván với máy" aria-label="Tùy chỉnh ván với máy"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
+          <div id="sgOnlineBox">
+            <button class="act rooms" type="button" data-go="sg-rooms"><span class="hz">友</span><span><b>Phòng chơi</b><small id="sgRoomsNote">Mời bạn bè</small></span></button>
+            <button class="act rank" type="button" data-go="sg-ranked" id="sgRankedBox" hidden><span class="hz">榜</span><span><b>Xếp hạng</b><small id="sgRankNote"></small></span></button>
           </div>
-        </article>
+        </div>
+        <p class="note" id="onlineNote"></p>
       </div>
-      <p class="note" id="onlineNote"></p>
     </div>
     <div class="view" data-view="xq-ai" hidden>
       <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Đánh với máy</h2></div>

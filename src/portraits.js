@@ -1,4 +1,4 @@
-// portraits.js — the pictures on the menu's game cards: the heroes themselves (models.js), posed and rendered once into
+// portraits.js — the heroes on the menu's dock: the heroes themselves (models.js), posed and rendered once into
 // still images with a renderer of their own that is let go straight after, so it holds no WebGL context afterwards
 'use strict';
 const PORTRAITS = (() => {
@@ -30,8 +30,8 @@ const PORTRAITS = (() => {
       group.add(war);
     }
     scene.add(group); group.updateMatrixWorld(true);
-    // frame the figures tight (their banners may run out at the top), seen a little from below; the card sets the
-    // picture in its bottom right corner, the card's name and Chơi ngay on its left
+    // frame the figures tight (their banners may run out at the top), seen a little from below; the dock stands them
+    // on its edge, the picture's bottom
     const box = new THREE.Box3();
     for (const war of group.children) box.expandByObject(war.userData.fig);
     const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
