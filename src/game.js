@@ -1096,17 +1096,30 @@
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
-    VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 && !hallOpen ? 332 : 0);
+    frameBoard();
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
+  }
+  // the board's framing: clear of the side panel in a game (on the right), of the menu's column over the menu (on the left),
+  // as wide as the page shown in it
+  function frameBoard() {
+    if (innerWidth <= 760 || hallOpen) VIEW.setInset(0);
+    else if (G.mode !== 'menu') VIEW.setInset(332);
+    else if ($('#menu').hidden) VIEW.setInset(0);
+    else VIEW.setInset(-Math.round($(`#${document.body.dataset.page || 'menu'} .card`).getBoundingClientRect().right));
   }
   function showMenu(on) {
     $('#menu').hidden = !on;
+    document.body.classList.toggle('in-menu', on);
+    if (!on) mePop(false);
+    frameBoard();
     $('#bResume').hidden = !(on && G.mode !== 'menu');
     if (on) { menuView('home'); VIEW.setMenu(G.mode === 'menu'); }
   }
   // the menu's pages: 'home' lists the ways to play, the others hold each one's options
+  let curView = 'home';
   function menuView(name) {
     document.querySelectorAll('#menu .view').forEach(v => { v.hidden = v.dataset.view !== name; });
+    $('#menu').dataset.at = curView = name; navMark(); frameBoard();   // the home page's column is wider
     $('#menu .legal').hidden = name !== 'home';             // the legal links only beside the short home page
     $('#menu').scrollTop = 0;
     clearTimeout(roomsT); loadRooms();
@@ -1114,7 +1127,7 @@
   // ---------- the open friendly rooms (worker/lobby.js, rooms.js) ----------
   // The Phòng chơi page of each game: a filter (a free seat, playing, all, each with how many rooms it holds), a search
   // by code or host's name, a page of rooms at a time with Xem thêm for more, and Vào nhanh into the best free seat.
-  // Fetched every few seconds while that page is open; the page before it only shows the counts.
+  // Fetched every few seconds while that page is open; the home page only shows each game's counts, less often.
   let roomsT = 0, roomsAsk = 0;
   const ROOM_STATUS = { waiting: 'Chờ kiện tướng', playing: 'Đang chiến đấu' }, TC_LABEL = { '10+5': '10′ + 5s', '5+3': '5′ + 3s' };
   const ROOM_F = ['open', 'playing', 'all'], ROOM_PAGE = 20;
@@ -1124,16 +1137,21 @@
   };
   const askRooms = async q => (await fetch('rooms?' + new URLSearchParams(q), { cache: 'no-store' })).json();
   async function loadRooms() {
-    const page = ['xq', 'xq-rooms', 'sanguo', 'sg-rooms'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
+    const page = ['home', 'xq-rooms', 'sg-rooms'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
     if ($('#menu').hidden || !page || !G.online) return;
-    const v = page.startsWith('xq') ? 'xq' : 'sg', ui = roomUi[v], full = page.endsWith('rooms'), id = ++roomsAsk;
+    const id = ++roomsAsk, home = page === 'home', ui = home ? null : roomUi[page.slice(0, 2)];
     try {
-      const r = await askRooms(full ? { v, f: ROOM_F[ui.f], q: $(ui.input).value.trim(), n: ui.n } : { v, n: 0 });
-      if (id !== roomsAsk) return;                          // a newer question went out meanwhile
-      const c = r.counts;
-      if (full) renderRooms(ui, r); else $(ui.note).textContent = c.all ? `${c.all} phòng đang mở${c.open ? ` · ${c.open} còn chỗ` : ''} · hoặc tạo phòng mới` : 'Chưa có phòng nào: tạo phòng mời bạn bè';
-    } catch (e) { if (full) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>'; }
-    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, 4000);
+      if (home) {   // just how many rooms each game has open, beside its Phòng chơi
+        const rs = await Promise.all(['xq', 'sg'].map(v => askRooms({ v, n: 0 })));
+        if (id !== roomsAsk) return;                        // a newer question went out meanwhile
+        rs.forEach(({ counts: c }, i) => { $(roomUi[i ? 'sg' : 'xq'].note).textContent = c.all ? `${c.all} phòng${c.open ? ` · ${c.open} còn chỗ` : ''}` : 'Mời bạn bè'; });
+      } else {
+        const r = await askRooms({ v: page.slice(0, 2), f: ROOM_F[ui.f], q: $(ui.input).value.trim(), n: ui.n });
+        if (id !== roomsAsk) return;
+        renderRooms(ui, r);
+      }
+    } catch (e) { if (ui) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>'; }
+    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, home ? 15000 : 4000);
   }
   function renderRooms(ui, { rooms: list, total, counts: c }) {
     const searching = !!$(ui.input).value.trim();
@@ -1248,13 +1266,10 @@
     mark(value);
     el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); mark(+b.dataset.v); onPick(+b.dataset.v); });
   }
-  // the home page's lines under the two- and three-player games: the computer game as set up, and whether online is there
-  let onlineThere = false;
-  const andOnline = () => (onlineThere ? ' · hoặc chơi online' : '');
+  // the home page's game cards: beside Đánh với máy, the computer game as set up
   const renderAINote = () => {
     const side = pref.side > 0 ? 'Đỏ' : 'Đen', level = ['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường';
-    $('#aiNote').textContent = `Với máy: quân ${side}, ${level.toLowerCase()}${andOnline()}`;
-    $('#xqAiNote').textContent = `Quân ${side} · ${level}`;
+    $('#xqAiNote').textContent = `${side} · ${level}`;
   };
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); renderAINote(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
@@ -1263,8 +1278,7 @@
   // the three-kingdom page: who leads each kingdom, and how strong the computer is
   const renderSgNote = () => {
     const people = pref.sgSeats.map((v, k) => (v ? -1 : k)).filter(k => k >= 0);
-    const who = people.length === 1 ? `Bạn cầm ${KNAME[people[0]]}, hai nước kia là máy` : people.length ? `${people.length} người chung một máy` : 'Xem ba máy tranh hùng';
-    $('#sgNote').textContent = (people.length === 1 ? `Với máy: bạn cầm ${KNAME[people[0]]}` : people.length ? `${people.length} người chung một máy` : 'Xem ba máy tranh hùng') + andOnline();
+    const who = people.length === 1 ? KNAME[people[0]] : people.length ? `${people.length} người` : 'Ba máy';
     $('#sgAiNote').textContent = `${who} · ${['Dễ', 'Thường', 'Khó'][pref.sgLevel] || 'Thường'}`;
   };
   [0, 1, 2].forEach(k => seg('#seat' + k, pref.sgSeats[k], v => { pref.sgSeats[k] = v; savePref(); renderSgNote(); }));
@@ -1272,21 +1286,22 @@
   seg('#segSgTc', pref.sgTc, v => { pref.sgTc = v; savePref(); });
   renderSgNote();
   $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return; SFX.init(); SFX.pick(); menuView(b.dataset.go); });
+  // a game card's picture plays the computer at once, as set up on that game's Với máy page
+  $('#menu').addEventListener('click', e => { const b = e.target.closest('[data-play]'); if (!b) return; SFX.init(); $(b.dataset.play === 'sg' ? '#bPlaySg' : '#bPlayAI').click(); });
   addEventListener('keydown', e => {
     if (e.key === 'Escape' && !$('#musicPop').hidden) { musicPop(false); $('#bMusic').focus(); return; }
+    if (e.key === 'Escape' && !$('#mePop').hidden && !e.target.closest('#renameForm')) { mePop(false); $('#navMe').focus(); return; }
     if (e.key === 'Escape' && !$('#rules').hidden) { $('#rules').hidden = true; return; }
+    // over the menu Escape steps back out of a flat page too: the briefing to the campaign, the others to the menu
+    if (e.key === 'Escape' && document.body.classList.contains('in-menu') && /^(brief|campaign|ranks)$/.test(document.body.dataset.page)) {
+      if (!$('#brief').hidden) $('#brief').hidden = true; else closePages();
+      return;
+    }
     if (e.key !== 'Escape' || $('#menu').hidden || !$('#campaign').hidden || !$('#ranks').hidden || !$('#seek').hidden) return;
     const back = document.querySelector('#menu .view:not([hidden]) .vhead [data-go]');
     if (back) menuView(back.dataset.go);
     else if (G.mode !== 'menu') showMenu(false);
   });
-  // the home page's line about the picked hero and battlefield
-  function renderArmyNote() {
-    const h = HEROES.byId[myHero()], s = STAGES.byId[myStage()];
-    $('#armyHz').textContent = h ? h.han : '帥';
-    $('#armyNote').textContent = `${h ? h.name : 'Tướng quân'} · ${s.name}`;
-  }
-
   // hero picker: the general piece of the player's side becomes this hero
   function renderHeroes() {
     const cur = myHero();
@@ -1294,7 +1309,6 @@
     const h = HEROES.byId[cur];
     $('#heroNote').textContent = h ? `${h.name}${h.kingdom ? ' · nhà ' + h.kingdom : ''}: ${h.look}.`
       : 'Chọn một danh tướng: quân Tướng của bạn sẽ hóa thành người đó, và bóng của họ phủ lên bàn cờ khi bạn chiếu tướng.';
-    renderArmyNote();
   }
   $('#heroes').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1319,7 +1333,6 @@
     const cur = myStage();
     $('#segStage').innerHTML = stagePicks(cur);
     $('#stageNote').textContent = STAGES.byId[cur].note;
-    renderArmyNote();
   }
   $('#segStage').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.dataset.id === myStage()) return;
@@ -1329,15 +1342,9 @@
     SFX.pick(); if (G.mode !== 'campaign') VIEW.setStage(pref.stage);   // a battle keeps its own battlefield
   });
   renderStages();
-  // the campaign: its pages live in campaign-ui.js; battles start here
-  function renderCampaignEntry() {
-    const u = CAMPAIGN_UI.unlocked(), done = CAMPAIGN_UI.progress(), next = CAMPAIGN.LEVELS.find(l => u.levels.has(l.id) && !done[l.id]);
-    $('#campNote').textContent = `${u.total}/${CAMPAIGN.MAX_STARS} sao · ` + (next ? `Trận kế tiếp: ${next.name}` : 'Đã thắng mọi trận, hãy săn đủ sao!');
-  }
+  // the campaign: its pages live in campaign-ui.js (opened from the navbar); battles start here
   CAMPAIGN_UI.init({ toast, onStart: startCampaign });
-  CAMPAIGN_UI.onChange(() => { renderHeroes(); renderStages(); renderCampaignEntry(); });
-  renderCampaignEntry();
-  $('#bCampaign').addEventListener('click', () => { SFX.init(); SFX.pick(); CAMPAIGN_UI.open(); });
+  CAMPAIGN_UI.onChange(() => { renderHeroes(); renderStages(); });
   $('#bEndRetry').addEventListener('click', () => { if (G.lv) startCampaign(G.lv.id); });
   $('#bEndMap').addEventListener('click', () => { showEnd(false); CAMPAIGN_UI.open(); });
   $('#bRanked').addEventListener('click', () => seek());
@@ -1362,8 +1369,8 @@
       CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
     }
     $('#bRanked').disabled = $('#bSgRanked').disabled = !u;
-    $('#xqRankNote').textContent = u ? `Điểm của bạn: ${u.rating} · mỗi bên 10 phút` : 'Đăng nhập để chơi xếp hạng';
-    $('#sgRankNote').textContent = u ? `Điểm Tam Quốc: ${u.sg_rating || 1200} · ghép ba người` : 'Đăng nhập để chơi xếp hạng';
+    $('#xqRankNote').textContent = u ? `${u.rating} điểm` : 'Cần đăng nhập';
+    $('#sgRankNote').textContent = u ? `${u.sg_rating || 1200} điểm` : 'Cần đăng nhập';
     $('#sgRankedNote').textContent = u ? `Ghép ba người có điểm Tam Quốc gần nhau${u.sg_rating ? ` (bạn: ${u.sg_rating})` : ''}. Mỗi nước 10 phút, cộng 5 giây sau mỗi nước.` : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
     $('#rankedNote').textContent = u ? 'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.' : 'Đăng nhập Google ở màn hình chính để chơi xếp hạng.';
   });
@@ -1425,9 +1432,44 @@
     const sg = G.mode === 'sanguo' || (!$('#menu').hidden && [...document.querySelectorAll('#menu .view')].some(v => !v.hidden && /^(sanguo|sg-)/.test(v.dataset.view)));
     rulesTab(sg ? 1 : 0); $('#rules').hidden = false;
   });
+  // the navbar over the menu: the ways to play, the campaign, the leaderboard, heroes and battlefields, the rules
+  $('#nav').addEventListener('click', e => {
+    const b = e.target.closest('[data-nav]'), go = b && b.dataset.nav;
+    if (!go) return;
+    closePages();
+    if (go === 'rules') { $('#bRules').click(); return; }
+    SFX.init(); SFX.pick();
+    if (go === 'campaign') CAMPAIGN_UI.open();
+    else if (go === 'ranks') ACCOUNT.openRanks(0);
+    else menuView(go);
+  });
+  // the dialogs that lie flat in the menu's column over the menu (index.html): the first one open is the page shown,
+  // and the navbar marks it, or else the menu's own page
+  const PAGES = ['seek', 'brief', 'campaign', 'ranks', 'rules'];
+  function closePages() { CAMPAIGN_UI.close(); $('#ranks').hidden = $('#rules').hidden = true; }
+  function navMark() {
+    const p = document.body.dataset.page, on = p === 'brief' ? 'campaign' : p && p !== 'seek' ? p : curView === 'army' ? 'army' : 'home';
+    document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === on));
+  }
+  const pageObserver = new MutationObserver(() => {
+    const page = PAGES.find(id => !$('#' + id).hidden);
+    if (page) document.body.dataset.page = page; else delete document.body.dataset.page;
+    navMark(); frameBoard();
+  });
+  PAGES.forEach(id => pageObserver.observe($('#' + id), { attributes: true, attributeFilter: ['hidden'] }));
+  // the navbar's right end: signed out, the Google button; signed in, the player, with their name, rating, profile,
+  // rename and sign-out in a panel
+  const mePop = open => { $('#mePop').hidden = !open; $('#navMe').setAttribute('aria-expanded', open); };
+  $('#navMe').addEventListener('click', () => { SFX.init(); SFX.pick(); mePop($('#mePop').hidden); });
+  $('#bProfile').addEventListener('click', () => { mePop(false); closePages(); ACCOUNT.openRanks(1); });
+  ACCOUNT.onChange(u => {
+    $('#meWrap').hidden = !u;
+    if (u) { $('#navAv').textContent = u.name.slice(0, 1).toUpperCase(); $('#navName').textContent = u.name; } else mePop(false);
+  });
   $('#rulesTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { SFX.pick(); rulesTab(+b.dataset.v); } });
   $('#bRulesClose').addEventListener('click', () => { $('#rules').hidden = true; });
-  $('#rules').addEventListener('click', e => { if (e.target.id === 'rules') $('#rules').hidden = true; });
+  // a click beside the rules closes them, as a dialog only: lying flat over the menu, beside them is just the scene
+  $('#rules').addEventListener('click', e => { if (e.target.id === 'rules' && !document.body.classList.contains('in-menu')) $('#rules').hidden = true; });
   $('#bUndo').addEventListener('click', undo);
   $('#bEndUndo').addEventListener('click', undo);
   $('#bHint').addEventListener('click', hint);
@@ -1462,7 +1504,10 @@
     if (v > 0 && !SFX.musicOn) SFX.toggleMusic();
     SFX.setMusicVol(v); soundIcon();
   });
-  addEventListener('pointerdown', e => { if (!$('#musicPop').hidden && !e.target.closest('.pop-wrap')) musicPop(false); });
+  addEventListener('pointerdown', e => {
+    if (!$('#musicPop').hidden && !e.target.closest('#bMusic, #musicPop')) musicPop(false);
+    if (!$('#mePop').hidden && !e.target.closest('#meWrap')) mePop(false);
+  });
   $('#bMoves').addEventListener('click', () => document.body.classList.toggle('show-moves'));
   // phones: drag the panel down by its grip or the players row to fold it away to just the players, up to unfold;
   // a tap on the grip toggles it
@@ -1497,7 +1542,7 @@
   }
   $('#grip').addEventListener('click', e => { if (!e.detail) panelMin(!pref.panelMin); });   // keyboard
   addEventListener('pointerdown', () => SFX.init(), { once: true });
-  addEventListener('resize', () => VIEW.setInset(G.mode !== 'menu' && innerWidth > 760 && !hallOpen ? 332 : 0));
+  addEventListener('resize', frameBoard);
 
   // test hook (only with #debug in the URL): the engine plays both sides
   if (location.hash === '#debug') window.__ct = {
@@ -1516,16 +1561,21 @@
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();
     $('#boot').remove();
+    // the game cards' pictures: the heroes rendered once, just after the board is up
+    setTimeout(() => {
+      const art = PORTRAITS.render(440, 300);
+      if (art) [['#artXq', art.xq], ['#artSg', art.sg]].forEach(([el, url]) => { $(el).src = url; $(el).hidden = false; });
+    }, 50);
     let info = null;
     try { const r = await fetch('info', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { }
     const online = !!info && info.online === true;
     G.online = online;
-    $('#rankedBox').hidden = $('#bRanks').hidden = $('#sgRankedBox').hidden = !(online && info.accounts);
+    $('#rankedBox').hidden = $('#bRanks').hidden = $('#sgRankedBox').hidden = $('#navRanks').hidden = !(online && info.accounts);
     $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
     $('#onlineBox').classList.toggle('off', !online);
-    onlineThere = online; renderAINote(); renderSgNote(); loadRooms();   // a page opened before this was known
-    $('#onlineNote').textContent = $('#sgOnlineNote').textContent = online ? '' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
+    loadRooms();   // a page opened before this was known
+    $('#onlineNote').textContent = online ? '' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const q = new URLSearchParams(location.search), invited = cleanRoom(q.get('room')), invitedSg = cleanRoom(q.get('tq'));
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
     else if (online && invited.length >= 4) goOnline(invited);

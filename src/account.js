@@ -24,7 +24,6 @@ const ACCOUNT = (() => {
   async function init(info, opts = {}) {
     toast = opts.toast || toast;
     enabled = !!(info && info.accounts && info.clientId);
-    $('#account').hidden = !enabled;
     if (!enabled) return;
     try { user = (await call('api/me')).user; } catch (e) { user = null; }
     emit();
@@ -34,13 +33,15 @@ const ACCOUNT = (() => {
       google.accounts.id.initialize({ client_id: info.clientId, callback: onCredential, auto_select: false, cancel_on_tap_outside: true });
       renderButton();
     };
-    s.onerror = () => { $('#gNote').textContent = 'Không tải được nút đăng nhập Google. Kiểm tra mạng rồi tải lại trang.'; };
+    s.onerror = () => toast('Không tải được nút đăng nhập Google. Kiểm tra mạng rồi tải lại trang.');
     document.head.appendChild(s);
   }
   function renderButton() {
     if (!window.google || user) return;
     const box = $('#gBtn'); box.innerHTML = '';
-    google.accounts.id.renderButton(box, { theme: 'filled_black', size: 'large', shape: 'pill', text: 'signin_with', locale: 'vi', width: 280 });
+    // in the navbar: a small "Đăng nhập" pill, just the G on a phone
+    const phone = innerWidth <= 760;
+    google.accounts.id.renderButton(box, { theme: 'filled_black', size: 'medium', shape: phone ? 'circle' : 'pill', type: phone ? 'icon' : 'standard', text: 'signin', locale: 'vi' });
   }
   async function onCredential(r) {
     try { user = (await call('auth/google', { credential: r.credential })).user; emit(); toast(`Chào ${user.name}!`); }
@@ -59,7 +60,7 @@ const ACCOUNT = (() => {
   // saves fields of the signed-in player (name, title, hero, stage); throws with the server's message if refused
   async function save(fields) { user = (await call('api/me', fields)).user; emit(); return user; }
 
-  // ---------- the account box in the menu ----------
+  // ---------- the account in the navbar ----------
   // a campaign title (CAMPAIGN.TITLES), shown with the player's name
   const titleOf = u => (u && u.title && CAMPAIGN.TITLES[u.title]) || '';
   function statLine(u) {

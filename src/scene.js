@@ -8,7 +8,7 @@ const VIEW = (() => {
   THREE.ColorManagement.legacyMode = false;
   const { DISC_H } = MODELS;
   const { N, R, B } = XQ;
-  let renderer, scene, camera, W = 1, H = 1, inset = 0;   // inset: px covered by the side panel on the right
+  let renderer, scene, camera, W = 1, H = 1, inset = 0;   // inset: px covered by the side panel on the right (negative: a column on the left)
   const units = new Map();                 // square -> unit { piece, root, disc, war, sq }
 
   // ---------- layouts ----------
@@ -80,7 +80,7 @@ const VIEW = (() => {
   const cam = { theta: 0, phi: 0.98, dist: 16, tTheta: 0, tPhi: 0.98, tDist: 16, zoom: 1, tZoom: 1 };
   const HOME = new THREE.Vector3(0, -0.4, 0), focus = HOME.clone(), tFocus = HOME.clone();   // close-ups move the focus
   function fitDist() {
-    const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - inset) / H;
+    const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - Math.abs(inset)) / H;
     // portrait screens fit the board's width only; the trays beside it may leave the frame
     return Math.max(L.fit[0] / v, (portrait() ? L.fit[1] : L.fit[2]) / (v * a)) * 1.02;
   }
@@ -92,7 +92,7 @@ const VIEW = (() => {
     if (hall) {
       // the hall: the generals seen from the front at eye level, all of them in frame; on a portrait phone they stand in
       // the upper half, above the controls
-      const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - inset) / H, n = Math.max(2, hall.figs.length), gap = hallGap();
+      const v = Math.tan((camera.fov * Math.PI) / 360), a = (W - Math.abs(inset)) / H, n = Math.max(2, hall.figs.length), gap = hallGap();
       hall.figs.forEach((f, i) => { f.base.position.x = (i - (n - 1) / 2) * gap; f.ped.scale.set(hallPed(), 1, hallPed()); });
       // the page's dock covers the bottom of the screen: the camera stands back a little and looks low, so the
       // generals and their name cards stand clear above it
