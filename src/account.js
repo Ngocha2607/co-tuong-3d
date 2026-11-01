@@ -123,9 +123,13 @@ const ACCOUNT = (() => {
     else h += '<p class="note">Đăng nhập Google rồi chơi trận xếp hạng để có tên trên bảng.</p>';
     return h;
   }
+  // on someone else's profile: where the two stand as friends, and what can be done about it (friends.js does it)
+  const FR = { none: ['ask', 'Kết bạn', 'gold'], asked: ['remove', 'Hủy lời mời kết bạn', ''], incoming: ['accept', 'Đồng ý kết bạn', 'gold'], friends: ['remove', 'Xóa bạn', ''] };
   async function profile(id) {
-    const { user: u, games, sg = [] } = await call('api/user/' + id);
+    const { user: u, games, sg = [], friend } = await call('api/user/' + id);
+    const fr = friend && FR[friend];
     let h = `<div class="phead"><span class="av big">${esc(u.name.slice(0, 1).toUpperCase())}</span><div><h3>${esc(u.name)}</h3>${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}<small>${esc(statLine(u))}</small></div></div>
+      ${fr ? `<div class="pacts">${friend === 'friends' ? `<span class="badge">Bạn bè</span><button class="btn primary" type="button" data-fchallenge="${u.id}" data-name="${esc(u.name)}">Thách đấu</button>` : ''}<button class="btn ${fr[2]}" type="button" data-fact="${fr[0]}" data-fid="${u.id}">${fr[1]}</button></div>` : ''}
       <div class="stats"><div><b>${u.games}</b>Ván</div><div><b>${u.wins}</b>Thắng</div><div><b>${u.draws}</b>Hòa</div><div><b>${u.losses}</b>Thua</div></div>
       <h4>Ván gần đây</h4>`;
     if (!games.length) h += '<p class="note">Chưa có ván xếp hạng nào.</p>';
@@ -157,10 +161,20 @@ const ACCOUNT = (() => {
   }
   $('#rkTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(+b.dataset.v); });
   // a ranked game to watch again (game.js opens it)
-  let replay = () => { };
-  $('#rkBody').addEventListener('click', e => {
+  let replay = () => { }, removeArm = 0;
+  $('#rkBody').addEventListener('click', async e => {
     const gm = e.target.closest('[data-game]');
     if (gm) { replay(+gm.dataset.game); return; }
+    const fa = e.target.closest('[data-fact]'), fc = e.target.closest('[data-fchallenge]');
+    if (fc) { FRIENDS.challenge(+fc.dataset.fchallenge, fc.dataset.name); return; }
+    if (fa) {
+      // unfriending asks twice
+      if (fa.dataset.fact === 'remove' && fa.textContent === 'Xóa bạn' && Date.now() - removeArm > 3000) { removeArm = Date.now(); fa.textContent = 'Chắc chắn xóa?'; return; }
+      fa.disabled = true;
+      await FRIENDS.act(+fa.dataset.fid, fa.dataset.fact);
+      show(tab, +fa.dataset.fid);
+      return;
+    }
     const t = e.target.closest('[data-id]');
     if (!t) return;
     e.preventDefault();
@@ -171,6 +185,7 @@ const ACCOUNT = (() => {
 
   return {
     init, refresh, save, openRanks, esc, sign,
+    openProfile(id) { $('#ranks').hidden = false; show(1, id); },
     onChange(f) { subs.push(f); },
     onReplay(f) { replay = f; },
     get user() { return user; },

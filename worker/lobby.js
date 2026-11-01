@@ -2,13 +2,17 @@
 // Two queues: ordinary games ('xq'), where seekers are paired by rating (fits in elo.js), and Tam Quốc ('sg'), where
 // three are matched by their Tam Quốc rating (trio). A match gets a fresh ranked room (code X + 7 characters, or Y + 7
 // for Tam Quốc) with random seats; the pages are told the code and open it like any other room.
+// It also keeps the list of open friendly rooms, the ranked games under way (to watch), and who is online: a signed-in
+// page keeps a socket here ('hi'), through which friends challenge each other and hear of friend requests.
 import { DurableObject } from 'cloudflare:workers';
 import { userOf } from './room.js';
 import { fits, trio } from './elo.js';
-import { pick, STALE_MS } from './rooms.js';
+import { pick, pickLive, STALE_MS, LIVE_STALE_MS } from './rooms.js';
+import { CONTROLS } from './clock.js';
 
 const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const code = first => first + Array.from(crypto.getRandomValues(new Uint8Array(7)), b => CHARS[b % CHARS.length]).join('');
+const code = (first, n = 7) => first + Array.from(crypto.getRandomValues(new Uint8Array(n)), b => CHARS[b % CHARS.length]).join('');
+export const CHALLENGE_MS = 45000;      // a challenge not answered by then is off (the pages show 30 seconds)
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
 export class Lobby extends DurableObject {
@@ -16,6 +20,10 @@ export class Lobby extends DurableObject {
     const path = new URL(req.url).pathname;
     if (path === '/room') return this.roomSays(await req.json());
     if (path === '/rooms') return Response.json(await this.openRooms(Object.fromEntries(new URL(req.url).searchParams)), { headers: { 'cache-control': 'no-store' } });
+    if (path === '/live') return Response.json(await this.liveGames(new URL(req.url).searchParams.get('v')), { headers: { 'cache-control': 'no-store' } });
+    // from api.js: who of these players is online, and news for one of them (a friend request)
+    if (path === '/presence') return Response.json(this.presenceOf((await req.json()).ids || []));
+    if (path === '/notify') { const b = await req.json(); for (const ws of this.pages(b.to)) this.send(ws, b.msg); return new Response('ok'); }
     const user = userOf(req);
     if (!user) return new Response('sign in first', { status: 401 });
     const [client, server] = Object.values(new WebSocketPair());
@@ -38,11 +46,27 @@ export class Lobby extends DurableObject {
   }
   async roomSays(r) {
     if (!r || typeof r.code !== 'string' || !/^[A-Z0-9]{4,8}$/.test(r.code) || !['xq', 'sg'].includes(r.v)) return new Response('bad', { status: 400 });
-    const map = await this.roomMap(), key = `r:${r.v}:${r.code}`;
+    const map = r.live ? await this.liveMap() : await this.roomMap(), key = `${r.live ? 'l' : 'r'}:${r.v}:${r.code}`;
     if (r.gone) { map.delete(key); await this.ctx.storage.delete(key); }
     else { const e = { ...r, at: Date.now() }; map.set(key, e); await this.ctx.storage.put(key, e); }
     return new Response('ok');
   }
+  // ---------- the ranked games under way, to watch ----------
+  // The Lobby writes one when it opens the room ('l:<game>:<code>', the players and their ratings); the room says when
+  // the game is over. Entries not heard of for 2 hours are dropped (rooms.js LIVE_STALE_MS).
+  async liveMap() {
+    if (!this.liveLoading) this.liveLoading = this.ctx.storage.list({ prefix: 'l:' }).then(m => { this.live = new Map(m); });
+    await this.liveLoading;
+    return this.live;
+  }
+  async liveGames(v) {
+    const map = await this.liveMap(), now = Date.now(), stale = [];
+    for (const [k, r] of map) if (now - r.at > LIVE_STALE_MS) { map.delete(k); stale.push(k); }
+    for (let i = 0; i < stale.length; i += 128) await this.ctx.storage.delete(stale.slice(i, i + 128));
+    return pickLive([...map.values()], v === 'sg' ? 'sg' : 'xq', now);
+  }
+  async goesLive(room, v, players) { await this.roomSays({ code: room, v, live: true, players }); }
+
   async openRooms(q) {
     const map = await this.roomMap(), now = Date.now(), stale = [];
     for (const [k, r] of map) if (now - r.at > STALE_MS) { map.delete(k); stale.push(k); }
@@ -71,7 +95,73 @@ export class Lobby extends DurableObject {
       this.mark(me, 0);
       this.send(ws, { t: 'cancelled' });
       await this.pair();
+    } else if (m.t === 'hi' || m.t === 'status') {
+      // a page saying it is here, and whether its player is in a game (tab: which page of theirs this is)
+      const tab = typeof m.tab === 'string' ? m.tab.slice(0, 16) : me.a.tab || '';
+      ws.serializeAttachment({ ...me.a, presence: true, tab, status: m.status === 'playing' ? 'playing' : 'online' });
+    } else if (m.t === 'challenge') await this.challenge(me, m);
+    else if (m.t === 'answer') await this.answer(me, m);
+    else if (m.t === 'unchallenge') await this.unchallenge(me, m);
+  }
+
+  // ---------- who is online, and challenges between friends ----------
+  // the pages a player has open here (all of them, or the one with that tab id)
+  pages(id, tab) {
+    return this.ctx.getWebSockets().filter(ws => { const a = ws.deserializeAttachment(); return a && a.presence && a.user.id === id && (!tab || a.tab === tab); });
+  }
+  // { [id]: 'online' | 'playing' } for those of ids who have a page open (free on any of their pages counts as free)
+  presenceOf(ids) {
+    const want = new Set(ids.map(Number)), out = {};
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment();
+      if (!a || !a.presence || !want.has(a.user.id)) continue;
+      if (out[a.user.id] !== 'online') out[a.user.id] = a.status;
     }
+    return out;
+  }
+  async friends(a, b) {
+    if (!this.env.DB) return false;
+    return !!(await this.env.DB.prepare('SELECT 1 AS x FROM friends WHERE user_id = ? AND friend_id = ? AND state = 1').bind(a, b).first());
+  }
+  // a friend is challenged to a game: every page of theirs hears of it; the challenge lives in storage, so a pause of
+  // this object between the asking and the answer loses nothing
+  async challenge(me, m) {
+    const from = me.a.user, to = Number(m.to);
+    const fail = why => this.send(me.ws, { t: 'challenge-fail', to, why });
+    if (!Number.isInteger(to) || to === from.id) return;
+    const targets = this.pages(to);
+    if (!targets.length) { fail('offline'); return; }
+    if (!(await this.friends(from.id, to))) { fail('not-friends'); return; }
+    // challenges nobody answered are cleared away as new ones come
+    const old = [...(await this.ctx.storage.list({ prefix: 'c:' }))].filter(([, v]) => Date.now() - v.at > CHALLENGE_MS).map(([k]) => k);
+    if (old.length) await this.ctx.storage.delete(old.slice(0, 128));
+    const c = {
+      id: code('C'), to, fromTab: me.a.tab || '', at: Date.now(), tc: CONTROLS[m.tc] ? m.tc : '',
+      from: { id: from.id, name: from.name, rating: from.rating, title: from.title || '' },
+    };
+    await this.ctx.storage.put('c:' + c.id, c);
+    for (const ws of targets) this.send(ws, { t: 'challenged', id: c.id, from: c.from, tc: c.tc, ms: CHALLENGE_MS - 15000 });
+    this.send(me.ws, { t: 'challenge-sent', id: c.id, to });
+  }
+  // the answer, from one of the challenged player's pages: off, or both into a new private friendly room (the one who
+  // challenged opens it, so they hold the room and Red; the other follows a moment later)
+  async answer(me, m) {
+    const c = typeof m.id === 'string' && await this.ctx.storage.get('c:' + m.id);
+    if (!c || c.to !== me.a.user.id) { this.send(me.ws, { t: 'challenge-over', id: m.id }); return; }
+    await this.ctx.storage.delete('c:' + c.id);
+    for (const ws of this.pages(c.to)) if (ws !== me.ws) this.send(ws, { t: 'challenge-over', id: c.id });
+    const asker = this.pages(c.from.id, c.fromTab)[0] || this.pages(c.from.id)[0];   // the page that asked, or another of theirs
+    if (Date.now() - c.at > CHALLENGE_MS || !asker) { this.send(me.ws, { t: 'challenge-over', id: c.id }); return; }
+    if (!m.ok) { this.send(asker, { t: 'declined', id: c.id, by: me.a.user.name }); return; }
+    const room = code('F', 5);
+    this.send(asker, { t: 'go', id: c.id, room, tc: c.tc, host: true });
+    this.send(me.ws, { t: 'go', id: c.id, room, tc: c.tc, host: false });
+  }
+  async unchallenge(me, m) {
+    const c = typeof m.id === 'string' && await this.ctx.storage.get('c:' + m.id);
+    if (!c || c.from.id !== me.a.user.id) return;
+    await this.ctx.storage.delete('c:' + c.id);
+    for (const ws of this.pages(c.to)) this.send(ws, { t: 'challenge-over', id: c.id, withdrawn: true });
   }
   async webSocketClose() { await this.pair(); }
   async webSocketError() { await this.pair(); }
@@ -115,7 +205,11 @@ export class Lobby extends DurableObject {
       const r = await this.env.ROOMS.get(this.env.ROOMS.idFromName(room)).fetch('https://room/setup', {
         method: 'POST', body: JSON.stringify({ code: room, info: { 1: seat(red), '-1': seat(black) } }),
       });
-      if (r.ok) { this.send(x.ws, { t: 'match', room }); this.send(y.ws, { t: 'match', room }); return; }
+      if (r.ok) {
+        this.send(x.ws, { t: 'match', room }); this.send(y.ws, { t: 'match', room });
+        await this.goesLive(room, 'xq', [seat(red), seat(black)]);
+        return;
+      }
     }
     this.mark(x, since[0]); this.mark(y, since[1]);   // could not open a room: back in the queue
   }
@@ -128,7 +222,11 @@ export class Lobby extends DurableObject {
     for (let i = 0; i < 4; i++) {
       const room = code('Y');
       const r = await this.env.SGROOMS.get(this.env.SGROOMS.idFromName(room)).fetch('https://room/setup', { method: 'POST', body: JSON.stringify({ code: room, info }) });
-      if (r.ok) { for (const s of list) this.send(s.ws, { t: 'match', room, v: 'sg' }); return true; }
+      if (r.ok) {
+        for (const s of list) this.send(s.ws, { t: 'match', room, v: 'sg' });
+        await this.goesLive(room, 'sg', info);
+        return true;
+      }
     }
     list.forEach((s, i) => this.mark(s, since[i]));
     return false;

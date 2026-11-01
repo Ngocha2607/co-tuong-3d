@@ -8,6 +8,8 @@ import * as R from '../worker/sg-game.js';
 import * as H from '../worker/hall.js';
 import * as Rooms from '../worker/rooms.js';
 import SG from '../src/sanguo.js';
+import EMOTES from '../src/emotes.js';
+import HEROES from '../src/heroes.js';
 
 let failed = 0;
 async function test(name, fn) {
@@ -234,6 +236,25 @@ await test('session cookie: round trip, forgery and expiry', async () => {
   assert.strictEqual(cookieOf({ headers: new Headers({ cookie: 'a=1; ct_sid=xyz; b=2' }) }), 'xyz');
 });
 
+await test('emotes: set phrases and battle cries only, every hero has one, unknown ids are refused', () => {
+  for (const l of EMOTES.LINES) { assert.ok(EMOTES.valid(l.id), l.id); assert.ok(EMOTES.text(l.id, '').length > 0); }
+  assert.ok(EMOTES.valid('cry'));
+  for (const h of HEROES.list) assert.ok(EMOTES.CRY[h.id], `${h.name} has a battle cry`);
+  assert.strictEqual(EMOTES.text('cry', 'truong-phi'), EMOTES.CRY['truong-phi']);
+  assert.strictEqual(EMOTES.text('cry', 'nobody'), EMOTES.CRY[''], 'an unknown hero shouts the plain cry');
+  for (const bad of ['', 'xin chào', 'toString', '__proto__', 'constructor', 42, null, undefined, { id: 'chao' }]) assert.ok(!EMOTES.valid(bad), String(bad));
+  assert.strictEqual(EMOTES.text('toString', ''), '');
+});
+await test('live ranked games: one game at a time, the strongest first, stale ones left out', () => {
+  const g = (code, v, ratings, at) => ({ code, v, at, players: ratings.map((rating, i) => ({ id: i, name: 'P' + i, rating })) });
+  const now = 10 * 3600e3;
+  const r = Rooms.pickLive([g('XA', 'xq', [1500, 1300], now - 60e3), g('XB', 'xq', [1600, 1500], now - 120e3), g('XC', 'xq', [1550, 1550], now - 30e3),
+    g('YD', 'sg', [2000, 1900, 1800], now), g('XE', 'xq', [2500, 2500], now - Rooms.LIVE_STALE_MS - 1)], 'xq', now);
+  assert.deepStrictEqual(r.games.map(x => x.code), ['XC', 'XB', 'XA'], 'ties go to the newer game');
+  assert.strictEqual(r.total, 3);
+  assert.strictEqual(r.games[1].avg, 1550);
+  assert.deepStrictEqual(Rooms.pickLive([g('YD', 'sg', [2000, 1900, 1800], now)], 'sg', now).games[0].avg, 1900);
+});
 await test('signed tickets (for the daily puzzle): round trip, another key, a changed body', async () => {
   const t = await sign('secret', { u: 7, d: 20758, t: 1000 });
   assert.deepStrictEqual(await unsign('secret', t), { u: 7, d: 20758, t: 1000 });

@@ -8,6 +8,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import SG from '../src/sanguo.js';
 import HEROES from '../src/heroes.js';
+import EMOTES from '../src/emotes.js';
 import * as C from './clock.js';
 import * as R from './sg-game.js';
 import { rate3 } from './elo.js';
@@ -119,6 +120,12 @@ export class SgRoom extends DurableObject {
     await this.record();
     await this.save(); await this.schedule();
     this.broadcast({ t: 'over', ...st.over, ...this.timing(now) });
+    if (st.rated) await this.liveOver();
+  }
+  // a ranked game over: off the Lobby's list of games to watch
+  async liveOver() {
+    const body = JSON.stringify({ code: this.st.code, v: 'sg', live: true, gone: true });
+    try { await this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby')).fetch('https://lobby/room', { method: 'POST', body }); } catch (e) { }
   }
   // a finished ranked game → D1: the game row and the three new Tam Quốc ratings, in one transaction
   async record() {
@@ -190,6 +197,7 @@ export class SgRoom extends DurableObject {
     }
     const side = this.sideOf(ws);
     if (m.t === 'sync') { this.send(ws, this.stateFor(ws)); return; }
+    if (m.t === 'emote') { if (side >= 0) this.emote(ws, side, m.id, now); return; }
     // a player walks out: their kingdom leaves a game under way; in a friendly room the seat is freed for someone else
     // once no game holds it (the hall, or a game that is over)
     if (m.t === 'leave') {
@@ -244,6 +252,14 @@ export class SgRoom extends DurableObject {
       await this.save();
       this.broadcast({ t: 'rematch', want: st.rematch });
     }
+  }
+
+  // a player says something (emotes.js): set phrases only, one every few seconds, to everyone here, watchers too
+  emote(ws, side, id, now) {
+    const a = ws.deserializeAttachment() || {};
+    if (!EMOTES.valid(id) || now - (a.emoteAt || 0) < EMOTES.GAP_MS) return;
+    ws.serializeAttachment({ ...a, emoteAt: now });
+    this.broadcast({ t: 'emote', side, id, hero: this.st.heroes[side] || '' });
   }
 
   // the hall: a general for oneself; the battlefield and the time (host only); ready (the others); asking a player to

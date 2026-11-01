@@ -47,6 +47,22 @@ async function progressOf(env, uid) {
   return Object.fromEntries(results.map(r => [r.level, r.stars]));
 }
 
+// ---------- friends (migrations/0005_friends.sql) ----------
+const MAX_FRIENDS = 200, MAX_ASKED = 50;
+const lobby = env => env.LOBBY.get(env.LOBBY.idFromName('lobby'));
+// news for a player's open pages (lobby.js passes it on); nothing is lost if they have none open
+async function notify(env, to, msg) {
+  try { await lobby(env).fetch('https://lobby/notify', { method: 'POST', body: JSON.stringify({ to, msg }) }); } catch (e) { }
+}
+// how two players stand: 'friends', 'asked' (a asked b, waiting), 'incoming' (b asked a) or 'none'
+async function relation(env, a, b) {
+  const { results } = await env.DB.prepare('SELECT user_id, state FROM friends WHERE (user_id = ?1 AND friend_id = ?2) OR (user_id = ?2 AND friend_id = ?1)').bind(a, b).all();
+  if (results.some(r => r.state === 1)) return 'friends';
+  if (results.some(r => r.user_id === a)) return 'asked';
+  if (results.some(r => r.user_id === b)) return 'incoming';
+  return 'none';
+}
+
 // a day's daily puzzle: the 20 fastest (without undo or hints), how many solved it, and the player's own result,
 // rank and streak
 async function dailyBoard(env, day, user) {
@@ -168,6 +184,67 @@ export async function api(req, env, url) {
       black: { id: g.black, name: g.black_name, rating: g.black_rating, delta: g.black_delta },
     });
   }
+  // friends: the list (with who is online, from the Lobby), requests both ways; and asking, accepting, declining,
+  // removing. The other player's open pages hear of it at once.
+  if (p === '/api/friends') {
+    const user = await currentUser(req, env);
+    if (!user) return fail(401, 'not signed in');
+    const me = user.id, db = env.DB;
+    if (!post) {
+      const { results } = await db.prepare(`SELECT f.user_id, f.state, u.id, u.name, u.title, u.rating, u.sg_rating FROM friends f
+        JOIN users u ON u.id = CASE WHEN f.user_id = ?1 THEN f.friend_id ELSE f.user_id END
+        WHERE f.user_id = ?1 OR (f.friend_id = ?1 AND f.state = 0) ORDER BY u.name COLLATE NOCASE`).bind(me).all();
+      const who = r => ({ id: r.id, name: r.name, title: r.title, rating: r.rating, sg_rating: r.sg_rating });
+      const friends = results.filter(r => r.user_id === me && r.state === 1).map(who);
+      let online = {};
+      try { if (friends.length) online = await (await lobby(env).fetch('https://lobby/presence', { method: 'POST', body: JSON.stringify({ ids: friends.map(f => f.id) }) })).json(); } catch (e) { }
+      return json({
+        friends: friends.map(f => ({ ...f, status: online[f.id] || 'offline' })),
+        incoming: results.filter(r => r.user_id !== me).map(who),
+        outgoing: results.filter(r => r.user_id === me && r.state === 0).map(who),
+      });
+    }
+    const b = await body(req), to = Number(b.to), now = Date.now();
+    if (!Number.isInteger(to) || to === me) return fail(400, 'bad player');
+    const other = await db.prepare('SELECT id, name FROM users WHERE id = ?').bind(to).first();
+    if (!other) return fail(404, 'no such player');
+    let rel = await relation(env, me, to);
+    if (b.act === 'ask' && rel === 'none') {
+      const n = await db.prepare('SELECT SUM(state = 1) AS friends, SUM(state = 0) AS asked FROM friends WHERE user_id = ?').bind(me).first();
+      if ((n.friends | 0) >= MAX_FRIENDS) return fail(403, `Danh sách bạn bè đã đủ ${MAX_FRIENDS} người`);
+      if ((n.asked | 0) >= MAX_ASKED) return fail(403, 'Bạn đang chờ quá nhiều lời mời kết bạn');
+      await db.prepare('INSERT INTO friends (user_id, friend_id, state, at) VALUES (?, ?, 0, ?) ON CONFLICT DO NOTHING').bind(me, to, now).run();
+      rel = 'asked';
+      await notify(env, to, { t: 'friends', why: 'asked', name: user.name });
+    } else if ((b.act === 'accept' || b.act === 'ask') && rel === 'incoming') {
+      // asking someone who already asked you is a yes
+      await db.batch([
+        db.prepare('UPDATE friends SET state = 1, at = ? WHERE user_id = ? AND friend_id = ?').bind(now, to, me),
+        db.prepare('INSERT INTO friends (user_id, friend_id, state, at) VALUES (?, ?, 1, ?) ON CONFLICT (user_id, friend_id) DO UPDATE SET state = 1').bind(me, to, now),
+      ]);
+      rel = 'friends';
+      await notify(env, to, { t: 'friends', why: 'accepted', name: user.name });
+    } else if (b.act === 'decline' && rel === 'incoming') {
+      await db.prepare('DELETE FROM friends WHERE user_id = ? AND friend_id = ? AND state = 0').bind(to, me).run();
+      rel = 'none';
+    } else if (b.act === 'remove' && rel !== 'none') {   // unfriend, or take back one's own request
+      await db.prepare('DELETE FROM friends WHERE (user_id = ?1 AND friend_id = ?2) OR (user_id = ?2 AND friend_id = ?1)').bind(me, to).run();
+      rel = 'none';
+      await notify(env, to, { t: 'friends' });
+    }
+    return json({ relation: rel });
+  }
+  // players by the start of their name, to ask as friends
+  if (p === '/api/users') {
+    const user = await currentUser(req, env);
+    if (!user) return fail(401, 'not signed in');
+    const q = String(url.searchParams.get('q') || '').normalize('NFC').replace(/\s+/g, ' ').trim().slice(0, 20);
+    if (q.length < 2) return json({ users: [] });
+    const like = q.replace(/[\\%_]/g, c => '\\' + c) + '%';
+    const { results } = await env.DB.prepare(`SELECT id, name, title, rating, sg_rating FROM users WHERE name LIKE ? ESCAPE '\\' AND id != ?
+      ORDER BY games DESC, rating DESC LIMIT 10`).bind(like, user.id).all();
+    return json({ users: results });
+  }
   if (p === '/api/leaderboard') {
     const q = url.searchParams.get('v') === 'sg'
       ? `SELECT ${USER_COLS} FROM users WHERE sg_games >= 10 ORDER BY sg_rating DESC, sg_games DESC LIMIT 100`
@@ -201,7 +278,10 @@ export async function api(req, env, url) {
         others: [0, 1, 2].filter(j => j !== k).map(j => ({ k: j, id: g['p' + j], name: g['n' + j], place: g['place' + j] })),
       };
     });
-    return json({ user: await withRanks(env, user), games, sg });
+    // how the one looking stands with this player (signed in, someone else)
+    const viewer = await currentUser(req, env);
+    const friend = viewer && viewer.id !== id ? await relation(env, viewer.id, id) : null;
+    return json({ user: await withRanks(env, user), games, sg, friend });
   }
   return fail(404, 'not found');
 }

@@ -33,7 +33,7 @@
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // a signed-in player's hero and stage follow them: each pick is saved to the account
   const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq' };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq', muteEmotes: false };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!Array.isArray(pref.sgSeats) || pref.sgSeats.length !== 3 || pref.sgSeats.some(v => v !== 0 && v !== 1)) pref.sgSeats = [0, 1, 1];
   if (!HEROES.valid(pref.hero)) pref.hero = '';
@@ -424,6 +424,7 @@
       }
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
       case 'kicked': leaveRoom(); toast('Chủ phòng đã mời bạn ra khỏi phòng'); break;
+      case 'emote': onEmote(m); break;
     }
   }
 
@@ -759,6 +760,7 @@
       case 'rematch': net.rematch = m.want; renderEnd(); break;
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
       case 'kicked': leaveRoom(); toast('Chủ phòng đã mời bạn ra khỏi phòng'); break;
+      case 'emote': onEmote(m); break;
     }
   }
   // each player brings their hero; a kingdom without one is led by its ruler
@@ -892,6 +894,10 @@
   // called with each state from the room: true while the room is in its hall (the board then waits)
   function hallUpdate(m) {
     G.hall = hallOf(m);
+    // a room opened by a challenge between friends stays out of the public list
+    if (G.privateRoom === G.room && G.hall.phase === 'lobby' && G.hall.public && hallModel().me !== null && hallModel().me === G.hall.host) {
+      send({ t: 'public', on: false }); G.privateRoom = '';
+    }
     if (G.hall.phase !== 'lobby') {
       if (hallOpen) hallClose();
       VIEW.setStage(G.hall.stage || myStage());               // the game is played where the host chose
@@ -947,7 +953,7 @@
 
     // the button: start (host), ready or not (the others); people watching only watch
     const go = $('#bHallGo');
-    go.hidden = me === null;
+    go.hidden = $('#bHallEmote').hidden = me === null;
     if (host) { go.textContent = 'Bắt đầu'; go.disabled = !!waiting; go.classList.add('primary'); go.classList.remove('gold'); }
     else if (me !== null) { const on = !!r.ready[me]; go.textContent = on ? 'Đã sẵn sàng' : 'Sẵn sàng'; go.title = on ? 'Bấm để hủy sẵn sàng' : ''; go.disabled = false; go.classList.toggle('gold', on); go.classList.toggle('primary', !on); }
     $('#hallWait').textContent = me === null ? 'Phòng đã đủ người, bạn đang xem.' : host ? (waiting || 'Mọi người đã sẵn sàng!') : r.ready[me] ? 'Chờ chủ phòng bắt đầu… (bấm để hủy)' : '';
@@ -975,6 +981,56 @@
     const ok = stageAllowed(s.id);
     return `<button type="button" data-id="${s.id}" class="${s.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('stage', s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
   }).join('');
+  // ---------- emotes (emotes.js): set phrases across the board in an online room ----------
+  // A seated player opens the picker from the panel (or the hall); what anyone says comes back from the room and
+  // shows as a bubble by that player's card while their general raises the weapon. pref.muteEmotes hides the others'.
+  const emoteSide = () => (G.mode === 'online' ? G.you || null : sgNet() && G.sg.net.you >= 0 ? G.sg.net.you : null);
+  // the hero whose battle cry a side gives: a Tam Quốc kingdom without one has its ruler
+  const cryHero = (side, hero) => hero || (G.mode === 'sanguo' ? RULERS[side] : '');
+  let emoteAt = 0;
+  function emotePop(open, anchor) {
+    const pop = $('#emotePop'), side = emoteSide();
+    if (!open || side === null) { pop.hidden = true; return; }
+    const id = cryHero(side, G.mode === 'sanguo' ? (G.sg.net.heroesRaw || [])[side] : G.heroes[side]), hero = HEROES.byId[id];
+    pop.innerHTML = `<button type="button" class="cry" data-emote="cry"><span class="hz">${hero ? hero.han : '帥'}</span><span>${ACCOUNT.esc(EMOTES.text('cry', id))}</span></button>`
+      + EMOTES.LINES.map(l => `<button type="button" data-emote="${l.id}">${l.text}</button>`).join('')
+      + `<label class="mute"><input type="checkbox" id="emoteMute"${pref.muteEmotes ? ' checked' : ''}> Ẩn biểu cảm của người khác</label>`;
+    pop.hidden = false;
+    // over the button that opened it, kept on the screen
+    const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    pop.style.top = (r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8) + 'px';
+  }
+  $('#emotePop').addEventListener('click', e => {
+    const b = e.target.closest('[data-emote]'); if (!b) return;
+    SFX.init();
+    if (Date.now() - emoteAt < EMOTES.GAP_MS) { toast('Chờ một chút rồi nói tiếp'); return; }
+    emoteAt = Date.now(); send({ t: 'emote', id: b.dataset.emote }); emotePop(false);
+  });
+  $('#emotePop').addEventListener('change', e => { if (e.target.id === 'emoteMute') { pref.muteEmotes = e.target.checked; savePref(); } });
+  for (const id of ['#bEmote', '#bHallEmote']) $(id).addEventListener('click', e => { SFX.init(); SFX.pick(); emotePop($('#emotePop').hidden, e.currentTarget); });
+  function onEmote(m) {
+    if (pref.muteEmotes && m.side !== emoteSide()) return;
+    const text = EMOTES.text(m.id, cryHero(m.side, m.hero));
+    if (!text) return;
+    bubble(m.side, text, m.id === 'cry');
+    VIEW.cheer(m.side, inHall() ? hallModel().sides.indexOf(m.side) : -1);
+    if (m.id === 'cry') SFX.drum(); else SFX.pick();
+  }
+  // a speech bubble by a player's card: to the left of the side panel's card, above it on a phone and in the hall
+  function bubble(side, text, cry) {
+    const anchor = inHall() ? $('#hallCards').children[hallModel().sides.indexOf(side)] : $(G.mode === 'sanguo' ? PL[side] : side > 0 ? '#plRed' : '#plBlack');
+    if (!anchor) return;
+    for (const o of $('#bubbles').querySelectorAll(`[data-side="${side}"]`)) o.remove();   // one at a time each
+    const b = document.createElement('div'), r = anchor.getBoundingClientRect(), beside = !inHall() && innerWidth > 760;
+    b.className = 'bubble' + (cry ? ' cry' : '') + (beside ? ' left' : ''); b.dataset.side = side; b.textContent = text;
+    $('#bubbles').appendChild(b);
+    const w = b.offsetWidth, h = b.offsetHeight;
+    const x = beside ? r.left - w - 12 : r.left + r.width / 2 - w / 2, y = beside ? r.top + r.height / 2 - h / 2 : r.top - h - 10;
+    b.style.left = Math.max(8, Math.min(innerWidth - w - 8, x)) + 'px'; b.style.top = Math.max(8, y) + 'px';
+    setTimeout(() => b.classList.add('gone'), 3200); setTimeout(() => b.remove(), 3700);
+  }
+
   // leave the room for the menu: the room is told, and frees the seat (a game under way is given up)
   function leaveRoom() {
     if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });
@@ -1320,6 +1376,8 @@
     $('#moveCount').textContent = G.log.length ? `${Math.ceil(G.log.length / 2)} nước` : '';
   }
   function updateStatus() {
+    $('#bEmote').hidden = emoteSide() === null;              // emotes: the seated players of an online room
+    if (emoteSide() === null) $('#emotePop').hidden = true;
     if (inHall()) { renderHall(); return; }
     if (G.mode === 'sanguo') { sgStatus(); return; }
     if (G.mode === 'review') { rvStatus(); return; }
@@ -1404,6 +1462,7 @@
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
+    FRIENDS.setStatus(G.mode === 'menu' || G.mode === 'review' ? 'online' : 'playing');   // what friends see
     frameBoard();
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
@@ -1448,21 +1507,38 @@
   };
   const askRooms = async q => (await fetch('rooms?' + new URLSearchParams(q), { cache: 'no-store' })).json();
   async function loadRooms() {
-    const page = ['home', 'xq-rooms', 'sg-rooms'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
+    const page = ['home', 'xq-rooms', 'sg-rooms', 'xq-ranked', 'sg-ranked'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
     if ($('#menu').hidden || !page || !G.online) return;
-    const id = ++roomsAsk, home = page === 'home', ui = home ? null : roomUi[page.slice(0, 2)];
+    const id = ++roomsAsk, home = page === 'home', live = /ranked$/.test(page), ui = home || live ? null : roomUi[page.slice(0, 2)];
     try {
       if (home) {   // just how many rooms each game has open, beside its Phòng chơi
         const rs = await Promise.all(['xq', 'sg'].map(v => askRooms({ v, n: 0 })));
         if (id !== roomsAsk) return;                        // a newer question went out meanwhile
         rs.forEach(({ counts: c }, i) => { $(roomUi[i ? 'sg' : 'xq'].note).textContent = c.all ? `${c.all} phòng${c.open ? ` · ${c.open} còn chỗ` : ''}` : 'Mời bạn bè'; });
+      } else if (live) {   // the ranked games under way, to watch
+        const v = page.slice(0, 2), r = await (await fetch('live?v=' + v, { cache: 'no-store' })).json();
+        if (id !== roomsAsk) return;
+        renderLive(v, r);
       } else {
         const r = await askRooms({ v: page.slice(0, 2), f: ROOM_F[ui.f], q: $(ui.input).value.trim(), n: ui.n });
         if (id !== roomsAsk) return;
         renderRooms(ui, r);
       }
-    } catch (e) { if (ui) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>'; }
-    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, home ? 15000 : 4000);
+    } catch (e) {
+      if (ui) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>';
+      if (live) $(page[0] === 's' ? '#sgLiveList' : '#liveList').innerHTML = '<p class="note">Không tải được danh sách ván.</p>';
+    }
+    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, home ? 15000 : live ? 8000 : 4000);
+  }
+  // ranked games under way: the players with their ratings, the strongest first, and how long they have been at it
+  function renderLive(v, { games, total }) {
+    const box = $(v === 'sg' ? '#sgLiveList' : '#liveList');
+    $(v === 'sg' ? '#sgLiveSum' : '#liveSum').textContent = total ? `${total} ván` : '';
+    const ago = at => { const m = Math.max(0, Math.round((Date.now() - at) / 60000)); return m < 1 ? 'vừa bắt đầu' : `bắt đầu ${m} phút trước`; };
+    box.innerHTML = games.length ? games.map(g => `<button type="button" class="room-row live" data-code="${cleanRoom(g.code)}" data-v="${g.v === 'sg' ? 'sg' : 'xq'}">`
+      + `<span class="st live">Trực tiếp</span><span class="ri"><b>${g.players.map(p => `${ACCOUNT.esc(p.name)} <i>${p.rating | 0}</i>`).join(' – ')}</b>`
+      + `<small>Điểm trung bình ${g.avg} · ${ago(g.at)}</small></span><span class="cnt"></span><span class="go">Xem</span></button>`).join('')
+      : `<p class="note">Lúc này chưa có ván xếp hạng ${v === 'sg' ? 'Tam Quốc ' : ''}nào đang diễn ra.</p>`;
   }
   function renderRooms(ui, { rooms: list, total, counts: c }) {
     const searching = !!$(ui.input).value.trim();
@@ -1633,11 +1709,11 @@
     if (e.key === 'Escape' && !$('#mePop').hidden && !e.target.closest('#renameForm')) { mePop(false); $('#navMe').focus(); return; }
     if (e.key === 'Escape' && !$('#rules').hidden) { $('#rules').hidden = true; return; }
     // over the menu Escape steps back out of a flat page too: the briefing to the campaign, the others to the menu
-    if (e.key === 'Escape' && document.body.classList.contains('in-menu') && /^(brief|campaign|ranks|daily|history)$/.test(document.body.dataset.page)) {
+    if (e.key === 'Escape' && document.body.classList.contains('in-menu') && /^(brief|campaign|ranks|daily|history|friends)$/.test(document.body.dataset.page)) {
       if (!$('#brief').hidden) $('#brief').hidden = true; else closePages();
       return;
     }
-    if (e.key === 'Escape' && (!$('#daily').hidden || !$('#history').hidden)) { closePages(); return; }   // over a game: dialogs
+    if (e.key === 'Escape' && (!$('#daily').hidden || !$('#history').hidden || !$('#friends').hidden)) { closePages(); return; }   // over a game: dialogs
     if (e.key !== 'Escape' || $('#menu').hidden || !$('#campaign').hidden || !$('#ranks').hidden || !$('#seek').hidden) return;
     const back = document.querySelector('#menu .view:not([hidden]) .vhead [data-go]');
     if (back) menuView(back.dataset.go);
@@ -1697,6 +1773,20 @@
     $('#bDaily').classList.toggle('done', done);
   };
   DAILY_UI.onChange(dailyChip); dailyChip();
+  // friends and challenges (friends.js): a challenge accepted opens a new private friendly room for both; whoever
+  // challenged goes in first, so they hold the room (and Red), the other a moment later
+  FRIENDS.init({
+    toast,
+    busy: () => ((G.mode === 'online' && G.you && !G.over && G.moves.length) || (sgNet() && G.sg.net.you >= 0 && !G.over && sgMoves().length)
+      ? 'Bạn đang trong một ván online: nhận lời sẽ là xin thua ván này. Bấm Nhận lần nữa nếu chắc chắn.' : ''),
+    onGo(room, tc, host) {
+      if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });   // a game under way here is given up
+      G.privateRoom = room;
+      SFX.init(); closePages();
+      toast(host ? 'Bạn bè đã nhận lời! Đang vào phòng riêng…' : 'Đang vào phòng riêng…');
+      if (host) goOnline(room, tc); else setTimeout(() => goOnline(room), 900);
+    },
+  });
   $('#bDaily').addEventListener('click', () => { SFX.init(); SFX.pick(); closePages(); DAILY_UI.open(); });
   $('#bRanked').addEventListener('click', () => seek());
   $('#bSeekCancel').addEventListener('click', stopSeek);
@@ -1793,13 +1883,14 @@
     if (go === 'campaign') CAMPAIGN_UI.open();
     else if (go === 'ranks') ACCOUNT.openRanks(0);
     else if (go === 'daily') DAILY_UI.open();
+    else if (go === 'friends') FRIENDS.open();
     else if (go === 'history') openHistory();
     else menuView(go);
   });
   // the dialogs that lie flat in the menu's column over the menu (index.html): the first one open is the page shown,
   // and the navbar marks it, or else the menu's own page
-  const PAGES = ['seek', 'brief', 'campaign', 'ranks', 'rules', 'daily', 'history'];
-  function closePages() { CAMPAIGN_UI.close(); DAILY_UI.close(); $('#ranks').hidden = $('#rules').hidden = $('#history').hidden = true; }
+  const PAGES = ['seek', 'brief', 'campaign', 'ranks', 'rules', 'daily', 'history', 'friends'];
+  function closePages() { CAMPAIGN_UI.close(); DAILY_UI.close(); FRIENDS.close(); $('#ranks').hidden = $('#rules').hidden = $('#history').hidden = true; }
   function navMark() {
     const p = document.body.dataset.page, on = p === 'brief' ? 'campaign' : p && p !== 'seek' ? p : curView === 'army' ? 'army' : 'home';
     document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === on));
@@ -1860,6 +1951,7 @@
   addEventListener('pointerdown', e => {
     if (!$('#musicPop').hidden && !e.target.closest('#bMusic, #musicPop')) musicPop(false);
     if (!$('#mePop').hidden && !e.target.closest('#meWrap')) mePop(false);
+    if (!$('#emotePop').hidden && !e.target.closest('#emotePop, #bEmote, #bHallEmote')) emotePop(false);
   });
   $('#bMoves').addEventListener('click', () => document.body.classList.toggle('show-moves'));
   // phones: drag the panel down by its grip or the players row to fold it away to just the players, up to unfold;
@@ -1927,6 +2019,7 @@
     $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
     DAILY_UI.setOnline(online);
+    FRIENDS.setOnline(online);
     $('#onlineBox').classList.toggle('off', !online);
     loadRooms();   // a page opened before this was known
     $('#onlineNote').textContent = online ? '' : !navigator.onLine ? 'Đang offline: vẫn đánh với máy, chiến dịch, Bát Trận Đồ và xem lại ván cũ được.'
