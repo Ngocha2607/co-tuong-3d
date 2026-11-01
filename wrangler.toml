@@ -19,6 +19,10 @@ run_worker_first = ["/sw.js"]
 [vars]
 GOOGLE_CLIENT_ID = "1004336835914-rbujm6bqm11sp7ef1k6ct3fvlo1rn0e4.apps.googleusercontent.com"
 
+# every day at 00:05 in Vietnam (17:05 UTC): closes a ranked season once it has ended (worker/seasons.js)
+[triggers]
+crons = ["5 17 * * *"]
+
 # players and ranked games (migrations/); created on the first `npm run deploy`
 [[d1_databases]]
 binding = "DB"

@@ -9,9 +9,12 @@ import CAMPAIGN from '../src/campaign.js';
 import DAILY from '../src/daily.js';
 import HEROES from '../src/heroes.js';
 import STAGE_LIST from '../src/stage-list.js';
+import ACHIEVEMENTS from '../src/achievements.js';
+import SEASONS from '../src/seasons.js';
+import { titlesOf as seasonTitlesOf } from './seasons.js';
 
 export const authReady = env => !!(env.DB && env.GOOGLE_CLIENT_ID && env.SESSION_SECRET);
-const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage, sg_rating, sg_games, sg_wins, sg_draws, sg_losses';
+const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage, sg_rating, sg_games, sg_wins, sg_draws, sg_losses, season_games, sg_season_games';
 
 const json = (body, init = {}) => Response.json(body, { ...init, headers: { 'cache-control': 'no-store', ...init.headers } });
 const fail = (status, error) => json({ error }, { status });
@@ -28,11 +31,12 @@ export function cleanName(s) {
   const n = String(s || '').normalize('NFC').replace(/\s+/g, ' ').trim();
   return NAME_RE.test(n) ? n : '';
 }
-const rankOf = async (env, u) => u.games >= PROVISIONAL
-  ? (await env.DB.prepare('SELECT COUNT(*) + 1 AS r FROM users WHERE games >= 10 AND rating > ?').bind(u.rating).first()).r
+// ranks on this season's boards (seasons.js): those with 10 ranked games in the season
+const rankOf = async (env, u) => u.season_games >= PROVISIONAL
+  ? (await env.DB.prepare('SELECT COUNT(*) + 1 AS r FROM users WHERE season_games >= 10 AND rating > ?').bind(u.rating).first()).r
   : null;
-const sgRankOf = async (env, u) => u.sg_games >= PROVISIONAL
-  ? (await env.DB.prepare('SELECT COUNT(*) + 1 AS r FROM users WHERE sg_games >= 10 AND sg_rating > ?').bind(u.sg_rating).first()).r
+const sgRankOf = async (env, u) => u.sg_season_games >= PROVISIONAL
+  ? (await env.DB.prepare('SELECT COUNT(*) + 1 AS r FROM users WHERE sg_season_games >= 10 AND sg_rating > ?').bind(u.sg_rating).first()).r
   : null;
 // a player as the page sees them: both ranks with the rest
 const withRanks = async (env, u) => ({ ...u, rank: await rankOf(env, u), sg_rank: await sgRankOf(env, u) });
@@ -61,6 +65,23 @@ async function relation(env, a, b) {
   if (results.some(r => r.user_id === a)) return 'asked';
   if (results.some(r => r.user_id === b)) return 'incoming';
   return 'none';
+}
+
+// ---------- achievements (src/achievements.js) ----------
+// a player's achievements; those the records now prove (Bát Trận Đồ days in a row, ranked games, rating) are added
+async function achievementsOf(env, u) {
+  const db = env.DB;
+  const { results: days } = await db.prepare('SELECT day FROM daily WHERE user_id = ? ORDER BY day').bind(u.id).all();
+  let run = 0, best = 0;
+  days.forEach((d, i) => { run = i && d.day === days[i - 1].day + 1 ? run + 1 : 1; best = Math.max(best, run); });
+  const proven = ACHIEVEMENTS.fromRecords(u, best), now = Date.now();
+  if (proven.length) await db.batch(proven.map(id => db.prepare('INSERT OR IGNORE INTO achievements (user_id, id, at) VALUES (?, ?, ?)').bind(u.id, id, now)));
+  return (await db.prepare('SELECT id, at FROM achievements WHERE user_id = ? ORDER BY at').bind(u.id).all()).results;
+}
+// the titles a player may wear besides the campaign's: from achievements ('a:<id>') and season finishes ('s:...')
+async function titlesBeyond(env, u) {
+  const ach = (await achievementsOf(env, u)).filter(a => ACHIEVEMENTS.has(a.id) && ACHIEVEMENTS.byId[a.id].title).map(a => 'a:' + a.id);
+  return [...ach, ...await seasonTitlesOf(env.DB, u.id)];
 }
 
 // a day's daily puzzle: the 20 fastest (without undo or hints), how many solved it, and the player's own result,
@@ -103,7 +124,7 @@ export async function api(req, env, url) {
 
   if (p === '/api/me') {
     const user = await currentUser(req, env);
-    if (!post) return json({ user: user && await withRanks(env, user) });
+    if (!post) return json({ user: user && { ...await withRanks(env, user), titles: await titlesBeyond(env, user) } });
     if (!user) return fail(401, 'not signed in');
     const b = await body(req), next = { ...user };
     let won = null;                                            // what the campaign has given this player, when needed
@@ -114,7 +135,7 @@ export async function api(req, env, url) {
     }
     if ('title' in b) {                                        // '' takes the title off
       next.title = typeof b.title === 'string' ? b.title : '';
-      if (next.title && !(await earned()).titles.includes(next.title)) return fail(403, 'Danh hiệu này chưa đạt được');
+      if (next.title && !(await earned()).titles.includes(next.title) && !(await titlesBeyond(env, user)).includes(next.title)) return fail(403, 'Danh hiệu này chưa đạt được');
     }
     if ('hero' in b) {                                         // '' = the plain general
       if (b.hero !== '' && !HEROES.valid(b.hero)) return fail(400, 'no such hero');
@@ -127,7 +148,7 @@ export async function api(req, env, url) {
       next.stage = b.stage;
     }
     await env.DB.prepare('UPDATE users SET name = ?, title = ?, hero = ?, stage = ? WHERE id = ?').bind(next.name, next.title, next.hero, next.stage, user.id).run();
-    return json({ user: await withRanks(env, next) });
+    return json({ user: { ...await withRanks(env, next), titles: await titlesBeyond(env, next) } });
   }
   if (p === '/api/campaign') {
     const user = await currentUser(req, env);
@@ -245,12 +266,33 @@ export async function api(req, env, url) {
       ORDER BY games DESC, rating DESC LIMIT 10`).bind(like, user.id).all();
     return json({ users: results });
   }
+  // achievements: the signed-in player's (with what the records now prove), and a game that earned some, replayed
+  if (p === '/api/achievements') {
+    const user = await currentUser(req, env);
+    if (!user) return fail(401, 'not signed in');
+    if (post) {
+      const b = await body(req), g = b.game || {};
+      if (!Array.isArray(g.moves) || g.moves.length > 600 || typeof g.fen0 !== 'string' || g.fen0.length > 100) return fail(400, 'bad game');
+      const got = ACHIEVEMENTS.fromGame({ fen0: g.fen0, moves: g.moves, me: g.me });
+      if (got.length) await env.DB.batch(got.map(id => env.DB.prepare('INSERT OR IGNORE INTO achievements (user_id, id, at) VALUES (?, ?, ?)').bind(user.id, id, Date.now())));
+    }
+    return json({ achievements: await achievementsOf(env, user) });
+  }
+  // the boards: this season's (ten ranked games in the season to be on it), or a past season's as it ended
   if (p === '/api/leaderboard') {
-    const q = url.searchParams.get('v') === 'sg'
-      ? `SELECT ${USER_COLS} FROM users WHERE sg_games >= 10 ORDER BY sg_rating DESC, sg_games DESC LIMIT 100`
-      : `SELECT ${USER_COLS} FROM users WHERE games >= 10 ORDER BY rating DESC, games DESC LIMIT 100`;
+    const sg = url.searchParams.get('v') === 'sg', now = Date.now(), current = SEASONS.of(now);
+    const asked = parseInt(url.searchParams.get('season'), 10), season = asked >= 1 && asked < current ? asked : current;
+    const info = { n: season, name: SEASONS.name(season), current, end: SEASONS.end(season), past: season < current };
+    if (season < current) {
+      const { results } = await env.DB.prepare(`SELECT u.id, u.name, u.title, r.rank, r.rating, r.games FROM season_results r JOIN users u ON u.id = r.user_id
+        WHERE r.season = ? AND r.v = ? ORDER BY r.rank LIMIT 100`).bind(season, sg ? 'sg' : 'xq').all();
+      return json({ season: info, past: results, provisional: PROVISIONAL });
+    }
+    const q = sg
+      ? `SELECT ${USER_COLS} FROM users WHERE sg_season_games >= 10 ORDER BY sg_rating DESC, sg_season_games DESC LIMIT 100`
+      : `SELECT ${USER_COLS} FROM users WHERE season_games >= 10 ORDER BY rating DESC, season_games DESC LIMIT 100`;
     const { results } = await env.DB.prepare(q).all();
-    return json({ top: results, provisional: PROVISIONAL });
+    return json({ season: info, top: results, provisional: PROVISIONAL });
   }
   const m = p.match(/^\/api\/user\/(\d{1,12})$/);
   if (m) {
@@ -281,7 +323,10 @@ export async function api(req, env, url) {
     // how the one looking stands with this player (signed in, someone else)
     const viewer = await currentUser(req, env);
     const friend = viewer && viewer.id !== id ? await relation(env, viewer.id, id) : null;
-    return json({ user: await withRanks(env, user), games, sg, friend });
+    // achievements (public), and the seasons they finished in the top hundred
+    const ach = (await env.DB.prepare('SELECT id, at FROM achievements WHERE user_id = ? ORDER BY at').bind(id).all()).results;
+    const seasons = (await env.DB.prepare('SELECT season, v, rank, rating FROM season_results WHERE user_id = ? ORDER BY season DESC, v LIMIT 40').bind(id).all()).results;
+    return json({ user: await withRanks(env, user), games, sg, friend, achievements: ach, seasons });
   }
   return fail(404, 'not found');
 }

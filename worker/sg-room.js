@@ -140,7 +140,7 @@ export class SgRoom extends DurableObject {
       const places = st.over.places, d = rate3(P, places);
       // a win is uniting the realm alone; still standing at a draw is a draw; having fallen is a loss
       const res = places.map(p => (p !== 1 ? 'l' : places.filter(q => q === 1).length === 1 ? 'w' : 'd'));
-      const upd = db.prepare('UPDATE users SET sg_rating = sg_rating + ?, sg_games = sg_games + 1, sg_wins = sg_wins + ?, sg_draws = sg_draws + ?, sg_losses = sg_losses + ? WHERE id = ?');
+      const upd = db.prepare('UPDATE users SET sg_rating = sg_rating + ?, sg_games = sg_games + 1, sg_season_games = sg_season_games + 1, sg_wins = sg_wins + ?, sg_draws = sg_draws + ?, sg_losses = sg_losses + ? WHERE id = ?');
       await db.batch([
         db.prepare(`INSERT INTO sg_games (room, p0, p1, p2, place0, place1, place2, reason, plies, rating0, rating1, rating2, delta0, delta1, delta2, ended_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(st.code, ...ids, ...places, st.over.reason, st.moves, ...P.map(u => u.rating), ...d, Date.now()),

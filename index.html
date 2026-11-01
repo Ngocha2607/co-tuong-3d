@@ -228,7 +228,7 @@
   .rv-ctl .icon { width: auto; height: 34px; }
   .rv-ctl .icon:disabled { opacity: 0.35; cursor: default; }
   .rv-sum { display: grid; gap: 4px; font-size: 12.5px; }
-  .rv-sum div { display: grid; grid-template-columns: 34px 44px repeat(4, 1fr); align-items: center; gap: 4px; padding: 4px 8px; border-radius: 8px; background: rgba(245, 233, 212, 0.05); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .rv-sum div { display: grid; grid-template-columns: 48px 44px repeat(4, 1fr); align-items: center; gap: 4px; padding: 4px 8px; border-radius: 8px; background: rgba(245, 233, 212, 0.05); color: var(--dim); font-variant-numeric: tabular-nums; }
   .rv-sum .r b { color: #ff9a8a; } .rv-sum .b b { color: #cfd8e6; }
   .rv-sum .acc { font-weight: 800; color: var(--ink); }
   #moves .mv[data-ply] { cursor: pointer; border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
@@ -292,6 +292,28 @@
   .ch .ct > small:first-of-type { display: inline; color: var(--gold); font-weight: 700; }
   .ch .btn { padding: 8px 14px; }
 
+  /* ---------- achievements (achievements-ui.js) and seasons (account.js) ---------- */
+  .medals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .medal { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 7px 9px; border-radius: 10px; border: 1px dashed var(--line); background: rgba(245, 233, 212, 0.03); color: var(--dim); }
+  .medal i { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #3a2c22; color: var(--dim); font: 700 17px/1 var(--han); font-style: normal; }
+  .medal b { display: block; font-size: 12.5px; line-height: 1.25; }
+  .medal small { display: block; font-size: 11.5px; line-height: 1.3; }
+  .medal.got { border-style: solid; border-color: var(--gold-soft); color: var(--ink); background: rgba(227, 180, 72, 0.07); }
+  .medal.got i { background: radial-gradient(circle at 35% 30%, #f6dc94, #c9962f); color: #6b1712; box-shadow: 0 0 0 2px rgba(255, 230, 170, 0.35), 0 4px 12px rgba(227, 180, 72, 0.35); }
+  .medal.got small { color: var(--dim); }
+  .medals.small { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .medals.small .medal { padding: 0; border: 0; background: none; }
+  .ach-title { display: flex; align-items: center; gap: 10px; color: var(--dim); font-weight: 600; }
+  .ach-title select { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: #24160f; color: var(--ink); font: 600 14px/1.2 var(--ui); }
+  #endAch { display: grid; gap: 6px; margin: -6px 0 14px; text-align: left; }
+  #endAch .medal { animation: pop-in 400ms ease-out both; }
+  .shead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 10px; }
+  .shead b { font: 700 17px/1.2 var(--serif); color: var(--gold); }
+  .shead small { color: var(--dim); font-size: 12.5px; }
+  .shead span { margin-left: auto; display: flex; gap: 12px; }
+  .slist { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+  .slist .ttl { display: inline; margin-left: 4px; }
+
   /* ---------- the daily puzzle: the seal on the home dock, its page with a small flat board ---------- */
   .daily-chip { display: flex; align-items: center; gap: 8px; margin-left: auto; padding: 3px 12px 3px 3px; border-radius: 999px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); color: var(--ink); text-align: left; cursor: pointer; animation: dailyGlow 2.6s ease-in-out infinite; }
   .daily-chip:hover { background: rgba(227, 180, 72, 0.22); }
@@ -331,7 +353,8 @@
   .glist .linkish { font-size: 12.5px; margin-top: 2px; }
   /* the installed app: a new version waiting, and the install button (over the menu only) */
   .btn.upd { padding: 7px 12px; align-self: center; }
-  body:not(.in-menu) #bInstall { display: none; }
+  body:not(.in-menu) #bInstall, body:not(.in-menu) #bLang { display: none; }
+  .icon.lang { font: 700 12px/1 var(--ui); letter-spacing: 0.04em; }
 
   /* ---------- the open rooms in the menu ---------- */
   .rhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
@@ -630,6 +653,7 @@
     .rewards { grid-template-columns: 1fr; }
     #campaign .camp-head h2, #brief h2, #daily .camp-head h2, #history .camp-head h2 { font-size: 22px; }
     .dtop { flex-wrap: wrap; }
+    .medals { grid-template-columns: 1fr; }
     .flist li { grid-template-columns: auto minmax(0, 1fr); }
     .flist .fa { grid-column: 1 / -1; justify-content: flex-end; }
     .ch { grid-template-columns: auto minmax(0, 1fr) auto; }
@@ -679,6 +703,7 @@
   </nav>
   <div id="status" role="status" aria-live="polite"></div>
   <div class="tools">
+    <button class="icon lang" id="bLang" type="button" translate="no" title="English / Tiếng Việt" aria-label="Ngôn ngữ"></button>
     <button class="btn gold upd" id="bUpdate" type="button" title="Tải bản mới của trò chơi" hidden>Cập nhật</button>
     <button class="icon" id="bInstall" type="button" title="Cài trò chơi lên máy" aria-label="Cài trò chơi lên máy" hidden><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
     <button class="icon" id="bArmy" type="button" title="Hiện chiến binh trên mọi quân" aria-label="Hiện chiến binh"><svg viewBox="0 0 24 24"><path d="M4 4l10 10M14 14l2.5-.5L20 17l-3 3-3.5-3.5L14 14zM20 4L10 14M10 14l-2.5-.5L4 17l3 3 3.5-3.5L10 14z"/></svg></button>
@@ -906,7 +931,7 @@
     </div>
 
     <div class="view" data-view="army" hidden>
-      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Chủ tướng &amp; bối cảnh</h2></div>
+      <div class="vhead"><button class="icon" type="button" data-go="home" aria-label="Quay lại"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>Chủ tướng, bối cảnh &amp; thành tựu</h2></div>
       <section>
         <h2>Chủ tướng</h2>
         <div class="picks" id="heroes"></div>
@@ -916,6 +941,12 @@
         <h2>Bối cảnh</h2>
         <div class="picks" id="segStage"></div>
         <p class="note" id="stageNote"></p>
+      </section>
+      <section>
+        <div class="rhead"><h2>Thành tựu</h2><small id="achSum"></small></div>
+        <div class="medals" id="achGrid"></div>
+        <label class="ach-title" id="achTitleBox" hidden>Danh hiệu<select id="achTitle"></select></label>
+        <p class="note" id="achNote"></p>
       </section>
     </div>
   </div>
@@ -930,6 +961,7 @@
     <p id="endSub"></p>
     <div id="endStars" hidden><div class="stars" id="endStarRow"></div><ul class="goals" id="endGoals"></ul></div>
     <p id="endNote"></p>
+    <div id="endAch" hidden></div>
     <div class="row">
       <button class="btn primary" id="bAgain" type="button">Ván mới</button>
       <button class="btn" id="bEndRetry" type="button" hidden>Đánh lại</button>
@@ -1069,6 +1101,7 @@
 
 <div id="boot"><div><b>象棋</b>Đang bày quân…</div></div>
 
+<script src="src/i18n.js"></script>
 <script src="src/vendor/three.min.js"></script>
 <script src="src/xiangqi.js"></script>
 <script src="src/review.js"></script>
@@ -1081,10 +1114,14 @@
 <script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
 <script src="src/campaign.js"></script>
+<script src="src/achievements.js"></script>
+<script src="src/seasons.js"></script>
+<script src="src/titles.js"></script>
 <script src="src/daily.js"></script>
 <script src="src/account.js"></script>
 <script src="src/campaign-ui.js"></script>
 <script src="src/daily-ui.js"></script>
+<script src="src/achievements-ui.js"></script>
 <script src="src/emotes.js"></script>
 <script src="src/friends.js"></script>
 <script src="src/game.js"></script>

@@ -141,7 +141,7 @@ export class Room extends DurableObject {
       const R = results.find(u => u.id === ids[0]), B = results.find(u => u.id === ids[1]);
       if (!R || !B) { st.recorded = true; return; }
       const w = st.over.winner, d = rate(R, B, w);
-      const upd = db.prepare('UPDATE users SET rating = rating + ?, games = games + 1, wins = wins + ?, draws = draws + ?, losses = losses + ? WHERE id = ?');
+      const upd = db.prepare('UPDATE users SET rating = rating + ?, games = games + 1, season_games = season_games + 1, wins = wins + ?, draws = draws + ?, losses = losses + ? WHERE id = ?');
       await db.batch([
         db.prepare(`INSERT INTO games (room, red, black, winner, reason, plies, red_rating, black_rating, red_delta, black_delta, ended_at, moves)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(st.code, R.id, B.id, w, st.over.reason, st.moves.length, R.rating, B.rating, d.red, d.black, Date.now(), st.moves.join(',')),

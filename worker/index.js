@@ -2,6 +2,7 @@
 // (room.js, and sg-room.js for the three-kingdom game) and one for the ranked queues (lobby.js).
 import { api, authReady, currentUser } from './api.js';
 import { RANKED_TC } from './clock.js';
+import { tick as seasonTick } from './seasons.js';
 export { Room } from './room.js';
 export { Lobby } from './lobby.js';
 export { SgRoom } from './sg-room.js';
@@ -50,5 +51,9 @@ export default {
       catch (e) { console.error(e); return Response.json({ error: 'server error' }, { status: 500 }); }
     }
     return env.ASSETS.fetch(req);
+  },
+  // the daily cron (wrangler.toml): closes a ranked season once it has ended (seasons.js)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(seasonTick(env).then(r => { if (r.closed.length) console.log('seasons closed', r.closed); }, e => console.error('season tick failed', e)));
   },
 };

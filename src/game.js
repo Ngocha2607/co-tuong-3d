@@ -249,6 +249,7 @@
     const name = side => online ? (G.info[side] ? G.info[side].name : side === G.you ? you : G.you ? 'Đối thủ' : SIDE[side])
       : side === G.me ? you : G.mode === 'ai' ? `Máy · ${LEVELS[G.level].name}` : (lv && CAMPAIGN.chapter(lv.chapter) || {}).foeName || (HEROES.byId[G.heroes[side]] || {}).name || 'Máy';
     const kind = online ? (G.rated ? 'ranked' : 'online') : G.mode === 'campaign' ? (lv.daily ? 'daily' : 'campaign') : 'ai';
+    o.ach = me ? ACH_UI.check({ fen0: G.fen0, moves: G.moves.slice(), me }) : [];   // feats of the board (achievements-ui.js)
     const title = { ranked: 'Trận xếp hạng', online: `Phòng ${G.room}`, daily: lv && lv.name, campaign: lv && `Chiến dịch ${lv.id} · ${lv.name}`, ai: `Với máy · ${LEVELS[G.level].name}` }[kind];
     try {
       return REVIEW.add({ at: Date.now(), kind, title, fen0: G.fen0, moves: G.moves.slice(), me, names: { 1: name(1), '-1': name(-1) }, winner: o.winner, reason: o.reason, heroes: { ...G.heroes }, room: online && !G.rated ? G.room : '' }).id;
@@ -816,7 +817,7 @@
       if (!pos.alive[k]) who.textContent = 'Đã mất nước';
       else if (net) who.innerHTML = sgWho(k);
       else who.textContent = sgAIk(k) ? `Máy · ${(SG_LEVELS[sg.level] || SG_LEVELS[1]).name}` : solo >= 0 ? 'Bạn' : 'Người';
-      const ttl = net && net.info[k] && CAMPAIGN.TITLES[net.info[k].title];
+      const ttl = net && net.info[k] && TITLES.text(net.info[k].title);
       who.title = ttl ? `Danh hiệu: ${ttl}` : '';
       el.classList.toggle('turn', !G.over && pos.alive[k] && (G.animating ? G.lastMover : turn) === k);
       el.classList.toggle('out', !pos.alive[k]);
@@ -1023,7 +1024,7 @@
     if (!anchor) return;
     for (const o of $('#bubbles').querySelectorAll(`[data-side="${side}"]`)) o.remove();   // one at a time each
     const b = document.createElement('div'), r = anchor.getBoundingClientRect(), beside = !inHall() && innerWidth > 760;
-    b.className = 'bubble' + (cry ? ' cry' : '') + (beside ? ' left' : ''); b.dataset.side = side; b.textContent = text;
+    b.className = 'bubble' + (cry ? ' cry' : '') + (beside ? ' left' : ''); b.dataset.side = side; b.textContent = I18N.tr(text);   // in its own words before it is measured
     $('#bubbles').appendChild(b);
     const w = b.offsetWidth, h = b.offsetHeight;
     const x = beside ? r.left - w - 12 : r.left + r.width / 2 - w / 2, y = beside ? r.top + r.height / 2 - h / 2 : r.top - h - 10;
@@ -1410,7 +1411,7 @@
       else if (G.mode === 'campaign') who = side === G.me ? 'Bạn' : 'Máy';
       else if (G.mode === 'online') who = whoOnline(side);
       el.querySelector('.who').innerHTML = who;
-      const ttl = G.mode === 'online' && G.info[side] && CAMPAIGN.TITLES[G.info[side].title];
+      const ttl = G.mode === 'online' && G.info[side] && TITLES.text(G.info[side].title);
       el.querySelector('.who').title = ttl ? `Danh hiệu: ${ttl}` : '';
       el.classList.toggle('turn', !G.over && G.mode !== 'menu' && (G.animating ? -G.lastMover : turn) === side);
       el.classList.toggle('away', G.mode === 'online' && !G.players[side]);
@@ -1605,6 +1606,9 @@
     $('#bEndLeave').hidden = !(G.mode === 'online' || sgNet());
     $('#bEndUndo').hidden = !(G.mode === 'ai' || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length && G.sg.hist.some(h => !G.sg.seats[h.pos.turn])));
     $('#bEndReview').hidden = !(G.over && G.over.kept && G.mode !== 'sanguo');
+    const ach = (G.over && G.over.ach) || [];
+    $('#endAch').hidden = !ach.length;
+    $('#endAch').innerHTML = ach.map(id => { const a = ACHIEVEMENTS.byId[id]; return `<span class="medal got"><i>${a.han}</i><span><b>Thành tựu mới: ${ACCOUNT.esc(a.name)}</b><small>${ACCOUNT.esc(a.desc)}</small></span></span>`; }).join('');
     $('#bEndMap').textContent = 'Bản đồ chiến dịch';
     renderEndCampaign();
   }
@@ -1767,6 +1771,7 @@
   $('#bEndReview').addEventListener('click', () => { const g = G.over && G.over.kept && REVIEW.get(G.over.kept); if (g) rvOpen(g, 'end'); else toast('Không tìm thấy ván này trên máy'); });
   // the daily puzzle: its page (from the navbar, or the home dock's seal), started from there
   DAILY_UI.init({ toast, onStart: startDaily });
+  ACH_UI.init({ toast });
   const dailyChip = () => {
     const done = DAILY_UI.solvedToday, n = DAILY_UI.streak();
     $('#dailyNote').textContent = (done ? 'Đã phá trận' : 'Chưa phá trận') + (n ? ` · chuỗi ${n} ngày` : '');
@@ -1808,6 +1813,7 @@
     if (id !== syncedFor) {
       syncedFor = id;
       CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
+      ACH_UI.sync(u);
     }
     $('#bRanked').disabled = $('#bSgRanked').disabled = !u;
     $('#xqRankNote').textContent = u ? `${u.rating} điểm` : 'Cần đăng nhập';

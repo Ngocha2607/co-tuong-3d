@@ -113,7 +113,7 @@ const DAILY_UI = (() => {
     else {
       h = '<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Thời gian</th><th>Lần thử</th></tr></thead><tbody>';
       board.top.forEach((u, i) => {
-        const ttl = u.title && CAMPAIGN.TITLES[u.title];
+        const ttl = TITLES.text(u.title);
         h += `<tr${ACCOUNT.user && u.id === ACCOUNT.user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${ACCOUNT.esc(u.name)}${ttl ? `<small class="ttl">${ACCOUNT.esc(ttl)}</small>` : ''}</td><td><b>${clock(u.ms)}</b></td><td>${u.tries}</td></tr>`;
       });
       h += '</tbody></table>';

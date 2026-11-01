@@ -74,14 +74,15 @@ const CAMPAIGN_UI = (() => {
       const when = r.chapter ? `Xong chương ${CAMPAIGN.chapter(r.chapter).name}` : got ? `${r.stars} sao` : `${u.total}/${r.stars} sao`;
       return `<li class="${got ? 'got' : ''}"><span class="hz">${han}</span><span><b>${esc(what)}</b><small>${esc(when)}${got ? ' · đã nhận' : ''}</small></span></li>`;
     }).join('');
-    // title: shown on the leaderboard and in ranked games, for signed-in players
-    const box = $('#campTitleBox');
-    if (ACCOUNT.user && u.titles.length) {
+    // title: shown on the leaderboard and in ranked games, for signed-in players; the campaign's, and those from
+    // achievements and seasons (titles.js)
+    const box = $('#campTitleBox'), all = [...u.titles, ...((ACCOUNT.user && ACCOUNT.user.titles) || [])];
+    if (ACCOUNT.user && all.length) {
       box.hidden = false;
       const cur = ACCOUNT.user.title || '';
-      $('#campTitle').innerHTML = '<option value="">Không hiện danh hiệu</option>' + u.titles.map(t => `<option value="${t}"${t === cur ? ' selected' : ''}>${esc(CAMPAIGN.TITLES[t])}</option>`).join('');
+      $('#campTitle').innerHTML = '<option value="">Không hiện danh hiệu</option>' + all.map(t => `<option value="${esc(t)}"${t === cur ? ' selected' : ''}>${esc(TITLES.text(t))}</option>`).join('');
     } else box.hidden = true;
-    $('#campTitleNote').textContent = ACCOUNT.user ? (u.titles.length ? '' : 'Hoàn thành một chương để nhận danh hiệu đầu tiên.') : (ACCOUNT.enabled ? 'Đăng nhập Google để giữ tiến độ trên mọi thiết bị và hiện danh hiệu trên bảng xếp hạng.' : '');
+    $('#campTitleNote').textContent = ACCOUNT.user ? (all.length ? '' : 'Hoàn thành một chương để nhận danh hiệu đầu tiên.') : (ACCOUNT.enabled ? 'Đăng nhập Google để giữ tiến độ trên mọi thiết bị và hiện danh hiệu trên bảng xếp hạng.' : '');
     // chapters, each with its three battles
     $('#campMap').innerHTML = CAMPAIGN.CHAPTERS.map((c, i) => {
       const open = c.levels.some(l => u.levels.has(l.id)), done = u.chapters.has(c.id), st = STAGES.byId[c.stage];
