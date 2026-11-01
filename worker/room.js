@@ -136,8 +136,8 @@ export class Room extends DurableObject {
       const w = st.over.winner, d = rate(R, B, w);
       const upd = db.prepare('UPDATE users SET rating = rating + ?, games = games + 1, wins = wins + ?, draws = draws + ?, losses = losses + ? WHERE id = ?');
       await db.batch([
-        db.prepare(`INSERT INTO games (room, red, black, winner, reason, plies, red_rating, black_rating, red_delta, black_delta, ended_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(st.code, R.id, B.id, w, st.over.reason, st.moves.length, R.rating, B.rating, d.red, d.black, Date.now()),
+        db.prepare(`INSERT INTO games (room, red, black, winner, reason, plies, red_rating, black_rating, red_delta, black_delta, ended_at, moves)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(st.code, R.id, B.id, w, st.over.reason, st.moves.length, R.rating, B.rating, d.red, d.black, Date.now(), st.moves.join(',')),
         upd.bind(d.red, +(w === 1), +(w === 0), +(w === -1), R.id),
         upd.bind(d.black, +(w === -1), +(w === 0), +(w === 1), B.id),
       ]);

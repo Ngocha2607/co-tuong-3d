@@ -3,7 +3,7 @@
 import assert from 'assert';
 import * as elo from '../worker/elo.js';
 import * as C from '../worker/clock.js';
-import { verifyGoogle, makeSession, readSession, b64u, cookieOf } from '../worker/auth.js';
+import { verifyGoogle, makeSession, readSession, b64u, cookieOf, sign, unsign } from '../worker/auth.js';
 import * as R from '../worker/sg-game.js';
 import * as H from '../worker/hall.js';
 import * as Rooms from '../worker/rooms.js';
@@ -232,6 +232,16 @@ await test('session cookie: round trip, forgery and expiry', async () => {
   assert.strictEqual(await readSession('secret', b64u.enc(enc.encode('{"u":1,"e":9999999999}')) + '.' + sig, now), 0);
   assert.strictEqual(await readSession('secret', 'garbage', now), 0);
   assert.strictEqual(cookieOf({ headers: new Headers({ cookie: 'a=1; ct_sid=xyz; b=2' }) }), 'xyz');
+});
+
+await test('signed tickets (for the daily puzzle): round trip, another key, a changed body', async () => {
+  const t = await sign('secret', { u: 7, d: 20758, t: 1000 });
+  assert.deepStrictEqual(await unsign('secret', t), { u: 7, d: 20758, t: 1000 });
+  assert.strictEqual(await unsign('other', t), null);
+  const [, sig] = t.split('.');
+  assert.strictEqual(await unsign('secret', b64u.enc(enc.encode('{"u":7,"d":20758,"t":1}')) + '.' + sig), null);
+  assert.strictEqual(await unsign('secret', ''), null);
+  assert.strictEqual(await unsign('secret', 'x.y'), null);
 });
 
 if (failed) { console.log(`\n${failed} failed`); process.exit(1); }

@@ -32,6 +32,13 @@ export default {
       const rooms = p === '/ws/sg' ? env.SGROOMS : env.ROOMS;
       return rooms.get(rooms.idFromName(room)).fetch(withUser(req, user));
     }
+    // the installed app's service worker: always the whole file, never a 304 on a stale ETag, or a new version of
+    // the game could go unnoticed (the page compares it byte for byte)
+    if (p === '/sw.js') {
+      const h = new Headers(req.headers); h.delete('if-none-match'); h.delete('if-modified-since');
+      const r = await env.ASSETS.fetch(new Request(req, { headers: h }));
+      return new Response(r.body, { status: r.status, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' } });
+    }
     if (p === '/rooms') return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch('https://lobby/rooms' + url.search);   // open friendly rooms
     if (p === '/info') {
       const accounts = authReady(env);

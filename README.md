@@ -21,6 +21,14 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
     - Chủ tướng và bối cảnh đã có từ trước vẫn miễn phí.
   - Tiến độ của khách lưu trong trình duyệt. Đăng nhập thì đồng bộ lên server, đổi máy không mất, và những trận đã thắng lúc chưa đăng nhập được gửi lên. Server đi lại từng ván để xác minh trước khi ghi sao.
   - Khi đăng nhập, chủ tướng và bối cảnh đang chọn cũng lưu theo tài khoản: sang máy khác đăng nhập là có lại. Lần đăng nhập đầu tiên, lựa chọn trên máy đang dùng được gửi lên làm mặc định.
+- **Bát Trận Đồ (八陣圖):** trận đồ của Gia Cát Lượng, mỗi ngày phá một trận. Một thế cờ chung cho mọi người (đổi lúc 0 giờ giờ Việt Nam), chỉ dành cho cao thủ: Đỏ đi trước, chiếu bí trong 4, 5 hoặc 6 nước trước sự chống đỡ hết sức của máy. Mỗi trận ghi bậc: **Bậc Đại sư** cho trận 5–6 nước, hoặc trận mà máy tìm nông (4 nửa nước) không thấy nước mở đầu; còn lại là **Bậc Cao thủ**. Có bàn cờ nhỏ xem trước, chuỗi ngày phá trận liên tiếp, đồng hồ đếm đến trận mới và bảng **phá trận nhanh nhất hôm nay** (top 20). Mở từ nút 陣 trên thanh dưới màn hình chính, mục *Bát Trận Đồ* trên thanh điều hướng, hoặc lối tắt của ứng dụng đã cài (`/?daily`).
+  - Mỗi trận được tìm bằng `node test/gen-daily.js` (chạy song song trên mọi nhân CPU) và được chứng minh vét cạn: chiếu bí đúng N nước trước mọi cách đỡ, không có cách thắng nhanh hơn, chỉ **một** nước mở đầu đúng, và nước đó là nước êm hoặc thí quân, không bao giờ là một nước chiếu lộ liễu. Những trận mà máy tìm nông (4 nửa nước) không thấy được xếp lên trước. Hết kho thì quay vòng.
+  - Đồng hồ chạy từ lần đầu mở trận trong ngày và chạy tiếp qua mỗi lần thử lại. Khi đăng nhập, máy chủ cấp một vé có chữ ký lúc bắt đầu, tính thời gian từ vé đó và đi lại lời giải trước khi ghi lên bảng. Chỉ lần phá trận đầu tiên mỗi ngày được tính; lời giải có dùng Đi lại hay Gợi ý vẫn giữ chuỗi ngày nhưng không vào bảng nhanh nhất. Chưa đăng nhập thì chuỗi ngày lưu trong trình duyệt.
+- **Xem lại & phân tích:** mọi ván cờ tướng (với máy, chiến dịch, Bát Trận Đồ, online, xếp hạng) đều xem lại được từng nước: nút ⏮ ◀ ▶ ▶| hoặc phím ← → Home End, phím cách để tự chạy, chạm vào biên bản để nhảy tới nước đó, nút lật bàn. Bấm *Phân tích ván* (tự chạy khi mở) để máy chấm từng nước, mất khoảng nửa phút cho cả ván và chạy trong Web Worker:
+  - Mỗi nước được chấm theo cơ hội thắng mà nó đánh mất so với nước tốt nhất: **??** nước hớ, **?** sai lầm, **?!** chưa chính xác, và **!** nước hay (nước duy nhất giữ được thế cờ). Lời bình nói rõ mất gì ("mất lợi thế cỡ một quân Mã hay Pháo", "bỏ lỡ đường chiếu bí trong 2 nước") và nên đi nước nào; vòng sáng trên bàn chỉ nước đó.
+  - Biểu đồ thế trận cả ván (chạm để nhảy tới nước đó), độ chính xác (%) của mỗi bên và số nước mỗi loại.
+  - **Ván đã chơi** (thanh điều hướng): 30 ván gần nhất lưu trên máy, kèm phần phân tích. Nút *Xem lại · phân tích* có ở màn kết thúc ván. Ván xếp hạng mở được từ **Hồ sơ** (của mình hay của người khác), vì máy chủ lưu nước đi của từng ván xếp hạng. Tam Quốc chưa có xem lại.
+- **Cài lên máy (PWA), chơi offline:** trên Chrome/Edge có nút cài (mũi tên xuống) ở menu; trên iPhone dùng *Thêm vào màn hình chính*. Service worker (`sw.js`) giữ toàn bộ mã trò chơi, nên mất mạng vẫn mở được và đánh với máy, chơi chiến dịch, Bát Trận Đồ, xem lại ván cũ. Nhạc nền được giữ lại sau lần phát đầu. Khi deploy bản mới, trang hiện nút **Cập nhật**: bấm khi tiện, không bị tải lại giữa ván. Khi chạy `npm start` trên máy, service worker tắt sẵn để luôn nhận file mới; thêm `#sw` vào địa chỉ để thử.
 - **Đánh với máy:** chọn cầm quân Đỏ hoặc Đen, ba mức Dễ / Thường / Khó. Máy tính nước trong Web Worker nên hình không bị giật. Có Đi lại và Gợi ý.
 - **Tam Quốc tranh hùng (cờ tướng ba người):** Thục (đỏ), Ngô (xanh lục), Ngụy (xanh đen) chung một bàn lục giác ghép từ ba nửa bàn cờ, ba con sông 長江, 淮水, 漢水 ngăn giữa. Mỗi nước chọn Người hoặc Máy: đánh với hai máy, hai ba người chung một máy (bàn cờ tự xoay về phía nước đến lượt), hay ngồi xem ba máy đấu. Ba mức Dễ / Thường / Khó, có Đi lại và Gợi ý.
   - **Online:** tạo phòng 3 người rồi gửi link `…/?tq=ABCD` cho hai người bạn (hoặc nhập mã phòng). Người vào trước cầm Thục, rồi Ngô, rồi Ngụy; đủ ba người mới bắt đầu. Máy chủ kiểm tra từng nước, mỗi nước một đồng hồ (không giờ, 10 phút + 5 giây hoặc 5 phút + 3 giây). Xin hàng hay hết giờ thì nước đó rút quân khỏi bàn, hai nước kia đánh tiếp; người đã mất nước ở lại xem được. Đấu lại thì cả ba xoay một ghế, ai cũng có lượt đi trước.
@@ -64,8 +72,10 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
 ```bash
 npm install
 npm start          # wrangler dev, mở http://localhost:8787
-npm test           # luật cờ (perft), luật Tam Quốc, máy chơi, Elo, đồng hồ, đăng nhập, và chứng minh mọi thế cờ của chiến dịch
+npm test           # luật cờ (perft), luật Tam Quốc, máy chơi, Elo, đồng hồ, đăng nhập, chứng minh mọi thế cờ của chiến dịch và ba trận đầu của Bát Trận Đồ, chấm nước khi phân tích
 npm run verify:campaign   # (chậm, vài phút) cho máy đánh các trận thủ thành, chấp quân, quyết chiến để xem độ khó
+npm run verify:daily      # (chậm, vài chục phút) chứng minh vét cạn mọi trận của Bát Trận Đồ
+node test/gen-daily.js 150 60 7 keep.jsonl   # (tới 60 phút, mọi nhân CPU) tìm trận đồ mới cho Bát Trận Đồ, in ra danh sách cho src/daily.js; keep.jsonl giữ từng trận tìm được để chạy tiếp lần sau
 ```
 
 `npm start` chạy cả chế độ online trên máy (không cần đăng nhập Cloudflare). Mở bằng một web server tĩnh bất kỳ thì vẫn đánh với máy được, chỉ thiếu chế độ online.
@@ -99,7 +109,7 @@ Lần deploy đầu tiên wrangler tự tạo cơ sở dữ liệu D1 `co-tuong-
 3. Tạo khóa ký phiên: `npx wrangler secret put SESSION_SECRET` rồi nhập một chuỗi ngẫu nhiên dài, ví dụ lấy từ `openssl rand -base64 32`. Đổi khóa này thì mọi người bị đăng xuất.
 4. Tạo bảng: `npm run db:remote`, rồi `npm run deploy` lại.
 
-Khi có migration mới trong `migrations/` (ví dụ `0002_campaign.sql` cho chiến dịch và danh hiệu, `0003_sanguo.sql` cho xếp hạng Tam Quốc), chạy `npm run db:remote` **trước** khi deploy code mới. Phòng Tam Quốc là một Durable Object mới (`SgRoom`, migration `v3` trong `wrangler.toml`), wrangler tự tạo khi deploy.
+Khi có migration mới trong `migrations/` (ví dụ `0002_campaign.sql` cho chiến dịch và danh hiệu, `0003_sanguo.sql` cho xếp hạng Tam Quốc, `0004_review_daily.sql` cho nước đi của ván xếp hạng và bảng Bát Trận Đồ), chạy `npm run db:remote` **trước** khi deploy code mới. Phòng Tam Quốc là một Durable Object mới (`SgRoom`, migration `v3` trong `wrangler.toml`), wrangler tự tạo khi deploy.
 
 Máy chủ chỉ lưu mã tài khoản Google (`sub`) và tên hiển thị. Không lưu email hay ảnh đại diện.
 

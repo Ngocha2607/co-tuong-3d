@@ -11,6 +11,8 @@ watch_dir = ["src", "worker"]
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+# the service worker goes through worker/index.js, which never answers it with a 304 (see there)
+run_worker_first = ["/sw.js"]
 
 # Google sign-in: the OAuth client id is public (it is sent to the page). Leave it empty to run without accounts.
 # SESSION_SECRET is a secret: `npx wrangler secret put SESSION_SECRET` (and in .dev.vars for `npm start`).

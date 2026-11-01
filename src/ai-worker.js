@@ -3,9 +3,9 @@
 'use strict';
 importScripts('xiangqi.js', 'sanguo.js');
 onmessage = e => {
-  const { id, fen, moves, time, depth, noise, sg } = e.data;
+  const { id, fen, moves, time, depth, noise, sg, exclude, full } = e.data;
   if (sg) { postMessage({ id, ...SG.think(SG.unpack(sg), { time, depth, noise }) }); return; }
   const pos = XQ.Pos.fromFen(fen), history = [];
   for (const m of moves) { history.push(pos.key()); pos.make(m); }
-  postMessage({ id, ...XQ.think(pos, { time, depth, history, noise }) });
+  postMessage({ id, ...XQ.think(pos, { time, depth, history, noise, exclude, full }) });
 };

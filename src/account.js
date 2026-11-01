@@ -135,7 +135,7 @@ const ACCOUNT = (() => {
         const res = g.result > 0 ? ['win', '勝'] : g.result < 0 ? ['lose', '敗'] : ['draw', '和'];
         h += `<li class="${res[0]}"><span class="r">${res[1]}</span>
           <span class="vs">gặp <a href="#" data-id="${g.opp.id}">${esc(g.opp.name)}</a> <small>${g.opp.rating}</small><br>
-          <small>${g.side > 0 ? 'Đỏ' : 'Đen'} · ${REASON[g.reason] || ''} · ${Math.ceil(g.plies / 2)} nước · ${new Date(g.at).toLocaleDateString('vi-VN')}</small></span>
+          <small>${g.side > 0 ? 'Đỏ' : 'Đen'} · ${REASON[g.reason] || ''} · ${Math.ceil(g.plies / 2)} nước · ${new Date(g.at).toLocaleDateString('vi-VN')}</small>${g.replay ? `<br><button type="button" class="linkish" data-game="${g.id}">Xem lại · phân tích</button>` : ''}</span>
           <span class="d">${sign(g.delta)}<small>${g.rating}</small></span></li>`;
       }
       h += '</ul>';
@@ -156,7 +156,11 @@ const ACCOUNT = (() => {
     return h;
   }
   $('#rkTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(+b.dataset.v); });
+  // a ranked game to watch again (game.js opens it)
+  let replay = () => { };
   $('#rkBody').addEventListener('click', e => {
+    const gm = e.target.closest('[data-game]');
+    if (gm) { replay(+gm.dataset.game); return; }
     const t = e.target.closest('[data-id]');
     if (!t) return;
     e.preventDefault();
@@ -168,6 +172,7 @@ const ACCOUNT = (() => {
   return {
     init, refresh, save, openRanks, esc, sign,
     onChange(f) { subs.push(f); },
+    onReplay(f) { replay = f; },
     get user() { return user; },
     get enabled() { return enabled; },
   };

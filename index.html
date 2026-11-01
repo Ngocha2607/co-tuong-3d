@@ -207,6 +207,75 @@
   #drawAsk { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); font-weight: 700; }
   #drawAsk .btn { padding: 7px 12px; }
 
+  /* ---------- watching a game again: the chart, what the computer says, the controls (review.js) ---------- */
+  #review { display: grid; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--gold-soft); background: rgba(227, 180, 72, 0.06); }
+  body:not([data-mode="review"]) #review, body[data-mode="review"] #bResign { display: none; }
+  .rv-chart { height: 64px; border-radius: 8px; overflow: hidden; background: rgba(0, 0, 0, 0.35); cursor: pointer; }
+  .rv-chart svg { display: block; width: 100%; height: 100%; }
+  .rv-chart .red { fill: rgba(224, 87, 76, 0.7); }
+  .rv-chart .black { fill: rgba(160, 176, 200, 0.4); }
+  .rv-chart line { vector-effect: non-scaling-stroke; }
+  .rv-chart .mid { stroke: rgba(245, 233, 212, 0.25); stroke-width: 1; }
+  .rv-chart .at { stroke: var(--gold); stroke-width: 2; }
+  .rv-chart .dot { stroke-width: 7; stroke-linecap: round; }
+  .rv-chart .dot.blunder { stroke: #ff6b5a; } .rv-chart .dot.mistake { stroke: #ffa94d; }
+  .rv-say { margin: 0; min-height: 38px; font-size: 13px; line-height: 1.45; color: var(--dim); }
+  .rv-say b { color: var(--ink); } .rv-say b.r { color: #ff9a8a; } .rv-say b.b { color: #cfd8e6; }
+  .rv-say small { display: block; margin-top: 2px; color: var(--gold); font-weight: 600; font-size: 12px; }
+  .mk { font-style: normal; font-weight: 800; margin-left: 3px; }
+  .mk.blunder { color: #ff6b5a; } .mk.mistake { color: #ffa94d; } .mk.inaccuracy { color: #e8d36a; } .mk.good { color: var(--jade); }
+  .rv-ctl { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .rv-ctl .icon { width: auto; height: 34px; }
+  .rv-ctl .icon:disabled { opacity: 0.35; cursor: default; }
+  .rv-sum { display: grid; gap: 4px; font-size: 12.5px; }
+  .rv-sum div { display: grid; grid-template-columns: 34px 44px repeat(4, 1fr); align-items: center; gap: 4px; padding: 4px 8px; border-radius: 8px; background: rgba(245, 233, 212, 0.05); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .rv-sum .r b { color: #ff9a8a; } .rv-sum .b b { color: #cfd8e6; }
+  .rv-sum .acc { font-weight: 800; color: var(--ink); }
+  #moves .mv[data-ply] { cursor: pointer; border-radius: 6px; padding: 0 4px; margin: 0 -4px; }
+  #moves .mv[data-ply]:hover { background: rgba(245, 233, 212, 0.08); }
+  #moves .mv.at { background: rgba(227, 180, 72, 0.22); box-shadow: inset 0 0 0 1px var(--gold-soft); }
+
+  /* ---------- the daily puzzle: the seal on the home dock, its page with a small flat board ---------- */
+  .daily-chip { display: flex; align-items: center; gap: 8px; margin-left: auto; padding: 3px 12px 3px 3px; border-radius: 999px; border: 1px solid var(--gold); background: rgba(227, 180, 72, 0.12); color: var(--ink); text-align: left; cursor: pointer; animation: dailyGlow 2.6s ease-in-out infinite; }
+  .daily-chip:hover { background: rgba(227, 180, 72, 0.22); }
+  .daily-chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  .daily-chip.done { animation: none; border-color: var(--line); background: transparent; }
+  .daily-chip .hz { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--red); color: #fff3dc; font: 700 15px/1 var(--han); }
+  .daily-chip.done .hz { background: var(--gold); color: #2a1408; }
+  .daily-chip b { display: block; font: 700 13px/1.15 var(--serif); white-space: nowrap; }
+  .daily-chip small { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .daily-chip + #bResume { margin-left: 0; }
+  @keyframes dailyGlow { 50% { box-shadow: 0 0 16px rgba(227, 180, 72, 0.45); } }
+  #daily .card, #history .card { width: min(620px, 100%); position: relative; }
+  #bDailyClose, #bHistoryClose { position: absolute; top: 18px; right: 18px; }
+  #daily .camp-head h2, #history .camp-head h2 { margin: 0; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  #daily h4.sub { margin: 18px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+  .han-title { font: 700 18px/1 var(--han); color: var(--gold); margin-left: 4px; letter-spacing: 0.05em; }
+  .dy-main { display: grid; grid-template-columns: minmax(0, 250px) 1fr; gap: 18px; align-items: start; }
+  .dy-board svg { display: block; width: 100%; height: auto; background: #e7cf9f; border-radius: 10px; box-shadow: inset 0 0 0 3px #b48a4a, 0 10px 30px rgba(0, 0, 0, 0.4); }
+  .dy-board line { stroke: #6b4a22; stroke-width: 1.2; }
+  .dy-board .river { font: 700 15px var(--han); fill: #6b4a22; text-anchor: middle; opacity: 0.45; }
+  .dy-board circle { fill: #f3e2bd; stroke-width: 2; }
+  .dy-board .r circle { stroke: #a3201a; } .dy-board .b circle { stroke: #1b1b1b; }
+  .dy-board g text { font: 700 16px var(--han); text-anchor: middle; }
+  .dy-board .r text { fill: #a3201a; } .dy-board .b text { fill: #1b1b1b; }
+  .dy-side { display: grid; gap: 10px; }
+  .dy-side .goalline { margin: 0; }
+  .dy-streak { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(227, 180, 72, 0.1); border: 1px solid var(--gold-soft); }
+  .dy-streak .hz { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--gold); color: #a3201a; font: 700 22px/1 var(--han); }
+  .dy-streak b { display: block; font: 700 26px/1 var(--ui); color: var(--gold); font-variant-numeric: tabular-nums; }
+  .dy-streak small { color: var(--dim); }
+  #dyNext { font-variant-numeric: tabular-nums; }
+  #hiList { margin-bottom: 12px; }
+  #hiList li.empty { display: block; border: 0; }
+  #hiList .vs b { font-weight: 700; }
+  #hiList .d .btn { padding: 6px 12px; font-size: 13px; }
+  #hiList .d small { margin-top: 3px; color: var(--jade); }
+  .glist .linkish { font-size: 12.5px; margin-top: 2px; }
+  /* the installed app: a new version waiting, and the install button (over the menu only) */
+  .btn.upd { padding: 7px 12px; align-self: center; }
+  body:not(.in-menu) #bInstall { display: none; }
+
   /* ---------- the open rooms in the menu ---------- */
   .rhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
   .rhead small { color: var(--dim); font-size: 12px; }
@@ -291,9 +360,9 @@
   /* and over the menu the campaign, leaderboard, rules, briefing and search lie flat in that column too, in place of
      the menu's page (body[data-page] names the one shown); over a game they stay dialogs */
   body.in-menu[data-page] #menu :is(.card, .legal), body.in-menu[data-page="brief"] #campaign { visibility: hidden; }
-  body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek) { z-index: 8; background: none; justify-content: flex-start; padding-top: calc(84px + env(safe-area-inset-top, 0px)); }
-  body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek) > .card { margin-left: max(0px, 5vw); padding: 0; background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; }
-  body.in-menu :is(#bCampClose, #bRanksClose, #bRulesClose) { top: 0; right: 0; }
+  body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek, #daily, #history) { z-index: 8; background: none; justify-content: flex-start; padding-top: calc(84px + env(safe-area-inset-top, 0px)); }
+  body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek, #daily, #history) > .card { margin-left: max(0px, 5vw); padding: 0; background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+  body.in-menu :is(#bCampClose, #bRanksClose, #bRulesClose, #bDailyClose, #bHistoryClose) { top: 0; right: 0; }
   body.in-menu #campaign .chap { background: rgba(26, 15, 10, 0.72); backdrop-filter: blur(6px); }
   .card section { padding: 16px 0; border-top: 1px solid var(--line); display: grid; gap: 10px; }
   .card h2 { margin: 0; font: 700 13px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
@@ -358,8 +427,8 @@
   .act small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); font-size: 11.5px; }
   .dtabs button:focus-visible, .game .play:focus-visible, .act:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   #account { margin-top: 4px; padding: 14px 0 0; border-top: 1px solid var(--line); }
-  .me .meta { flex: 1; min-width: 0; }
-  .me .meta small { display: block; }
+  div.me .meta { flex: 1; min-width: 0; }
+  div.me .meta small { display: block; }
   #acIn { display: grid; gap: 12px; }
   #renameForm input { font: 600 15px/1.2 var(--ui); letter-spacing: 0; text-transform: none; }
   #end, .dialog { justify-content: center; background: rgba(10, 6, 4, 0.55); }
@@ -373,11 +442,11 @@
 
   /* ---------- account, leaderboard ---------- */
   #gBtn { display: flex; align-items: center; min-height: 38px; }
-  .me { display: flex; align-items: center; gap: 12px; }
+  div.me { display: flex; align-items: center; gap: 12px; }
   .av { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--gold); color: #2a1408; font: 700 18px/1 var(--serif); }
   .av.big { width: 56px; height: 56px; font-size: 26px; }
-  .me b { display: block; font-size: 16px; }
-  .me small, .phead small { color: var(--dim); }
+  div.me b { display: block; font-size: 16px; }
+  div.me small, .phead small { color: var(--dim); }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .picks button { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 6px 7px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25); color: var(--dim); font: 600 12.5px/1.15 var(--ui); text-align: left; cursor: pointer; }
@@ -502,12 +571,20 @@
     .hcard small { display: none; }
     .hcard .tag { padding: 2px 7px; font-size: 10.5px; }
     .rewards { grid-template-columns: 1fr; }
-    #campaign .camp-head h2, #brief h2 { font-size: 22px; }
+    #campaign .camp-head h2, #brief h2, #daily .camp-head h2, #history .camp-head h2 { font-size: 22px; }
+    .dtop { flex-wrap: wrap; }
+    .daily-chip small { display: none; }
+    .dy-main { grid-template-columns: 1fr; }
+    .dy-board { width: min(280px, 100%); margin: 0 auto; }
+    #review { padding: 8px 10px; gap: 6px; }
+    .rv-chart { height: 46px; }
+    .rv-say { min-height: 0; font-size: 12.5px; }
+    .rv-ctl .icon { height: 32px; }
     #room .link { display: none; }
     #menu { background: rgba(14, 8, 6, 0.8); justify-content: center; }
     #menu .card { margin: 0; }
-    body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek) { justify-content: center; padding-top: calc(108px + env(safe-area-inset-top, 0px)); }
-    body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek) > .card { margin-left: 0; }
+    body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek, #daily, #history) { justify-content: center; padding-top: calc(108px + env(safe-area-inset-top, 0px)); }
+    body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek, #daily, #history) > .card { margin-left: 0; }
     /* the navbar's pages take a second row of their own, sliding sideways if they don't fit */
     body.in-menu #nav { order: 3; flex-basis: 100%; gap: 0; margin: 0; overflow-x: auto; scrollbar-width: none; }
     #nav button { flex: 1 0 auto; padding: 7px 7px; font-size: 12.5px; }
@@ -525,13 +602,17 @@
   <div class="brand"><span class="seal">象</span><b>Cờ Tướng 3D</b></div>
   <nav id="nav" aria-label="Điều hướng">
     <button type="button" data-nav="home">Chơi</button>
+    <button type="button" data-nav="daily">Bát Trận Đồ</button>
     <button type="button" data-nav="campaign">Chinh chiến</button>
     <button type="button" data-nav="ranks" id="navRanks" hidden>Xếp hạng</button>
+    <button type="button" data-nav="history">Ván đã chơi</button>
     <button type="button" data-nav="army">Chủ tướng</button>
     <button type="button" data-nav="rules">Luật chơi</button>
   </nav>
   <div id="status" role="status" aria-live="polite"></div>
   <div class="tools">
+    <button class="btn gold upd" id="bUpdate" type="button" title="Tải bản mới của trò chơi" hidden>Cập nhật</button>
+    <button class="icon" id="bInstall" type="button" title="Cài trò chơi lên máy" aria-label="Cài trò chơi lên máy" hidden><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
     <button class="icon" id="bArmy" type="button" title="Hiện chiến binh trên mọi quân" aria-label="Hiện chiến binh"><svg viewBox="0 0 24 24"><path d="M4 4l10 10M14 14l2.5-.5L20 17l-3 3-3.5-3.5L14 14zM20 4L10 14M10 14l-2.5-.5L4 17l3 3 3.5-3.5L10 14z"/></svg></button>
     <button class="icon" id="bCam" type="button" title="Đặt lại góc nhìn" aria-label="Đặt lại góc nhìn"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg></button>
     <div class="pop-wrap">
@@ -578,6 +659,21 @@
     <small id="goalCount"></small>
     <small id="goalHelp" hidden>Đã dùng Đi lại hoặc Gợi ý: tối đa 2 sao</small>
   </div>
+  <div id="review">
+    <div class="mhead"><span>Xem lại</span><span id="rvPly"></span></div>
+    <div class="rv-chart" id="rvChart" title="Cơ hội thắng của Đỏ (trên) và Đen (dưới) qua từng nước: chạm để đến nước đó" hidden></div>
+    <p class="rv-say" id="rvSay" aria-live="polite"></p>
+    <div class="rv-ctl">
+      <button class="icon" id="rvFirst" type="button" aria-label="Về thế đầu"><svg viewBox="0 0 24 24"><path d="M6 5v14M18 5l-8 7 8 7"/></svg></button>
+      <button class="icon" id="rvPrev" type="button" aria-label="Lùi một nước"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="icon" id="rvPlay" type="button" aria-label="Tự chạy"></button>
+      <button class="icon" id="rvNext" type="button" aria-label="Tới một nước"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="icon" id="rvLast" type="button" aria-label="Đến nước cuối"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
+      <button class="icon" id="rvFlip" type="button" title="Lật bàn cờ" aria-label="Lật bàn cờ"><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></button>
+    </div>
+    <div class="rv-sum" id="rvSum" hidden></div>
+    <button class="btn gold" id="bAnalyse" type="button">Phân tích ván</button>
+  </div>
   <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
   <ol id="moves"></ol>
   <div id="drawAsk" hidden><span>Đối thủ cầu hòa</span><button class="btn gold" id="bDrawYes" type="button">Đồng ý</button><button class="btn" id="bDrawNo" type="button">Từ chối</button></div>
@@ -622,6 +718,7 @@
       <div class="dock">
         <div class="dtop">
           <div class="dtabs" id="gameTabs" role="tablist"><button type="button" role="tab" data-v="xq"><span class="hz">象</span>Cờ tướng</button><button type="button" role="tab" data-v="sg"><span class="hz">三</span>Tam Quốc</button></div>
+          <button class="daily-chip" id="bDaily" type="button"><span class="hz">陣</span><span><b>Bát Trận Đồ</b><small id="dailyNote"></small></span></button>
           <button class="btn gold" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
         </div>
         <div class="game xq" data-game="xq">
@@ -757,6 +854,7 @@
       <button class="btn primary" id="bAgain" type="button">Ván mới</button>
       <button class="btn" id="bEndRetry" type="button" hidden>Đánh lại</button>
       <button class="btn" id="bEndUndo" type="button">Đi lại</button>
+      <button class="btn" id="bEndReview" type="button" hidden>Xem lại · phân tích</button>
       <button class="btn" id="bEndMap" type="button" hidden>Bản đồ chiến dịch</button>
       <button class="btn" id="bEndLeave" type="button" hidden>Rời phòng</button>
       <button class="btn" id="bEndMenu" type="button">Về menu</button>
@@ -846,10 +944,40 @@
   </div>
 </div>
 
+<div id="daily" class="overlay dialog" hidden>
+  <div class="card">
+    <button class="icon" id="bDailyClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="camp-head"><span class="seal">陣</span><div><h2>Bát Trận Đồ <small class="han-title">八陣圖</small></h2><p id="dyDate"></p></div></div>
+    <div class="dy-main">
+      <div class="dy-board" id="dyBoard"></div>
+      <div class="dy-side">
+        <p class="goalline"><span class="badge" id="dyRank"></span> Đỏ đi trước · <b id="dyGoal"></b></p>
+        <p class="note">Trận đồ của Gia Cát Lượng: mỗi ngày một trận mới, giống nhau cho mọi người, chỉ dành cho bậc cao thủ. Máy giữ quân Đen, chống đỡ hết sức, và chỉ có đúng một nước mở đầu phá được trận.</p>
+        <div class="dy-streak"><span class="hz">連</span><div><b id="dyStreak">0</b><small>ngày phá trận liên tiếp</small></div></div>
+        <p class="note" id="dyMine"></p>
+        <button class="btn primary wide" id="bDailyGo" type="button">Phá trận</button>
+        <p class="note" id="dyNext"></p>
+      </div>
+    </div>
+    <h4 class="sub">Phá trận nhanh nhất hôm nay</h4>
+    <div id="dyTop"></div>
+  </div>
+</div>
+
+<div id="history" class="overlay dialog" hidden>
+  <div class="card">
+    <button class="icon" id="bHistoryClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="camp-head"><span class="seal">譜</span><div><h2>Ván đã chơi</h2><p id="hiSum"></p></div></div>
+    <ul class="glist" id="hiList"></ul>
+    <p class="note">Lưu 30 ván cờ tướng gần nhất trên máy này, kèm phần phân tích. Ván xếp hạng còn xem lại được trong Hồ sơ.</p>
+  </div>
+</div>
+
 <div id="boot"><div><b>象棋</b>Đang bày quân…</div></div>
 
 <script src="src/vendor/three.min.js"></script>
 <script src="src/xiangqi.js"></script>
+<script src="src/review.js"></script>
 <script src="src/sanguo.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/heroes.js"></script>
@@ -859,8 +987,10 @@
 <script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
 <script src="src/campaign.js"></script>
+<script src="src/daily.js"></script>
 <script src="src/account.js"></script>
 <script src="src/campaign-ui.js"></script>
+<script src="src/daily-ui.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>

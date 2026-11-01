@@ -64,6 +64,18 @@ export async function readSession(secret, value, now = Date.now()) {
     return Number.isInteger(p.u) && p.e > now / 1000 ? p.u : 0;
   } catch (e) { return 0; }
 }
+// any small object, signed the same way: `<payload>.<HMAC-SHA256>` (the daily puzzle's start ticket)
+export async function sign(secret, obj) {
+  const body = b64u.enc(enc.encode(JSON.stringify(obj)));
+  return body + '.' + b64u.enc(await crypto.subtle.sign('HMAC', await hmac(secret), enc.encode(body)));
+}
+// → the object, or null when missing or forged
+export async function unsign(secret, value) {
+  const [body, sig] = String(value || '').split('.');
+  if (!body || !sig) return null;
+  try { return await crypto.subtle.verify('HMAC', await hmac(secret), b64u.dec(sig), enc.encode(body)) ? json(body) : null; }
+  catch (e) { return null; }
+}
 export function cookieOf(req, name = COOKIE) {
   for (const part of (req.headers.get('cookie') || '').split(';')) {
     const i = part.indexOf('=');

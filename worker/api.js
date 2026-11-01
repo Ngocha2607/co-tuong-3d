@@ -1,10 +1,12 @@
 // worker/api.js — HTTP side of accounts: Google sign-in, the signed-in player (nickname, title, the hero and stage
-// they picked), leaderboard, profiles, and campaign progress (each battle won is replayed here before it is saved).
+// they picked), leaderboard, profiles, ranked games to watch again, campaign progress (each battle won is replayed
+// here before it is saved) and the daily puzzle's board of the fastest.
 // Accounts need three things configured (see README): the D1 database DB, GOOGLE_CLIENT_ID and the SESSION_SECRET
 // secret. Without them the site still works, just without sign-in and ranked play.
-import { verifyGoogle, makeSession, readSession, cookieOf, setCookie } from './auth.js';
+import { verifyGoogle, makeSession, readSession, cookieOf, setCookie, sign, unsign } from './auth.js';
 import { PROVISIONAL } from './elo.js';
 import CAMPAIGN from '../src/campaign.js';
+import DAILY from '../src/daily.js';
 import HEROES from '../src/heroes.js';
 import STAGE_LIST from '../src/stage-list.js';
 
@@ -43,6 +45,23 @@ const body = async req => { try { return await req.json(); } catch (e) { return 
 async function progressOf(env, uid) {
   const { results } = await env.DB.prepare('SELECT level, stars FROM campaign WHERE user_id = ?').bind(uid).all();
   return Object.fromEntries(results.map(r => [r.level, r.stars]));
+}
+
+// a day's daily puzzle: the 20 fastest (without undo or hints), how many solved it, and the player's own result,
+// rank and streak
+async function dailyBoard(env, day, user) {
+  const db = env.DB;
+  const { results: top } = await db.prepare(`SELECT d.user_id AS id, u.name, u.title, d.ms, d.tries FROM daily d JOIN users u ON u.id = d.user_id
+    WHERE d.day = ? AND d.help = 0 ORDER BY d.ms, d.solved_at LIMIT 20`).bind(day).all();
+  const solvers = (await db.prepare('SELECT COUNT(*) AS n FROM daily WHERE day = ?').bind(day).first()).n;
+  let me = null;
+  if (user) {
+    const mine = await db.prepare('SELECT ms, tries, help FROM daily WHERE user_id = ? AND day = ?').bind(user.id, day).first();
+    const { results: days } = await db.prepare('SELECT day FROM daily WHERE user_id = ? AND day <= ? ORDER BY day DESC LIMIT 400').bind(user.id, day).all();
+    const rank = mine && !mine.help ? (await db.prepare('SELECT COUNT(*) + 1 AS r FROM daily WHERE day = ? AND help = 0 AND ms < ?').bind(day, mine.ms).first()).r : null;
+    me = { solved: mine || null, rank, streak: DAILY.streak(days.map(d => d.day), day), days: days.length };
+  }
+  return { day, top, solvers, me };
 }
 
 export async function api(req, env, url) {
@@ -115,6 +134,40 @@ export async function api(req, env, url) {
     }
     return json({ stars, levels: progress });
   }
+  // the daily puzzle: anyone sees the board; a signed-in player takes a ticket when they open the puzzle (the clock
+  // runs from then, across retries) and hands it in with the solution, which is replayed before it is saved
+  if (p === '/api/daily') {
+    const user = await currentUser(req, env), today = DAILY.dayOf();
+    if (!post) return json(await dailyBoard(env, today, user));
+    if (!user) return fail(401, 'not signed in');
+    const b = await body(req), t = await unsign(env.SESSION_SECRET, b.ticket);
+    if (!t || t.u !== user.id || !Number.isInteger(t.d) || !Number.isInteger(t.t)) return fail(400, 'bad ticket');
+    if (t.d > today || t.d < today - 1) return fail(410, 'Trận đồ này đã qua ngày');   // a day's grace across midnight
+    if (!Array.isArray(b.moves) || b.moves.length > 40) return fail(400, 'bad moves');
+    const r = CAMPAIGN.judge(DAILY.level(t.d), b.moves);
+    if (!r.over || !r.win) return fail(400, 'Ván cờ không phải lời giải');
+    const ms = Math.max(1000, Date.now() - t.t), tries = Math.max(1, Math.min(999, b.tries | 0));
+    await env.DB.prepare(`INSERT INTO daily (user_id, day, ms, tries, help, moves, solved_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (user_id, day) DO NOTHING`).bind(user.id, t.d, ms, tries, b.help ? 1 : 0, b.moves.join(','), Date.now()).run();
+    return json(await dailyBoard(env, t.d, user));
+  }
+  if (p === '/api/daily/start' && post) {
+    const user = await currentUser(req, env), day = DAILY.dayOf(), now = Date.now();
+    if (!user) return fail(401, 'not signed in');
+    return json({ day, ticket: await sign(env.SESSION_SECRET, { u: user.id, d: day, t: now }) });
+  }
+  // a ranked game to watch again: both players and every move (games from before moves were kept have none)
+  const gm = p.match(/^\/api\/game\/(\d{1,12})$/);
+  if (gm) {
+    const g = await env.DB.prepare(`SELECT g.*, r.name AS red_name, b.name AS black_name FROM games g
+      JOIN users r ON r.id = g.red JOIN users b ON b.id = g.black WHERE g.id = ?`).bind(+gm[1]).first();
+    if (!g || !g.moves) return fail(404, 'no such game');
+    return json({
+      id: g.id, winner: g.winner, reason: g.reason, at: g.ended_at, moves: g.moves.split(',').map(Number),
+      red: { id: g.red, name: g.red_name, rating: g.red_rating, delta: g.red_delta },
+      black: { id: g.black, name: g.black_name, rating: g.black_rating, delta: g.black_delta },
+    });
+  }
   if (p === '/api/leaderboard') {
     const q = url.searchParams.get('v') === 'sg'
       ? `SELECT ${USER_COLS} FROM users WHERE sg_games >= 10 ORDER BY sg_rating DESC, sg_games DESC LIMIT 100`
@@ -132,6 +185,7 @@ export async function api(req, env, url) {
     const games = results.map(g => {
       const side = g.red === id ? 1 : -1, red = side > 0;
       return {
+        id: g.id, replay: !!g.moves,
         side, opp: { id: red ? g.black : g.red, name: red ? g.black_name : g.red_name, rating: red ? g.black_rating : g.red_rating },
         result: g.winner === 0 ? 0 : g.winner === side ? 1 : -1, reason: g.reason, plies: g.plies,
         delta: red ? g.red_delta : g.black_delta, rating: (red ? g.red_rating + g.red_delta : g.black_rating + g.black_delta), at: g.ended_at,
