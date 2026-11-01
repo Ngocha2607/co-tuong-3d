@@ -307,16 +307,18 @@ const XQ = (() => {
   }
   const ORDER_VAL = [0, 1000, 20, 20, 40, 90, 45, 10];
 
-  // Iterative deepening alpha-beta. opts: { time (ms), depth, history (position keys before this one), noise }
+  // Iterative deepening alpha-beta. opts: { time (ms), depth, history (position keys before this one), noise,
+  // exclude (moves not to consider here: the review looks for the second best), full (a real score even when there
+  // is only one move: the review needs it) }
   function think(pos, opts = {}) {
     ttInit();
     const deadline = Date.now() + (opts.time || 1000), maxDepth = opts.depth || 32, noise = opts.noise || 0;
     const killers = []; const hist = new Int32Array(90 * 90);
     const path = (opts.history || []).slice();              // keys of earlier positions for repetition
     let nodes = 0, stop = false, best = 0, bestScore = 0, depthDone = 0;
-    const rootMoves = pos.legal();
+    const rootMoves = opts.exclude ? pos.legal().filter(m => !opts.exclude.includes(m)) : pos.legal();
     if (!rootMoves.length) return { move: 0, score: -MATE, depth: 0, nodes: 0 };
-    if (rootMoves.length === 1) return { move: rootMoves[0], score: 0, depth: 0, nodes: 0 };
+    if (rootMoves.length === 1 && !opts.full) return { move: rootMoves[0], score: 0, depth: 0, nodes: 0 };
     const evalSide = p => p.val * p.turn + (noise ? ((p.lo ^ noise) & 63) - 32 : 0);
 
     function order(moves, ttm, ply) {

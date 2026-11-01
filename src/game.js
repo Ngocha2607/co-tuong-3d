@@ -1,7 +1,9 @@
-// game.js — the match: menu, playing against the computer (search in a Web Worker), the campaign's battles,
-// online rooms over a WebSocket to the Cloudflare Worker, the move list, banners and the end screen.
-// VIEW draws, XQ rules, CAMPAIGN judges the battles and CAMPAIGN_UI keeps their progress. The three-kingdom game
-// (SG, sanguo.js) is played on this device (each kingdom a person or the computer) or online in a three-seat room.
+// game.js — the match: menu, playing against the computer (search in a Web Worker), the campaign's battles and the
+// daily puzzle, online rooms over a WebSocket to the Cloudflare Worker, the move list, banners and the end screen;
+// and the review of a finished game, move by move with the computer's verdicts (REVIEW, review.js).
+// VIEW draws, XQ rules, CAMPAIGN judges the battles and CAMPAIGN_UI keeps their progress, DAILY_UI the daily puzzle's.
+// The three-kingdom game (SG, sanguo.js) is played on this device (each kingdom a person or the computer) or online in
+// a three-seat room.
 'use strict';
 (() => {
   const $ = s => document.querySelector(s);
@@ -31,7 +33,7 @@
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // a signed-in player's hero and stage follow them: each pick is saved to the account
   const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq' };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq', muteEmotes: false };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!Array.isArray(pref.sgSeats) || pref.sgSeats.length !== 3 || pref.sgSeats.some(v => v !== 0 && v !== 1)) pref.sgSeats = [0, 1, 1];
   if (!HEROES.valid(pref.hero)) pref.hero = '';
@@ -89,7 +91,7 @@
       if (job.sg) { res(SG.think(SG.unpack(job.sg), { time: Math.min(job.time || 900, 1200), depth: job.depth, noise: job.noise })); return; }
       const p = XQ.Pos.fromFen(job.fen), h = [];
       for (const m of job.moves) { h.push(p.key()); p.make(m); }
-      res(XQ.think(p, { time: Math.min(job.time || 900, 1200), depth: job.depth, noise: job.noise, history: h }));
+      res(XQ.think(p, { time: Math.min(job.time || 900, 1200), depth: job.depth, noise: job.noise, history: h, exclude: job.exclude, full: job.full }));
     }, 30);
   }
   try {
@@ -118,7 +120,7 @@
 
   // ---------- starting games ----------
   function startAI() {
-    disconnect(); stopSeek(); resetOnline();
+    disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'ai'; G.me = pref.side; G.level = pref.level; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
     G.fen0 = XQ.START; G.lv = null; VIEW.setLayout('classic'); VIEW.setStage(myStage());
     const rivals = HEROES.list.filter(h => h.id !== pref.hero);  // the computer may lead with a hero still to earn
@@ -136,32 +138,47 @@
     const lv = CAMPAIGN.level(id);
     if (!lv || !CAMPAIGN_UI.unlocked().levels.has(id)) return;
     const ch = CAMPAIGN.chapter(lv.chapter);
-    disconnect(); stopSeek(); resetOnline();
+    CAMPAIGN_UI.close();
+    startBattle(lv, ch.foe, ch.stage);
+  }
+  // the daily puzzle: today's position, against a general picked at random, on the player's own battlefield
+  async function startDaily() {
+    const lv = await DAILY_UI.begin();
+    DAILY_UI.close();
+    const rivals = HEROES.list.filter(h => h.id !== pref.hero);
+    startBattle(lv, rivals[(Math.random() * rivals.length) | 0].id, myStage());
+  }
+  const restartBattle = () => { if (G.lv.daily) startDaily(); else startCampaign(G.lv.id); };
+  // a battle with a position of its own (a campaign level or the daily puzzle), judged by CAMPAIGN.judge
+  function startBattle(lv, foe, stage) {
+    disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'campaign'; G.lv = lv; G.fen0 = lv.fen; G.me = lv.side; G.help = false; VIEW.setLayout('classic');
     G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
-    G.heroes = { [G.me]: myHero(), [-G.me]: ch.foe };
-    VIEW.setHeroes(G.heroes); VIEW.setStage(ch.stage);
+    G.heroes = { [G.me]: myHero(), [-G.me]: foe };
+    VIEW.setHeroes(G.heroes); VIEW.setStage(stage);
     reset(); clearSel();
     VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
-    showMenu(false); showEnd(false); CAMPAIGN_UI.close(); renderMoves(); layoutMode();
-    SFX.init(); SFX.gong(); banner(lv.name, 'open');
+    showMenu(false); showEnd(false); renderMoves(); layoutMode();
+    SFX.init(); SFX.gong(); banner(lv.daily ? 'Bát Trận Đồ' : lv.name, 'open');
     toast(CAMPAIGN.goal(lv));
     updateStatus();
     if (G.pos.turn !== G.me) setTimeout(() => { if (G.mode === 'campaign' && G.lv === lv && !G.moves.length) aiMove(); }, 900);
   }
-  // a battle is decided (CAMPAIGN.judge): stars, progress, what it opened
+  // a battle is decided (CAMPAIGN.judge): stars, progress, what it opened; for the daily puzzle the time and the board
   function endCampaign(r) {
     if (G.over && G.over.shown) return;
     const lv = G.lv, winner = r.win ? G.me : -G.me;
     aiId++; G.thinking = false;
     G.over = { winner: r.reason === 'held' || r.reason === 'limit' || (lv.type === 'survive' && r.win) ? 0 : winner, reason: r.reason, shown: true, camp: r, stars: CAMPAIGN.stars(lv, r, G.help), lv };
+    G.over.kept = keepGame();
     VIEW.check(-1); clearSel();
     const onBoard = r.reason === 'checkmate' || r.reason === 'stalemate';
     if (onBoard) VIEW.defeat(kingOf(-winner));
     if (r.win) { VIEW.heroShadow(G.me, true); SFX.win(); } else SFX.lose();
     updateStatus();
     const lvNow = lv;
-    (r.win ? CAMPAIGN_UI.record(lv, G.moves.slice(), G.help) : Promise.resolve(null)).then(res => {
+    const keep = !r.win ? Promise.resolve(null) : lv.daily ? DAILY_UI.solved(lv, G.moves.slice(), G.help) : CAMPAIGN_UI.record(lv, G.moves.slice(), G.help);
+    keep.then(res => {
       if (G.over && G.over.lv === lvNow) { G.over.saved = res; if (!$('#end').hidden) renderEnd(); }
     });
     setTimeout(() => showEnd(true), onBoard ? 1300 : 300);
@@ -214,6 +231,7 @@
   function endGame(st) {
     if (G.over && G.over.shown) return;
     G.over = Object.assign({}, st, { shown: true });
+    G.over.kept = keepGame();
     VIEW.check(-1); clearSel();
     const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     if (st.winner && onBoard) VIEW.defeat(kingOf(-st.winner));
@@ -221,6 +239,21 @@
     if (!st.winner) SFX.gong(); else if (!viewer || st.winner === viewer) SFX.win(); else SFX.lose();
     updateStatus();
     setTimeout(() => showEnd(true), onBoard ? 1300 : 200);
+  }
+  // a finished game goes into the games kept on this device (Ván đã chơi), to be watched again and analysed
+  function keepGame() {
+    const o = G.over;
+    if (!G.moves.length || !o || o.reason === 'aborted') return null;
+    const online = G.mode === 'online', lv = G.lv;
+    const me = online ? G.you : G.me, you = ACCOUNT.user ? ACCOUNT.user.name : 'Bạn';
+    const name = side => online ? (G.info[side] ? G.info[side].name : side === G.you ? you : G.you ? 'Đối thủ' : SIDE[side])
+      : side === G.me ? you : G.mode === 'ai' ? `Máy · ${LEVELS[G.level].name}` : (lv && CAMPAIGN.chapter(lv.chapter) || {}).foeName || (HEROES.byId[G.heroes[side]] || {}).name || 'Máy';
+    const kind = online ? (G.rated ? 'ranked' : 'online') : G.mode === 'campaign' ? (lv.daily ? 'daily' : 'campaign') : 'ai';
+    o.ach = me ? ACH_UI.check({ fen0: G.fen0, moves: G.moves.slice(), me }) : [];   // feats of the board (achievements-ui.js)
+    const title = { ranked: 'Trận xếp hạng', online: `Phòng ${G.room}`, daily: lv && lv.name, campaign: lv && `Chiến dịch ${lv.id} · ${lv.name}`, ai: `Với máy · ${LEVELS[G.level].name}` }[kind];
+    try {
+      return REVIEW.add({ at: Date.now(), kind, title, fen0: G.fen0, moves: G.moves.slice(), me, names: { 1: name(1), '-1': name(-1) }, winner: o.winner, reason: o.reason, heroes: { ...G.heroes }, room: online && !G.rated ? G.room : '' }).id;
+    } catch (e) { return null; }
   }
   // a ranked result: the rating change arrives with the result, or a little later if saving it had to be retried
   function rated(m) {
@@ -248,6 +281,7 @@
         repetition: 'Lặp lại thế cờ ba lần', quiet: '60 nước liền không ăn quân',
         'perpetual-check': r.win ? 'Đối phương chiếu dai, phạm luật' : 'Bạn chiếu dai, phạm luật', 'perpetual-chase': r.win ? 'Đối phương đuổi dai, phạm luật' : 'Bạn đuổi dai, phạm luật',
       }[r.reason] || '';
+      if (lv.daily) return [r.win ? 'Phá trận!' : 'Chưa phá được trận', `Bát Trận Đồ · Trận ${lv.no} · ${why}`];
       return [r.win ? 'Đại thắng!' : 'Thất bại', `${lv.name} · ${why}`];
     }
     if (st.reason === 'aborted') return ['Ván bị hủy', 'Một bên không đi nước đầu trong 30 giây'];
@@ -315,7 +349,7 @@
   function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
   // tc: time control asked for by the player opening a friendly room ('' = untimed)
   function goOnline(room, tc = '') {
-    disconnect(); stopSeek(); resetOnline();
+    disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++;
     G.fen0 = XQ.START; G.lv = null; VIEW.setLayout('classic'); VIEW.setStage(myStage());
     G.players = { 1: false, '-1': false }; G.rematch = { 1: false, '-1': false };
@@ -391,6 +425,7 @@
       }
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
       case 'kicked': leaveRoom(); toast('Chủ phòng đã mời bạn ra khỏi phòng'); break;
+      case 'emote': onEmote(m); break;
     }
   }
 
@@ -459,7 +494,7 @@
   }
   // a game on this device
   function sgStart() {
-    disconnect(); stopSeek(); resetOnline();
+    disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'sanguo'; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.lv = null; G.over = null;
     G.sg = sgFresh(pref.sgSeats.slice(), null);
     const people = sgPeople(); G.sg.viewer = people.length ? people[0] : 0;
@@ -475,7 +510,7 @@
   }
   // a game online: a friendly room (tc: time control asked for by whoever opens it) or a ranked one from the Lobby
   function sgOnline(room, tc = '') {
-    disconnect(); stopSeek(); resetOnline();
+    disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'sanguo'; G.room = room; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.lv = null; G.over = null;
     G.sg = sgFresh([0, 0, 0], { room, you: -1, players: [false, false, false], info: [null, null, null], rated: false, tc: null, clock: null, deadline: null, rematch: [false, false, false], n: 0 });
     history.replaceState(null, '', roomLink());
@@ -726,6 +761,7 @@
       case 'rematch': net.rematch = m.want; renderEnd(); break;
       case 'error': toast(m.msg || 'Có lỗi xảy ra'); break;
       case 'kicked': leaveRoom(); toast('Chủ phòng đã mời bạn ra khỏi phòng'); break;
+      case 'emote': onEmote(m); break;
     }
   }
   // each player brings their hero; a kingdom without one is led by its ruler
@@ -781,7 +817,7 @@
       if (!pos.alive[k]) who.textContent = 'Đã mất nước';
       else if (net) who.innerHTML = sgWho(k);
       else who.textContent = sgAIk(k) ? `Máy · ${(SG_LEVELS[sg.level] || SG_LEVELS[1]).name}` : solo >= 0 ? 'Bạn' : 'Người';
-      const ttl = net && net.info[k] && CAMPAIGN.TITLES[net.info[k].title];
+      const ttl = net && net.info[k] && TITLES.text(net.info[k].title);
       who.title = ttl ? `Danh hiệu: ${ttl}` : '';
       el.classList.toggle('turn', !G.over && pos.alive[k] && (G.animating ? G.lastMover : turn) === k);
       el.classList.toggle('out', !pos.alive[k]);
@@ -859,6 +895,10 @@
   // called with each state from the room: true while the room is in its hall (the board then waits)
   function hallUpdate(m) {
     G.hall = hallOf(m);
+    // a room opened by a challenge between friends stays out of the public list
+    if (G.privateRoom === G.room && G.hall.phase === 'lobby' && G.hall.public && hallModel().me !== null && hallModel().me === G.hall.host) {
+      send({ t: 'public', on: false }); G.privateRoom = '';
+    }
     if (G.hall.phase !== 'lobby') {
       if (hallOpen) hallClose();
       VIEW.setStage(G.hall.stage || myStage());               // the game is played where the host chose
@@ -914,7 +954,7 @@
 
     // the button: start (host), ready or not (the others); people watching only watch
     const go = $('#bHallGo');
-    go.hidden = me === null;
+    go.hidden = $('#bHallEmote').hidden = me === null;
     if (host) { go.textContent = 'Bắt đầu'; go.disabled = !!waiting; go.classList.add('primary'); go.classList.remove('gold'); }
     else if (me !== null) { const on = !!r.ready[me]; go.textContent = on ? 'Đã sẵn sàng' : 'Sẵn sàng'; go.title = on ? 'Bấm để hủy sẵn sàng' : ''; go.disabled = false; go.classList.toggle('gold', on); go.classList.toggle('primary', !on); }
     $('#hallWait').textContent = me === null ? 'Phòng đã đủ người, bạn đang xem.' : host ? (waiting || 'Mọi người đã sẵn sàng!') : r.ready[me] ? 'Chờ chủ phòng bắt đầu… (bấm để hủy)' : '';
@@ -942,6 +982,56 @@
     const ok = stageAllowed(s.id);
     return `<button type="button" data-id="${s.id}" class="${s.id === cur ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur}"${ok ? '' : ` title="${CAMPAIGN.requirement('stage', s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
   }).join('');
+  // ---------- emotes (emotes.js): set phrases across the board in an online room ----------
+  // A seated player opens the picker from the panel (or the hall); what anyone says comes back from the room and
+  // shows as a bubble by that player's card while their general raises the weapon. pref.muteEmotes hides the others'.
+  const emoteSide = () => (G.mode === 'online' ? G.you || null : sgNet() && G.sg.net.you >= 0 ? G.sg.net.you : null);
+  // the hero whose battle cry a side gives: a Tam Quốc kingdom without one has its ruler
+  const cryHero = (side, hero) => hero || (G.mode === 'sanguo' ? RULERS[side] : '');
+  let emoteAt = 0;
+  function emotePop(open, anchor) {
+    const pop = $('#emotePop'), side = emoteSide();
+    if (!open || side === null) { pop.hidden = true; return; }
+    const id = cryHero(side, G.mode === 'sanguo' ? (G.sg.net.heroesRaw || [])[side] : G.heroes[side]), hero = HEROES.byId[id];
+    pop.innerHTML = `<button type="button" class="cry" data-emote="cry"><span class="hz">${hero ? hero.han : '帥'}</span><span>${ACCOUNT.esc(EMOTES.text('cry', id))}</span></button>`
+      + EMOTES.LINES.map(l => `<button type="button" data-emote="${l.id}">${l.text}</button>`).join('')
+      + `<label class="mute"><input type="checkbox" id="emoteMute"${pref.muteEmotes ? ' checked' : ''}> Ẩn biểu cảm của người khác</label>`;
+    pop.hidden = false;
+    // over the button that opened it, kept on the screen
+    const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+    pop.style.top = (r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8) + 'px';
+  }
+  $('#emotePop').addEventListener('click', e => {
+    const b = e.target.closest('[data-emote]'); if (!b) return;
+    SFX.init();
+    if (Date.now() - emoteAt < EMOTES.GAP_MS) { toast('Chờ một chút rồi nói tiếp'); return; }
+    emoteAt = Date.now(); send({ t: 'emote', id: b.dataset.emote }); emotePop(false);
+  });
+  $('#emotePop').addEventListener('change', e => { if (e.target.id === 'emoteMute') { pref.muteEmotes = e.target.checked; savePref(); } });
+  for (const id of ['#bEmote', '#bHallEmote']) $(id).addEventListener('click', e => { SFX.init(); SFX.pick(); emotePop($('#emotePop').hidden, e.currentTarget); });
+  function onEmote(m) {
+    if (pref.muteEmotes && m.side !== emoteSide()) return;
+    const text = EMOTES.text(m.id, cryHero(m.side, m.hero));
+    if (!text) return;
+    bubble(m.side, text, m.id === 'cry');
+    VIEW.cheer(m.side, inHall() ? hallModel().sides.indexOf(m.side) : -1);
+    if (m.id === 'cry') SFX.drum(); else SFX.pick();
+  }
+  // a speech bubble by a player's card: to the left of the side panel's card, above it on a phone and in the hall
+  function bubble(side, text, cry) {
+    const anchor = inHall() ? $('#hallCards').children[hallModel().sides.indexOf(side)] : $(G.mode === 'sanguo' ? PL[side] : side > 0 ? '#plRed' : '#plBlack');
+    if (!anchor) return;
+    for (const o of $('#bubbles').querySelectorAll(`[data-side="${side}"]`)) o.remove();   // one at a time each
+    const b = document.createElement('div'), r = anchor.getBoundingClientRect(), beside = !inHall() && innerWidth > 760;
+    b.className = 'bubble' + (cry ? ' cry' : '') + (beside ? ' left' : ''); b.dataset.side = side; b.textContent = I18N.tr(text);   // in its own words before it is measured
+    $('#bubbles').appendChild(b);
+    const w = b.offsetWidth, h = b.offsetHeight;
+    const x = beside ? r.left - w - 12 : r.left + r.width / 2 - w / 2, y = beside ? r.top + r.height / 2 - h / 2 : r.top - h - 10;
+    b.style.left = Math.max(8, Math.min(innerWidth - w - 8, x)) + 'px'; b.style.top = Math.max(8, y) + 'px';
+    setTimeout(() => b.classList.add('gone'), 3200); setTimeout(() => b.remove(), 3700);
+  }
+
   // leave the room for the menu: the room is told, and frees the seat (a game under way is given up)
   function leaveRoom() {
     if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });
@@ -954,12 +1044,265 @@
     showEnd(false); renderMoves(); layoutMode(); updateStatus(); showMenu(true);
   }
 
+  // ---------- watching a finished game again, with the computer's verdicts (review.js) ----------
+  // G.rv: { g (fen0, moves, names, me, winner, reason, title, heroes), id (in the games kept here, which keep the
+  // analysis too) or key (a ranked game from the server: its analysis is kept for this visit), every position worked
+  // out once (boards, caps, checks, legalN, log), n, ply (being looked at), shown (on the board), moving (a move
+  // animating), evals and vs (the searches so far and the verdicts from them), busy, run, timer (playing on its own),
+  // from ('end', 'history', 'profile'), room (a friendly room to go back to) }.
+  const rvCache = new Map();
+  const RV_WHY = { ...REASON, time: 'Hết giờ', abandon: 'Bỏ ván', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai', held: 'Cầm cự đủ số nước', limit: 'Hết số nước cho phép' };
+  const rvDone = () => G.rv.evals.length > G.rv.n && G.rv.evals.every(Boolean);
+  const rvTurn = i => XQ.Pos.fromFen(G.rv.g.fen0).turn * (i % 2 ? -1 : 1);
+  function rvOpen(g, from = '') {
+    const game = typeof g.moves === 'string' ? REVIEW.unpack(g) : g;
+    // every position of the game, once; a move that is not legal (a damaged record) ends it there
+    const pos = XQ.Pos.fromFen(game.fen0), king = () => pos.kings[pos.turn > 0 ? 0 : 1];
+    const boards = [pos.b.slice()], caps = [[]], checks = [pos.inCheck() ? king() : -1], log = [], moves = [];
+    let legal = pos.legal(); const legalN = [legal.length];
+    for (const m of game.moves) {
+      if (!legal.includes(m)) break;
+      const text = XQ.notation(pos, m), side = pos.turn, cap = pos.make(m);
+      moves.push(m); log.push({ text, side, cap });
+      caps.push(cap ? caps[caps.length - 1].concat(cap) : caps[caps.length - 1]);
+      boards.push(pos.b.slice()); checks.push(pos.inCheck() ? king() : -1);
+      legal = pos.legal(); legalN.push(legal.length);
+    }
+    disconnect(); stopSeek(); resetOnline(); rvClose();
+    G.mode = 'review'; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.over = null; G.lv = null;
+    chain = Promise.resolve(); G.animating = 0;
+    G.fen0 = game.fen0; reset(); clearSel();
+    const evals = (g.id ? REVIEW.evalsOf(g) : rvCache.get(g.key)) || [];
+    G.rv = {
+      g: { ...game, moves }, id: g.id || '', key: g.key || '', boards, caps, checks, legalN, log, n: moves.length, ply: 0, shown: -1, moving: false,
+      evals, vs: REVIEW.verdicts(game.fen0, moves, evals), busy: false, run: 0, timer: 0, from, room: from === 'end' && game.room ? game.room : '',
+    };
+    history.replaceState(null, '', location.pathname);
+    VIEW.setLayout('classic'); G.heroes = { 1: '', '-1': '', ...(game.heroes || {}) }; VIEW.setHeroes(G.heroes);
+    VIEW.setMenu(false); VIEW.setViewer(game.me || 1);
+    closePages(); showMenu(false); showEnd(false); layoutMode();
+    rvShow(0); renderMoves(); updateStatus();
+    SFX.init();
+    if (!rvDone()) rvAnalyse();
+  }
+  function rvClose() {
+    const rv = G.rv;
+    if (!rv) return;
+    clearInterval(rv.timer); rv.run++; rvKeep(rv);
+    G.rv = null; VIEW.hint(-1, -1);
+  }
+  // back where the review was opened from: the friendly room (the seat is still ours), the list of games, the menu
+  function rvExit() {
+    const rv = G.rv;
+    if (!rv) return;
+    const { room, from } = rv;
+    rvClose();
+    if (room) { goOnline(room); return; }
+    G.mode = 'menu'; G.fen0 = XQ.START; reset(); clearSel();
+    G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
+    VIEW.setViewer(1, true);                                 // a game watched from Black's side leaves the menu's board Red-side down
+    VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1); VIEW.setStage(myStage());
+    renderMoves(); layoutMode(); updateStatus(); showMenu(true);
+    if (from === 'history') openHistory();
+  }
+  // the analysis so far goes with the game
+  function rvKeep(rv = G.rv) {
+    if (rv.id) REVIEW.saveEvals(rv.id, rv.evals); else if (rv.key) rvCache.set(rv.key, rv.evals.slice());
+  }
+
+  // ---------- the board, a position at a time ----------
+  function rvShow(i) {
+    const rv = G.rv;
+    VIEW.setBoard(rv.boards[i], rv.caps[i]); rv.shown = i; rvMarks();
+  }
+  // the last move, a check, and where a poor move should have gone
+  function rvMarks() {
+    const rv = G.rv, i = rv.shown, m = rv.g.moves[i - 1], v = rv.vs[i - 1];
+    VIEW.lastMove(m ? XQ.from(m) : -1, m ? XQ.to(m) : -1);
+    VIEW.check(rv.checks[i]);
+    if (v && v.best && ['blunder', 'mistake', 'inaccuracy'].includes(v.mark)) VIEW.hint(XQ.from(v.best), XQ.to(v.best)); else VIEW.hint(-1, -1);
+  }
+  // to position i: one step forward is played out by the warriors, anything else is laid out at once; while a move
+  // is under way the board catches up with the latest ask when it is over
+  async function rvGo(i, animate = false) {
+    const rv = G.rv;
+    if (!rv) return;
+    i = Math.max(0, Math.min(rv.n, i));
+    if (i === rv.ply && i === rv.shown) return;
+    rv.ply = i; rvRender();
+    if (rv.moving) return;
+    if (animate && i === rv.shown + 1) {
+      rv.moving = true; VIEW.hint(-1, -1); VIEW.check(-1);
+      await VIEW.play(rv.g.moves[i - 1], { closeUp: false });
+      rv.moving = false;
+      if (G.rv !== rv) return;
+      rv.shown = i;
+      if (rv.ply !== i) rvShow(rv.ply); else rvMarks();
+    } else rvShow(i);
+  }
+  function rvStep(d) { rvAuto(false); rvGo(G.rv.ply + d, d === 1); }
+  // playing on its own, a move every 1.4 seconds
+  function rvAuto(on) {
+    const rv = G.rv;
+    clearInterval(rv.timer); rv.timer = 0;
+    if (on) {
+      if (rv.ply >= rv.n) rvGo(0);
+      rv.timer = setInterval(() => {
+        if (G.rv !== rv || rv.moving) return;
+        if (rv.ply >= rv.n) { rvAuto(false); return; }
+        rvGo(rv.ply + 1, true);
+      }, 1400);
+    }
+    rvRender();
+  }
+
+  // ---------- the computer's verdicts ----------
+  // every position searched in turn (about half a minute for a whole game, less per position the longer it is);
+  // where the move played was the computer's own choice, the second best too, to tell a good find from the obvious
+  async function rvAnalyse() {
+    const rv = G.rv;
+    if (!rv || rv.busy || rvDone()) return;
+    rv.busy = true;
+    const run = rv.run, g = rv.g, n = rv.n, time = Math.round(Math.max(160, Math.min(700, 26000 / (n + 1) / 1.35)));
+    rvRender();
+    for (let i = 0; i <= n; i++) {
+      if (rv.evals[i]) continue;
+      const job = { fen: g.fen0, moves: g.moves.slice(0, i), time, full: true }, r = await ask(job);
+      if (G.rv !== rv || run !== rv.run) return;
+      const e = { s: r.score, b: r.move };
+      if (i < n && r.move === g.moves[i] && rv.legalN[i] > 2) {
+        e.a = (await ask({ ...job, exclude: [r.move] })).score;
+        if (G.rv !== rv || run !== rv.run) return;
+      }
+      rv.evals[i] = e;
+      rv.vs = REVIEW.verdicts(g.fen0, g.moves, rv.evals);
+      if (i % 12 === 11) rvKeep();
+      rvRender();
+      if (rv.shown === i + 1 || rv.shown === i) rvMarks();
+    }
+    rv.busy = false; rvKeep(); renderMoves(); updateStatus(); rvMarks();
+    toast('Đã phân tích xong: chọn từng nước để xem lời bình');
+  }
+
+  // ---------- the panel ----------
+  function rvStatus() {
+    const rv = G.rv, g = rv.g, turn = rvTurn(rv.ply), done = rvDone();
+    $('#status').textContent = `Xem lại · ${g.title || 'Ván cờ'}`; $('#status').classList.remove('mine');
+    for (const side of [1, -1]) {
+      const el = $(side > 0 ? '#plRed' : '#plBlack'), hero = HEROES.byId[G.heroes[side]], acc = done ? REVIEW.accuracy(rv.vs, side) : null;
+      el.querySelector('.chip').textContent = hero ? hero.han : side > 0 ? '帥' : '將'; el.querySelector('.chip').title = hero ? hero.name : '';
+      el.querySelector('.lab').textContent = SIDE[side];
+      el.querySelector('.nm small').textContent = hero ? hero.name : ARMY[side];
+      el.querySelector('.who').innerHTML = ACCOUNT.esc((g.names || {})[side] || '') + (acc != null ? ` <small>${acc}%</small>` : '');
+      el.querySelector('.who').title = acc != null ? `Độ chính xác ${acc}%` : '';
+      el.classList.toggle('turn', rv.ply < rv.n && turn === side);
+      el.classList.remove('away', 'out');
+    }
+    $('#plGreen').hidden = true; $('#room').hidden = true; $('#goal').hidden = true; $('#drawAsk').hidden = true; $('#bDraw').hidden = true;
+    $('#bNew').textContent = rv.room ? 'Về phòng' : 'Thoát xem lại';
+    renderClocks();
+    rvRender();
+  }
+  function rvEndText() {
+    const g = G.rv.g, why = RV_WHY[g.reason] || '';
+    return `Kết thúc: ${g.winner ? `${SIDE[g.winner]} thắng` : g.reason === 'held' ? 'giữ được thành' : 'hòa'}${why ? ` · ${why}` : ''}`;
+  }
+  function rvRender() {
+    const rv = G.rv;
+    if (!rv) return;
+    const n = rv.n, i = rv.ply, v = rv.vs[i - 1], e = rv.evals[i], done = rvDone(), got = rv.evals.filter(Boolean).length;
+    $('#rvPly').textContent = i ? `Nước ${Math.ceil(i / 2)} · ${i}/${n}` : `Thế đầu · 0/${n}`;
+    let say;
+    if (!i) say = 'Thế cờ ban đầu. Dùng các nút dưới đây, phím ← → hoặc chạm vào biên bản để đi từng nước.';
+    else {
+      const x = rv.log[i - 1], mk = v ? REVIEW.MARK[v.mark][0] : '';
+      say = `<b class="${x.side > 0 ? 'r' : 'b'}">${SIDE[x.side]}: ${x.text}${mk ? ` <i class="mk ${v.mark}">${mk}</i>` : ''}</b> ${v ? ACCOUNT.esc(REVIEW.comment(v)) : rv.busy ? 'Đang phân tích…' : ''}`;
+    }
+    if (e) say += ` <small>${REVIEW.standText(e.s, rvTurn(i))}</small>`;
+    if (i === n) say += ` <small>${rvEndText()}</small>`;
+    $('#rvSay').innerHTML = say;
+    $('#rvChart').hidden = !got;
+    if (got) $('#rvChart').innerHTML = REVIEW.chart(rv.g.fen0, rv.g.moves, rv.evals, rv.vs, i);
+    // each side's play in sum, once the whole game is analysed
+    $('#rvSum').hidden = !done;
+    if (done) $('#rvSum').innerHTML = [1, -1].map(side => {
+      const c = REVIEW.counts(rv.vs, side), acc = REVIEW.accuracy(rv.vs, side);
+      return `<div class="${side > 0 ? 'r' : 'b'}"><b>${SIDE[side]}</b><span class="acc">${acc == null ? '–' : acc + '%'}</span>`
+        + `<span title="Nước hay">! ${c.good}</span><span title="Chưa chính xác">?! ${c.inaccuracy}</span><span title="Sai lầm">? ${c.mistake}</span><span title="Nước hớ">?? ${c.blunder}</span></div>`;
+    }).join('');
+    const an = $('#bAnalyse');
+    an.hidden = done; an.disabled = rv.busy;
+    an.textContent = rv.busy ? `Máy đang chấm từng nước… ${Math.round((100 * got) / (n + 1))}%` : got ? 'Phân tích tiếp' : 'Phân tích ván';
+    $('#rvFirst').disabled = $('#rvPrev').disabled = !i; $('#rvNext').disabled = $('#rvLast').disabled = i >= n;
+    $('#rvPlay').classList.toggle('on', !!rv.timer); $('#rvPlay').setAttribute('aria-label', rv.timer ? 'Dừng' : 'Tự chạy');
+    $('#rvPlay').innerHTML = rv.timer ? '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>';
+    renderMoves();
+  }
+
+  // ---------- the games kept on this device (Ván đã chơi) ----------
+  function openHistory() { $('#history').hidden = false; renderHistory(); }
+  function renderHistory() {
+    const list = REVIEW.list(), box = $('#hiList');
+    $('#hiSum').textContent = list.length ? `${list.length} ván gần nhất trên máy này` : 'Chưa có ván nào';
+    if (!list.length) { box.innerHTML = '<li class="empty"><p class="note">Đánh xong một ván cờ tướng (với máy, chiến dịch, Bát Trận Đồ hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.</p></li>'; return; }
+    box.innerHTML = list.map(g => {
+      const me = g.me, won = g.reason === 'held' || (me && g.winner === me) ? 1 : me && g.winner === -me ? -1 : 0;
+      const res = !me ? ['draw', '觀'] : won > 0 ? ['win', '勝'] : won < 0 ? ['lose', '敗'] : ['draw', '和'];
+      const plies = g.moves ? String(g.moves).split(',').length : 0, names = g.names || {};
+      const who = me ? `${SIDE[me]} · gặp ${ACCOUNT.esc(names[-me] || '')}` : `${ACCOUNT.esc(names[1] || '')} – ${ACCOUNT.esc(names[-1] || '')}`;
+      let acc = null;
+      if (g.evals && me) { const u = REVIEW.unpack(g); acc = REVIEW.accuracy(REVIEW.verdicts(u.fen0, u.moves, REVIEW.evalsOf(g)), me); }
+      const at = new Date(g.at), when = `${at.toLocaleDateString('vi-VN')} ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`;
+      return `<li class="${res[0]}"><span class="r">${res[1]}</span><span class="vs"><b>${ACCOUNT.esc(g.title || 'Ván cờ')}</b><br><small>${who} · ${Math.ceil(plies / 2)} nước · ${when}</small></span>`
+        + `<span class="d"><button class="btn" type="button" data-open="${g.id}">Xem lại</button>${acc != null ? `<small>Chính xác ${acc}%</small>` : ''}</span></li>`;
+    }).join('');
+  }
+  $('#hiList').addEventListener('click', e => {
+    const b = e.target.closest('[data-open]'); if (!b) return;
+    const g = REVIEW.get(b.dataset.open);
+    SFX.init(); SFX.pick();
+    if (g) rvOpen(g, 'history'); else renderHistory();
+  });
+  $('#bHistoryClose').addEventListener('click', () => { $('#history').hidden = true; });
+  // a ranked game from a profile: fetched, then watched like the others
+  ACCOUNT.onReplay(async id => {
+    try {
+      const r = await fetch('api/game/' + id, { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json(), u = ACCOUNT.user, me = u ? (u.id === j.red.id ? 1 : u.id === j.black.id ? -1 : 0) : 0;
+      SFX.init();
+      rvOpen({ key: 'game:' + id, fen0: XQ.START, moves: j.moves, me, names: { 1: j.red.name, '-1': j.black.name }, winner: j.winner, reason: j.reason, title: `Xếp hạng · ${j.red.name} – ${j.black.name}` }, 'profile');
+    } catch (e) { toast('Không tải được ván cờ này'); }
+  });
+  // the controls
+  $('#rvFirst').addEventListener('click', () => { rvAuto(false); rvGo(0); });
+  $('#rvPrev').addEventListener('click', () => rvStep(-1));
+  $('#rvPlay').addEventListener('click', () => { SFX.init(); rvAuto(!G.rv.timer); });
+  $('#rvNext').addEventListener('click', () => { SFX.init(); rvStep(1); });
+  $('#rvLast').addEventListener('click', () => { rvAuto(false); rvGo(G.rv.n); });
+  $('#rvFlip').addEventListener('click', () => { const v = -(G.rv.viewer || G.rv.g.me || 1); G.rv.viewer = v; VIEW.setViewer(v); rvShow(G.rv.shown); });
+  $('#bAnalyse').addEventListener('click', () => rvAnalyse());
+  $('#rvChart').addEventListener('click', e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    rvAuto(false); rvGo(Math.round(((e.clientX - r.left) / r.width) * G.rv.n));
+  });
+  $('#moves').addEventListener('click', e => {
+    const m = e.target.closest('[data-ply]');
+    if (m && G.mode === 'review') { rvAuto(false); rvGo(+m.dataset.ply); }
+  });
+  addEventListener('keydown', e => {
+    if (G.mode !== 'review' || !$('#menu').hidden || e.target.closest('input, textarea, select')) return;
+    const k = { ArrowLeft: () => rvStep(-1), ArrowRight: () => rvStep(1), Home: () => rvGo(0), End: () => rvGo(G.rv.n), ' ': () => rvAuto(!G.rv.timer) }[e.key];
+    if (k) { e.preventDefault(); if (e.key === 'Home' || e.key === 'End') rvAuto(false); k(); }
+  });
+
   // ---------- input on the board ----------
   function clearSel() { G.sel = -1; G.targets = []; VIEW.select(-1, []); }
   const myTurn = () => G.mode !== 'menu' && !G.over && !G.thinking && G.pos.turn === G.me && (G.mode !== 'online' || G.you === G.me);
   const canAct = () => myTurn() && !G.animating;
   VIEW.onTap = s => {
     SFX.init();
+    if (G.mode === 'review') return;
     if (G.mode === 'sanguo') { sgTap(s); return; }
     if (!canAct()) return;
     if (G.sel >= 0 && G.targets.includes(s)) {
@@ -977,7 +1320,7 @@
     else if (pc) SFX.error();
   };
   VIEW.onHover(s => {
-    if (s < 0) return false;
+    if (s < 0 || G.mode === 'review') return false;
     if (G.mode === 'sanguo') return sgCanAct() && ((G.sg.pos.b[s] && SG.OWN(G.sg.pos.b[s]) === G.sg.pos.turn) || G.targets.includes(s));
     return canAct() && ((G.pos.b[s] && Math.sign(G.pos.b[s]) === G.me) || G.targets.includes(s));
   });
@@ -1004,6 +1347,26 @@
       $('#moveCount').textContent = n ? `${Math.ceil(n / 3)} vòng` : '';
       return;
     }
+    if (G.mode === 'review') {
+      // each move can be picked; the computer's mark beside it, the one looked at stands out
+      const rv = G.rv;
+      const cell = k => {
+        const x = rv.log[k]; if (!x) return '<span class="mv"></span>';
+        const v = rv.vs[k], mk = v ? REVIEW.MARK[v.mark][0] : '';
+        return `<span class="mv ${x.side > 0 ? 'r' : 'b'}${x.cap ? ' cap' : ''}${k + 1 === rv.ply ? ' at' : ''}" data-ply="${k + 1}">${x.text}${mk ? `<i class="mk ${v.mark}">${mk}</i>` : ''}</span>`;
+      };
+      for (let i = 0; i < rv.log.length; i += 2) h += `<li><em>${i / 2 + 1}</em>${cell(i)}${cell(i + 1)}</li>`;
+      ol.innerHTML = h || '<li class="empty">Ván này chưa có nước nào.</li>';
+      // the move looked at is kept in view, once each time it changes (the list may be scrolled meanwhile)
+      const at = ol.querySelector('.at');
+      if (rv.scrolled !== rv.ply) {
+        rv.scrolled = rv.ply;
+        if (!at) ol.scrollTop = 0;
+        else { const r = at.getBoundingClientRect(), o = ol.getBoundingClientRect(); if (r.top < o.top || r.bottom > o.bottom) ol.scrollTop += r.top - o.top - o.height / 2; }
+      }
+      $('#moveCount').textContent = rv.n ? `${Math.ceil(rv.n / 2)} nước` : '';
+      return;
+    }
     for (let i = 0; i < G.log.length; i += 2) {
       const a = G.log[i], b = G.log[i + 1];
       const cell = x => x ? `<span class="mv ${x.side > 0 ? 'r' : 'b'}${x.cap ? ' cap' : ''}">${x.text}</span>` : '<span class="mv"></span>';
@@ -1014,8 +1377,11 @@
     $('#moveCount').textContent = G.log.length ? `${Math.ceil(G.log.length / 2)} nước` : '';
   }
   function updateStatus() {
+    $('#bEmote').hidden = emoteSide() === null;              // emotes: the seated players of an online room
+    if (emoteSide() === null) $('#emotePop').hidden = true;
     if (inHall()) { renderHall(); return; }
     if (G.mode === 'sanguo') { sgStatus(); return; }
+    if (G.mode === 'review') { rvStatus(); return; }
     const st = $('#status'), turn = G.pos.turn;
     let text = '';
     if (G.mode === 'menu') text = '';
@@ -1037,7 +1403,7 @@
       const el = $(side > 0 ? '#plRed' : '#plBlack'), hero = HEROES.byId[G.mode === 'menu' ? '' : G.heroes[side]];
       const chip = el.querySelector('.chip');
       chip.textContent = hero ? hero.han : side > 0 ? '帥' : '將'; chip.title = hero ? hero.name : '';
-      const foe = G.mode === 'campaign' && side !== G.me && CAMPAIGN.chapter(G.lv.chapter).foeName;
+      const foe = G.mode === 'campaign' && side !== G.me && (CAMPAIGN.chapter(G.lv.chapter) || {}).foeName;
       el.querySelector('.lab').textContent = SIDE[side];
       el.querySelector('.nm small').textContent = hero ? hero.name : foe || ARMY[side];
       let who = '';
@@ -1045,7 +1411,7 @@
       else if (G.mode === 'campaign') who = side === G.me ? 'Bạn' : 'Máy';
       else if (G.mode === 'online') who = whoOnline(side);
       el.querySelector('.who').innerHTML = who;
-      const ttl = G.mode === 'online' && G.info[side] && CAMPAIGN.TITLES[G.info[side].title];
+      const ttl = G.mode === 'online' && G.info[side] && TITLES.text(G.info[side].title);
       el.querySelector('.who').title = ttl ? `Danh hiệu: ${ttl}` : '';
       el.classList.toggle('turn', !G.over && G.mode !== 'menu' && (G.animating ? -G.lastMover : turn) === side);
       el.classList.toggle('away', G.mode === 'online' && !G.players[side]);
@@ -1081,12 +1447,13 @@
     box.hidden = G.mode !== 'campaign';
     if (G.mode !== 'campaign') return;
     const lv = G.lv, r = CAMPAIGN.judge(lv, G.moves);
-    $('#goalName').textContent = `${lv.id} · ${lv.name}`;
+    $('#goalName').textContent = lv.daily ? `Bát Trận Đồ · Trận ${lv.no}` : `${lv.id} · ${lv.name}`;
     $('#goalText').textContent = CAMPAIGN.goal(lv);
     $('#goalCount').textContent = lv.type === 'mate' ? `Nước của bạn: ${r.mine}/${lv.n} (tối đa ${lv.n + 2})`
       : lv.type === 'survive' ? `Đã cầm cự: ${Math.min(r.theirs, lv.n)}/${lv.n} nước · còn ${r.pieces} quân`
       : `Nước của bạn: ${r.mine} · thắng trong ${lv.par} nước được thêm ★`;
     $('#goalHelp').hidden = !G.help;
+    $('#goalHelp').textContent = lv.daily ? 'Đã dùng Đi lại hoặc Gợi ý: không vào bảng nhanh nhất' : 'Đã dùng Đi lại hoặc Gợi ý: tối đa 2 sao';
   }
   // a player's name (signed in) or role, with the rating in ranked games; names are escaped, this goes in as HTML
   function whoOnline(side) {
@@ -1096,6 +1463,7 @@
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
+    FRIENDS.setStatus(G.mode === 'menu' || G.mode === 'review' ? 'online' : 'playing');   // what friends see
     frameBoard();
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
@@ -1115,6 +1483,7 @@
     if (!on) mePop(false);
     frameBoard();
     $('#bResume').hidden = !(on && G.mode !== 'menu');
+    $('#bResume').textContent = G.mode === 'review' ? 'Tiếp tục xem lại' : 'Tiếp tục ván đang chơi';
     if (on) { menuView('home'); VIEW.setMenu(G.mode === 'menu'); }
   }
   // the menu's pages: 'home' lists the ways to play, the others hold each one's options
@@ -1139,21 +1508,38 @@
   };
   const askRooms = async q => (await fetch('rooms?' + new URLSearchParams(q), { cache: 'no-store' })).json();
   async function loadRooms() {
-    const page = ['home', 'xq-rooms', 'sg-rooms'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
+    const page = ['home', 'xq-rooms', 'sg-rooms', 'xq-ranked', 'sg-ranked'].find(v => !$(`#menu .view[data-view="${v}"]`).hidden);
     if ($('#menu').hidden || !page || !G.online) return;
-    const id = ++roomsAsk, home = page === 'home', ui = home ? null : roomUi[page.slice(0, 2)];
+    const id = ++roomsAsk, home = page === 'home', live = /ranked$/.test(page), ui = home || live ? null : roomUi[page.slice(0, 2)];
     try {
       if (home) {   // just how many rooms each game has open, beside its Phòng chơi
         const rs = await Promise.all(['xq', 'sg'].map(v => askRooms({ v, n: 0 })));
         if (id !== roomsAsk) return;                        // a newer question went out meanwhile
         rs.forEach(({ counts: c }, i) => { $(roomUi[i ? 'sg' : 'xq'].note).textContent = c.all ? `${c.all} phòng${c.open ? ` · ${c.open} còn chỗ` : ''}` : 'Mời bạn bè'; });
+      } else if (live) {   // the ranked games under way, to watch
+        const v = page.slice(0, 2), r = await (await fetch('live?v=' + v, { cache: 'no-store' })).json();
+        if (id !== roomsAsk) return;
+        renderLive(v, r);
       } else {
         const r = await askRooms({ v: page.slice(0, 2), f: ROOM_F[ui.f], q: $(ui.input).value.trim(), n: ui.n });
         if (id !== roomsAsk) return;
         renderRooms(ui, r);
       }
-    } catch (e) { if (ui) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>'; }
-    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, home ? 15000 : 4000);
+    } catch (e) {
+      if (ui) $(ui.list).innerHTML = '<p class="note">Không tải được danh sách phòng.</p>';
+      if (live) $(page[0] === 's' ? '#sgLiveList' : '#liveList').innerHTML = '<p class="note">Không tải được danh sách ván.</p>';
+    }
+    clearTimeout(roomsT); roomsT = setTimeout(loadRooms, home ? 15000 : live ? 8000 : 4000);
+  }
+  // ranked games under way: the players with their ratings, the strongest first, and how long they have been at it
+  function renderLive(v, { games, total }) {
+    const box = $(v === 'sg' ? '#sgLiveList' : '#liveList');
+    $(v === 'sg' ? '#sgLiveSum' : '#liveSum').textContent = total ? `${total} ván` : '';
+    const ago = at => { const m = Math.max(0, Math.round((Date.now() - at) / 60000)); return m < 1 ? 'vừa bắt đầu' : `bắt đầu ${m} phút trước`; };
+    box.innerHTML = games.length ? games.map(g => `<button type="button" class="room-row live" data-code="${cleanRoom(g.code)}" data-v="${g.v === 'sg' ? 'sg' : 'xq'}">`
+      + `<span class="st live">Trực tiếp</span><span class="ri"><b>${g.players.map(p => `${ACCOUNT.esc(p.name)} <i>${p.rating | 0}</i>`).join(' – ')}</b>`
+      + `<small>Điểm trung bình ${g.avg} · ${ago(g.at)}</small></span><span class="cnt"></span><span class="go">Xem</span></button>`).join('')
+      : `<p class="note">Lúc này chưa có ván xếp hạng ${v === 'sg' ? 'Tam Quốc ' : ''}nào đang diễn ra.</p>`;
   }
   function renderRooms(ui, { rooms: list, total, counts: c }) {
     const searching = !!$(ui.input).value.trim();
@@ -1219,12 +1605,18 @@
     } else { again.textContent = 'Ván mới'; again.disabled = false; $('#endNote').textContent = ''; }
     $('#bEndLeave').hidden = !(G.mode === 'online' || sgNet());
     $('#bEndUndo').hidden = !(G.mode === 'ai' || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length && G.sg.hist.some(h => !G.sg.seats[h.pos.turn])));
+    $('#bEndReview').hidden = !(G.over && G.over.kept && G.mode !== 'sanguo');
+    const ach = (G.over && G.over.ach) || [];
+    $('#endAch').hidden = !ach.length;
+    $('#endAch').innerHTML = ach.map(id => { const a = ACHIEVEMENTS.byId[id]; return `<span class="medal got"><i>${a.han}</i><span><b>Thành tựu mới: ${ACCOUNT.esc(a.name)}</b><small>${ACCOUNT.esc(a.desc)}</small></span></span>`; }).join('');
+    $('#bEndMap').textContent = 'Bản đồ chiến dịch';
     renderEndCampaign();
   }
   function renderEndCampaign() {
     const camp = G.mode === 'campaign' && G.over && G.over.camp, box = $('#endStars');
     box.hidden = !camp; $('#bEndRetry').hidden = $('#bEndMap').hidden = !camp;
     if (!camp) return;
+    if (G.lv.daily) { renderEndDaily(); return; }
     const o = G.over, lv = o.lv, next = CAMPAIGN.next(lv.id), saved = o.saved;
     $('#end').dataset.result = camp.win ? 'win' : 'lose';
     $('#end .han').textContent = camp.win ? '勝' : '敗';
@@ -1243,8 +1635,24 @@
       : lv.type === 'mate' ? 'Đánh lại để thử cách khác. Bí quá thì xem Gợi ý ở nước đầu, chỉ mất một sao.'
       : 'Có thể Đi lại vài nước để gỡ, hoặc đánh lại từ đầu. Dùng Đi lại hay Gợi ý chỉ mất một sao.';
   }
+  // the daily puzzle's end: the time and tries it took (from the first look this day), the rank, the streak
+  function renderEndDaily() {
+    const o = G.over, camp = o.camp, s = o.saved;
+    $('#endStars').hidden = true; $('#bEndRetry').hidden = true;
+    $('#end').dataset.result = camp.win ? 'win' : 'lose';
+    $('#end .han').textContent = camp.win ? '陣' : '敗';
+    const again = $('#bAgain');
+    again.hidden = false; again.disabled = false; again.textContent = camp.win ? 'Phá lại để luyện tay' : 'Thử lại';
+    $('#bEndMap').hidden = false; $('#bEndMap').textContent = 'Bảng Bát Trận Đồ';
+    $('#bEndUndo').hidden = camp.win;
+    $('#endNote').textContent = !camp.win ? `Trận chưa vỡ: phải chiếu bí trong ${o.lv.n} nước. Đồng hồ vẫn chạy, thử đường khác nhé.`
+      : !s ? 'Đang ghi kết quả…'
+      : !s.first ? 'Bạn đã phá trận hôm nay rồi: lần này để luyện tay.'
+      : `Phá trận trong ${DAILY.clock(s.ms)} · ${s.tries > 1 ? `${s.tries} lần thử` : 'ngay lần đầu'}${s.rank ? ` · hạng ${s.rank} hôm nay` : ''} · chuỗi ${s.streak} ngày`;
+  }
   function showEnd(on) { if (on) renderEnd(); $('#end').hidden = !on; }
   function again() {
+    if (G.mode === 'campaign' && G.lv.daily) { startDaily(); return; }
     if (G.mode === 'campaign') {
       const next = G.over && G.over.camp && G.over.camp.win && CAMPAIGN.next(G.lv.id);
       startCampaign(next && CAMPAIGN_UI.unlocked().levels.has(next.id) ? next.id : G.lv.id);
@@ -1305,10 +1713,11 @@
     if (e.key === 'Escape' && !$('#mePop').hidden && !e.target.closest('#renameForm')) { mePop(false); $('#navMe').focus(); return; }
     if (e.key === 'Escape' && !$('#rules').hidden) { $('#rules').hidden = true; return; }
     // over the menu Escape steps back out of a flat page too: the briefing to the campaign, the others to the menu
-    if (e.key === 'Escape' && document.body.classList.contains('in-menu') && /^(brief|campaign|ranks)$/.test(document.body.dataset.page)) {
+    if (e.key === 'Escape' && document.body.classList.contains('in-menu') && /^(brief|campaign|ranks|daily|history|friends)$/.test(document.body.dataset.page)) {
       if (!$('#brief').hidden) $('#brief').hidden = true; else closePages();
       return;
     }
+    if (e.key === 'Escape' && (!$('#daily').hidden || !$('#history').hidden || !$('#friends').hidden)) { closePages(); return; }   // over a game: dialogs
     if (e.key !== 'Escape' || $('#menu').hidden || !$('#campaign').hidden || !$('#ranks').hidden || !$('#seek').hidden) return;
     const back = document.querySelector('#menu .view:not([hidden]) .vhead [data-go]');
     if (back) menuView(back.dataset.go);
@@ -1357,8 +1766,33 @@
   // the campaign: its pages live in campaign-ui.js (opened from the navbar); battles start here
   CAMPAIGN_UI.init({ toast, onStart: startCampaign });
   CAMPAIGN_UI.onChange(() => { renderHeroes(); renderStages(); });
-  $('#bEndRetry').addEventListener('click', () => { if (G.lv) startCampaign(G.lv.id); });
-  $('#bEndMap').addEventListener('click', () => { showEnd(false); CAMPAIGN_UI.open(); });
+  $('#bEndRetry').addEventListener('click', () => { if (G.lv) restartBattle(); });
+  $('#bEndMap').addEventListener('click', () => { showEnd(false); if (G.lv && G.lv.daily) { showMenu(true); DAILY_UI.open(); } else CAMPAIGN_UI.open(); });
+  $('#bEndReview').addEventListener('click', () => { const g = G.over && G.over.kept && REVIEW.get(G.over.kept); if (g) rvOpen(g, 'end'); else toast('Không tìm thấy ván này trên máy'); });
+  // the daily puzzle: its page (from the navbar, or the home dock's seal), started from there
+  DAILY_UI.init({ toast, onStart: startDaily });
+  ACH_UI.init({ toast });
+  const dailyChip = () => {
+    const done = DAILY_UI.solvedToday, n = DAILY_UI.streak();
+    $('#dailyNote').textContent = (done ? 'Đã phá trận' : 'Chưa phá trận') + (n ? ` · chuỗi ${n} ngày` : '');
+    $('#bDaily').classList.toggle('done', done);
+  };
+  DAILY_UI.onChange(dailyChip); dailyChip();
+  // friends and challenges (friends.js): a challenge accepted opens a new private friendly room for both; whoever
+  // challenged goes in first, so they hold the room (and Red), the other a moment later
+  FRIENDS.init({
+    toast,
+    busy: () => ((G.mode === 'online' && G.you && !G.over && G.moves.length) || (sgNet() && G.sg.net.you >= 0 && !G.over && sgMoves().length)
+      ? 'Bạn đang trong một ván online: nhận lời sẽ là xin thua ván này. Bấm Nhận lần nữa nếu chắc chắn.' : ''),
+    onGo(room, tc, host) {
+      if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });   // a game under way here is given up
+      G.privateRoom = room;
+      SFX.init(); closePages();
+      toast(host ? 'Bạn bè đã nhận lời! Đang vào phòng riêng…' : 'Đang vào phòng riêng…');
+      if (host) goOnline(room, tc); else setTimeout(() => goOnline(room), 900);
+    },
+  });
+  $('#bDaily').addEventListener('click', () => { SFX.init(); SFX.pick(); closePages(); DAILY_UI.open(); });
   $('#bRanked').addEventListener('click', () => seek());
   $('#bSeekCancel').addEventListener('click', stopSeek);
   $('#bRanks').addEventListener('click', () => ACCOUNT.openRanks(0));
@@ -1379,6 +1813,7 @@
     if (id !== syncedFor) {
       syncedFor = id;
       CAMPAIGN_UI.sync(u).then(() => { if (u && ACCOUNT.user && ACCOUNT.user.id === id) adoptPicks(ACCOUNT.user); });
+      ACH_UI.sync(u);
     }
     $('#bRanked').disabled = $('#bSgRanked').disabled = !u;
     $('#xqRankNote').textContent = u ? `${u.rating} điểm` : 'Cần đăng nhập';
@@ -1453,12 +1888,15 @@
     SFX.init(); SFX.pick();
     if (go === 'campaign') CAMPAIGN_UI.open();
     else if (go === 'ranks') ACCOUNT.openRanks(0);
+    else if (go === 'daily') DAILY_UI.open();
+    else if (go === 'friends') FRIENDS.open();
+    else if (go === 'history') openHistory();
     else menuView(go);
   });
   // the dialogs that lie flat in the menu's column over the menu (index.html): the first one open is the page shown,
   // and the navbar marks it, or else the menu's own page
-  const PAGES = ['seek', 'brief', 'campaign', 'ranks', 'rules'];
-  function closePages() { CAMPAIGN_UI.close(); $('#ranks').hidden = $('#rules').hidden = true; }
+  const PAGES = ['seek', 'brief', 'campaign', 'ranks', 'rules', 'daily', 'history', 'friends'];
+  function closePages() { CAMPAIGN_UI.close(); DAILY_UI.close(); FRIENDS.close(); $('#ranks').hidden = $('#rules').hidden = $('#history').hidden = true; }
   function navMark() {
     const p = document.body.dataset.page, on = p === 'brief' ? 'campaign' : p && p !== 'seek' ? p : curView === 'army' ? 'army' : 'home';
     document.querySelectorAll('#nav [data-nav]').forEach(b => b.classList.toggle('on', b.dataset.nav === on));
@@ -1493,7 +1931,7 @@
   });
   $('#bDrawYes').addEventListener('click', () => send({ t: 'draw' }));
   $('#bDrawNo').addEventListener('click', () => { send({ t: 'draw-no' }); G.drawOffer = 0; updateStatus(); });
-  $('#bNew').addEventListener('click', () => { if (G.mode === 'campaign') startCampaign(G.lv.id); else if (G.mode === 'sanguo' && !G.sg.net) sgStart(); else if (G.mode === 'online' || G.mode === 'sanguo') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
+  $('#bNew').addEventListener('click', () => { if (G.mode === 'review') rvExit(); else if (G.mode === 'campaign') restartBattle(); else if (G.mode === 'sanguo' && !G.sg.net) sgStart(); else if (G.mode === 'online' || G.mode === 'sanguo') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
   $('#bAgain').addEventListener('click', again);
   $('#bEndMenu').addEventListener('click', () => { showEnd(false); showMenu(true); });
   $('#bEndLeave').addEventListener('click', () => { showEnd(false); leaveRoom(); });
@@ -1519,6 +1957,7 @@
   addEventListener('pointerdown', e => {
     if (!$('#musicPop').hidden && !e.target.closest('#bMusic, #musicPop')) musicPop(false);
     if (!$('#mePop').hidden && !e.target.closest('#meWrap')) mePop(false);
+    if (!$('#emotePop').hidden && !e.target.closest('#emotePop, #bEmote, #bHallEmote')) emotePop(false);
   });
   $('#bMoves').addEventListener('click', () => document.body.classList.toggle('show-moves'));
   // phones: drag the panel down by its grip or the players row to fold it away to just the players, up to unfold;
@@ -1558,7 +1997,7 @@
 
   // test hook (only with #debug in the URL): the engine plays both sides
   if (location.hash === '#debug') window.__ct = {
-    G, commit, endGame, startCampaign, sgStart, sgCommit,
+    G, commit, endGame, startCampaign, startDaily, sgStart, sgCommit, rvOpen,
     selfPlay() { G.mode = 'debug'; const r = XQ.think(G.pos, { time: 120, history: G.keys.slice() }); if (r.move) commit(r.move); return r.move; },
   };
 
@@ -1583,15 +2022,49 @@
     const online = !!info && info.online === true;
     G.online = online;
     $('#rankedBox').hidden = $('#bRanks').hidden = $('#sgRankedBox').hidden = $('#navRanks').hidden = !(online && info.accounts);
+    document.querySelectorAll('.dock .game').forEach(g => g.classList.toggle('no-rank', !(online && info.accounts)));   // the dock's row fills up
     $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
+    DAILY_UI.setOnline(online);
+    FRIENDS.setOnline(online);
     $('#onlineBox').classList.toggle('off', !online);
     loadRooms();   // a page opened before this was known
-    $('#onlineNote').textContent = online ? '' : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
+    $('#onlineNote').textContent = online ? '' : !navigator.onLine ? 'Đang offline: vẫn đánh với máy, chiến dịch, Bát Trận Đồ và xem lại ván cũ được.'
+      : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const q = new URLSearchParams(location.search), invited = cleanRoom(q.get('room')), invitedSg = cleanRoom(q.get('tq'));
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
     else if (online && invited.length >= 4) goOnline(invited);
-    else showMenu(true);
+    else { showMenu(true); if (q.has('daily')) { history.replaceState(null, '', location.pathname); DAILY_UI.open(); } }   // the app's shortcut
+    registerSW();
+  }
+
+  // ---------- the installable app: sw.js keeps the game's files, so it opens and plays the computer offline ----------
+  let installEvt = null;
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#bInstall').hidden = false; });
+  addEventListener('appinstalled', () => { installEvt = null; $('#bInstall').hidden = true; toast('Đã cài Cờ Tướng 3D lên máy'); });
+  $('#bInstall').addEventListener('click', async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) { }
+    installEvt = null; $('#bInstall').hidden = true;
+  });
+  // a new version waits until the player says so (a reload mid-game would lose it): the Cập nhật button
+  function registerSW() {
+    if (!('serviceWorker' in navigator)) return;
+    if (/^(localhost|127\.|\[::1\])/.test(location.hostname) && !/sw/.test(location.hash)) return;   // `npm start`: fresh files on every reload (#sw to try it)
+    const had = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (had && !reloading) { reloading = true; location.reload(); } });
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      const offer = w => {
+        if (!w || !had) return;
+        $('#bUpdate').hidden = false; $('#bUpdate').onclick = () => w.postMessage('skip');
+        toast('Có bản mới của trò chơi: bấm Cập nhật ở góc trên khi tiện');
+      };
+      offer(reg.waiting);
+      reg.addEventListener('updatefound', () => { const w = reg.installing; if (w) w.addEventListener('statechange', () => { if (w.state === 'installed') offer(w); }); });
+      setInterval(() => reg.update().catch(() => { }), 30 * 60000);
+    }).catch(() => { });
   }
   boot();
 })();

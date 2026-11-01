@@ -7,6 +7,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import XQ from '../src/xiangqi.js';
 import HEROES from '../src/heroes.js';
+import EMOTES from '../src/emotes.js';
 import * as C from './clock.js';
 import { rate } from './elo.js';
 import * as H from './hall.js';
@@ -122,6 +123,12 @@ export class Room extends DurableObject {
     await this.record();
     await this.save(); await this.schedule();
     this.broadcast({ t: 'over', ...st.over, ...this.timing(now) });
+    if (st.rated) await this.liveOver();
+  }
+  // a ranked game over: off the Lobby's list of games to watch
+  async liveOver() {
+    const body = JSON.stringify({ code: this.st.code, v: 'xq', live: true, gone: true });
+    try { await this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby')).fetch('https://lobby/room', { method: 'POST', body }); } catch (e) { }
   }
   // a finished ranked game → D1: the game row and both players' new ratings, in one transaction
   async record() {
@@ -134,10 +141,10 @@ export class Room extends DurableObject {
       const R = results.find(u => u.id === ids[0]), B = results.find(u => u.id === ids[1]);
       if (!R || !B) { st.recorded = true; return; }
       const w = st.over.winner, d = rate(R, B, w);
-      const upd = db.prepare('UPDATE users SET rating = rating + ?, games = games + 1, wins = wins + ?, draws = draws + ?, losses = losses + ? WHERE id = ?');
+      const upd = db.prepare('UPDATE users SET rating = rating + ?, games = games + 1, season_games = season_games + 1, wins = wins + ?, draws = draws + ?, losses = losses + ? WHERE id = ?');
       await db.batch([
-        db.prepare(`INSERT INTO games (room, red, black, winner, reason, plies, red_rating, black_rating, red_delta, black_delta, ended_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(st.code, R.id, B.id, w, st.over.reason, st.moves.length, R.rating, B.rating, d.red, d.black, Date.now()),
+        db.prepare(`INSERT INTO games (room, red, black, winner, reason, plies, red_rating, black_rating, red_delta, black_delta, ended_at, moves)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(st.code, R.id, B.id, w, st.over.reason, st.moves.length, R.rating, B.rating, d.red, d.black, Date.now(), st.moves.join(',')),
         upd.bind(d.red, +(w === 1), +(w === 0), +(w === -1), R.id),
         upd.bind(d.black, +(w === -1), +(w === 0), +(w === 1), B.id),
       ]);
@@ -193,6 +200,7 @@ export class Room extends DurableObject {
     }
     const side = this.sideOf(ws);
     if (m.t === 'sync') { this.send(ws, this.stateFor(ws)); return; }
+    if (m.t === 'emote') { if (side) this.emote(ws, side, m.id, now); return; }
     // a player walks out: a game under way is given up; in a friendly room the seat is freed for someone else
     if (m.t === 'leave') {
       if (!side) return;
@@ -269,6 +277,14 @@ export class Room extends DurableObject {
       await this.save();
       this.broadcast({ t: 'rematch', want: st.rematch });
     }
+  }
+
+  // a player says something (emotes.js): set phrases only, one every few seconds, to everyone here, watchers too
+  emote(ws, side, id, now) {
+    const a = ws.deserializeAttachment() || {};
+    if (!EMOTES.valid(id) || now - (a.emoteAt || 0) < EMOTES.GAP_MS) return;
+    ws.serializeAttachment({ ...a, emoteAt: now });
+    this.broadcast({ t: 'emote', side, id, hero: this.st.heroes[side] || '' });
   }
 
   // the hall: a general for oneself; the battlefield and the time (host only); ready (the others); asking a player to

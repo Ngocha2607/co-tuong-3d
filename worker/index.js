@@ -2,6 +2,7 @@
 // (room.js, and sg-room.js for the three-kingdom game) and one for the ranked queues (lobby.js).
 import { api, authReady, currentUser } from './api.js';
 import { RANKED_TC } from './clock.js';
+import { tick as seasonTick } from './seasons.js';
 export { Room } from './room.js';
 export { Lobby } from './lobby.js';
 export { SgRoom } from './sg-room.js';
@@ -32,7 +33,15 @@ export default {
       const rooms = p === '/ws/sg' ? env.SGROOMS : env.ROOMS;
       return rooms.get(rooms.idFromName(room)).fetch(withUser(req, user));
     }
+    // the installed app's service worker: always the whole file, never a 304 on a stale ETag, or a new version of
+    // the game could go unnoticed (the page compares it byte for byte)
+    if (p === '/sw.js') {
+      const h = new Headers(req.headers); h.delete('if-none-match'); h.delete('if-modified-since');
+      const r = await env.ASSETS.fetch(new Request(req, { headers: h }));
+      return new Response(r.body, { status: r.status, headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' } });
+    }
     if (p === '/rooms') return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch('https://lobby/rooms' + url.search);   // open friendly rooms
+    if (p === '/live') return env.LOBBY.get(env.LOBBY.idFromName('lobby')).fetch('https://lobby/live' + url.search);     // ranked games to watch
     if (p === '/info') {
       const accounts = authReady(env);
       return Response.json({ online: true, accounts, clientId: accounts ? env.GOOGLE_CLIENT_ID : '', ranked: RANKED_TC }, { headers: { 'cache-control': 'no-store' } });
@@ -42,5 +51,9 @@ export default {
       catch (e) { console.error(e); return Response.json({ error: 'server error' }, { status: 500 }); }
     }
     return env.ASSETS.fetch(req);
+  },
+  // the daily cron (wrangler.toml): closes a ranked season once it has ended (seasons.js)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(seasonTick(env).then(r => { if (r.closed.length) console.log('seasons closed', r.closed); }, e => console.error('season tick failed', e)));
   },
 };

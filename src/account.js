@@ -61,15 +61,18 @@ const ACCOUNT = (() => {
   async function save(fields) { user = (await call('api/me', fields)).user; emit(); return user; }
 
   // ---------- the account in the navbar ----------
-  // a campaign title (CAMPAIGN.TITLES), shown with the player's name
-  const titleOf = u => (u && u.title && CAMPAIGN.TITLES[u.title]) || '';
+  // a title (titles.js: the campaign's, an achievement's or a season's), shown with the player's name
+  const titleOf = u => (u && TITLES.text(u.title)) || '';
+  // the boards are the season's (seasons.js): ten ranked games in it to be on one
   function statLine(u) {
-    if (u.games >= provisional) return `${u.rating} điểm · hạng ${u.rank} · ${u.games} ván`;
-    return `${u.rating} điểm · còn ${provisional - u.games} ván để có tên trên bảng`;
+    const n = u.season_games | 0;
+    if (n >= provisional) return `${u.rating} điểm · hạng ${u.rank} mùa này · ${n} ván trong mùa`;
+    return `${u.rating} điểm · còn ${provisional - n} ván để có tên trên bảng mùa này`;
   }
   function sgLine(u) {
-    if (u.sg_games >= provisional) return `Tam Quốc: ${u.sg_rating} điểm · hạng ${u.sg_rank} · ${u.sg_games} ván`;
-    return `Tam Quốc: ${u.sg_rating} điểm · còn ${provisional - u.sg_games} ván để có tên trên bảng`;
+    const n = u.sg_season_games | 0;
+    if (n >= provisional) return `Tam Quốc: ${u.sg_rating} điểm · hạng ${u.sg_rank} mùa này · ${n} ván trong mùa`;
+    return `Tam Quốc: ${u.sg_rating} điểm · còn ${provisional - n} ván để có tên trên bảng mùa này`;
   }
   function render() {
     $('#acOut').hidden = !!user; $('#acIn').hidden = !user;
@@ -95,7 +98,7 @@ const ACCOUNT = (() => {
   // ---------- leaderboard and profiles ----------
   // tabs: 0 the ordinary leaderboard, 2 the Tam Quốc one, 1 a profile (one's own unless another player was picked)
   let tab = 0;
-  function openRanks(which = 0) { $('#ranks').hidden = false; show(which); }
+  function openRanks(which = 0) { $('#ranks').hidden = false; pastSeason = 0; show(which); }
   function show(which, id) {
     tab = which;
     const mine = !id || (user && id === user.id);
@@ -105,17 +108,28 @@ const ACCOUNT = (() => {
     body.innerHTML = '<p class="note">Đang tải…</p>';
     (which !== 1 && !id ? board(which === 2) : profile(id || (user && user.id))).then(h => { body.innerHTML = h; }, () => { body.innerHTML = '<p class="note">Không tải được, thử lại sau.</p>'; });
   }
+  let pastSeason = 0;                                      // a season before this one, being looked at (0 = this one)
   async function board(sg) {
-    const { top, provisional: p } = await call('api/leaderboard' + (sg ? '?v=sg' : ''));
+    const r = await call('api/leaderboard?' + new URLSearchParams({ v: sg ? 'sg' : 'xq', ...(pastSeason ? { season: pastSeason } : {}) }));
+    const { top = [], past, provisional: p, season } = r;
     provisional = p;
-    const R = u => (sg ? { rating: u.sg_rating, games: u.sg_games, wins: u.sg_wins } : u);
-    let h = '';
-    if (!top.length) h = `<p class="note">Chưa ai chơi đủ ${p} ván xếp hạng${sg ? ' Tam Quốc' : ''}. Hãy là người đầu tiên có tên trên bảng!</p>`;
+    const R = u => (sg ? { rating: u.sg_rating, games: u.sg_season_games, wins: u.sg_wins } : { rating: u.rating, games: u.season_games, wins: u.wins });
+    const days = Math.max(0, Math.ceil((season.end - Date.now()) / 86400e3));
+    let h = `<div class="shead"><b>${esc(season.name)}</b><small>${season.past ? 'Bảng xếp hạng lúc kết thúc mùa' : `Còn ${days} ngày · hết mùa, top 10 nhận danh hiệu và điểm kéo về gần 1200`}</small>`
+      + `<span>${season.n > 1 && !season.past ? `<button type="button" class="linkish" data-season="${season.n - 1}">Mùa trước</button>` : ''}${season.past ? `${season.n > 1 ? `<button type="button" class="linkish" data-season="${season.n - 1}">Mùa trước nữa</button>` : ''}<button type="button" class="linkish" data-season="0">Mùa này</button>` : ''}</span></div>`;
+    if (past) {
+      if (!past.length) return h + '<p class="note">Mùa đó chưa ai có tên trên bảng.</p>';
+      return h + `<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Điểm</th><th>Ván</th></tr></thead><tbody>${past.map(u => {
+        const t = SEASONS.tierOf(u.rank);
+        return `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${u.rank}</td><td class="nm">${esc(u.name)}${t ? `<small class="ttl">${esc(SEASONS.title(SEASONS.titleId(season.n, t.tier, sg ? 'sg' : 'xq')))}</small>` : ''}</td><td><b>${u.rating}</b></td><td>${u.games}</td></tr>`;
+      }).join('')}</tbody></table>`;
+    }
+    if (!top.length) h += `<p class="note">Mùa này chưa ai chơi đủ ${p} ván xếp hạng${sg ? ' Tam Quốc' : ''}. Hãy là người đầu tiên có tên trên bảng!</p>`;
     else {
-      h = `<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Điểm</th><th>Ván</th><th>${sg ? 'Thống nhất' : 'Thắng'}</th></tr></thead><tbody>`;
+      h += `<table class="lb"><thead><tr><th>#</th><th>Kỳ thủ</th><th>Điểm</th><th>Ván</th><th>${sg ? 'Thống nhất' : 'Thắng'}</th></tr></thead><tbody>`;
       top.forEach((u, i) => {
         const r = R(u);
-        h += `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${esc(u.name)}${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}</td><td><b>${r.rating}</b></td><td>${r.games}</td><td>${Math.round(100 * r.wins / r.games)}%</td></tr>`;
+        h += `<tr data-id="${u.id}"${user && u.id === user.id ? ' class="me"' : ''}><td>${i + 1}</td><td class="nm">${esc(u.name)}${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}</td><td><b>${r.rating}</b></td><td>${r.games}</td><td>${Math.round(100 * r.wins / Math.max(1, sg ? u.sg_games : u.games))}%</td></tr>`;
       });
       h += '</tbody></table>';
     }
@@ -123,10 +137,16 @@ const ACCOUNT = (() => {
     else h += '<p class="note">Đăng nhập Google rồi chơi trận xếp hạng để có tên trên bảng.</p>';
     return h;
   }
+  // on someone else's profile: where the two stand as friends, and what can be done about it (friends.js does it)
+  const FR = { none: ['ask', 'Kết bạn', 'gold'], asked: ['remove', 'Hủy lời mời kết bạn', ''], incoming: ['accept', 'Đồng ý kết bạn', 'gold'], friends: ['remove', 'Xóa bạn', ''] };
   async function profile(id) {
-    const { user: u, games, sg = [] } = await call('api/user/' + id);
+    const { user: u, games, sg = [], friend, achievements = [], seasons = [] } = await call('api/user/' + id);
+    const fr = friend && FR[friend];
     let h = `<div class="phead"><span class="av big">${esc(u.name.slice(0, 1).toUpperCase())}</span><div><h3>${esc(u.name)}</h3>${titleOf(u) ? `<small class="ttl">${esc(titleOf(u))}</small>` : ''}<small>${esc(statLine(u))}</small></div></div>
+      ${fr ? `<div class="pacts">${friend === 'friends' ? `<span class="badge">Bạn bè</span><button class="btn primary" type="button" data-fchallenge="${u.id}" data-name="${esc(u.name)}">Thách đấu</button>` : ''}<button class="btn ${fr[2]}" type="button" data-fact="${fr[0]}" data-fid="${u.id}">${fr[1]}</button></div>` : ''}
       <div class="stats"><div><b>${u.games}</b>Ván</div><div><b>${u.wins}</b>Thắng</div><div><b>${u.draws}</b>Hòa</div><div><b>${u.losses}</b>Thua</div></div>
+      ${achievements.length ? `<h4>Thành tựu · ${achievements.length}/${ACHIEVEMENTS.LIST.length}</h4><div class="medals small">${achievements.filter(a => ACHIEVEMENTS.has(a.id)).map(a => { const d = ACHIEVEMENTS.byId[a.id]; return `<span class="medal got" title="${esc(d.name)}: ${esc(d.desc)}"><i>${d.han}</i></span>`; }).join('')}</div>` : ''}
+      ${seasons.length ? `<h4>Các mùa giải</h4><ul class="slist">${seasons.map(r => `<li><b>${esc(SEASONS.name(r.season))}</b> · ${r.v === 'sg' ? 'Tam Quốc' : 'Cờ tướng'} · hạng ${r.rank} · ${r.rating} điểm${SEASONS.tierOf(r.rank) ? ` <small class="ttl">${esc(SEASONS.title(SEASONS.titleId(r.season, SEASONS.tierOf(r.rank).tier, r.v)))}</small>` : ''}</li>`).join('')}</ul>` : ''}
       <h4>Ván gần đây</h4>`;
     if (!games.length) h += '<p class="note">Chưa có ván xếp hạng nào.</p>';
     else {
@@ -135,7 +155,7 @@ const ACCOUNT = (() => {
         const res = g.result > 0 ? ['win', '勝'] : g.result < 0 ? ['lose', '敗'] : ['draw', '和'];
         h += `<li class="${res[0]}"><span class="r">${res[1]}</span>
           <span class="vs">gặp <a href="#" data-id="${g.opp.id}">${esc(g.opp.name)}</a> <small>${g.opp.rating}</small><br>
-          <small>${g.side > 0 ? 'Đỏ' : 'Đen'} · ${REASON[g.reason] || ''} · ${Math.ceil(g.plies / 2)} nước · ${new Date(g.at).toLocaleDateString('vi-VN')}</small></span>
+          <small>${g.side > 0 ? 'Đỏ' : 'Đen'} · ${REASON[g.reason] || ''} · ${Math.ceil(g.plies / 2)} nước · ${new Date(g.at).toLocaleDateString('vi-VN')}</small>${g.replay ? `<br><button type="button" class="linkish" data-game="${g.id}">Xem lại · phân tích</button>` : ''}</span>
           <span class="d">${sign(g.delta)}<small>${g.rating}</small></span></li>`;
       }
       h += '</ul>';
@@ -156,7 +176,24 @@ const ACCOUNT = (() => {
     return h;
   }
   $('#rkTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(+b.dataset.v); });
-  $('#rkBody').addEventListener('click', e => {
+  // a ranked game to watch again (game.js opens it)
+  let replay = () => { }, removeArm = 0;
+  const friendOf = b => !!b.closest('.pacts') && !!b.closest('.pacts').querySelector('.badge');   // a friend's profile (its Xóa bạn asks twice)
+  $('#rkBody').addEventListener('click', async e => {
+    const ss = e.target.closest('[data-season]');
+    if (ss) { pastSeason = +ss.dataset.season; show(tab); return; }
+    const gm = e.target.closest('[data-game]');
+    if (gm) { replay(+gm.dataset.game); return; }
+    const fa = e.target.closest('[data-fact]'), fc = e.target.closest('[data-fchallenge]');
+    if (fc) { FRIENDS.challenge(+fc.dataset.fchallenge, fc.dataset.name); return; }
+    if (fa) {
+      // unfriending asks twice
+      if (fa.dataset.fact === 'remove' && friendOf(fa) && Date.now() - removeArm > 3000) { removeArm = Date.now(); fa.textContent = 'Chắc chắn xóa?'; return; }
+      fa.disabled = true;
+      await FRIENDS.act(+fa.dataset.fid, fa.dataset.fact);
+      show(tab, +fa.dataset.fid);
+      return;
+    }
     const t = e.target.closest('[data-id]');
     if (!t) return;
     e.preventDefault();
@@ -167,7 +204,9 @@ const ACCOUNT = (() => {
 
   return {
     init, refresh, save, openRanks, esc, sign,
+    openProfile(id) { $('#ranks').hidden = false; show(1, id); },
     onChange(f) { subs.push(f); },
+    onReplay(f) { replay = f; },
     get user() { return user; },
     get enabled() { return enabled; },
   };

@@ -570,6 +570,22 @@ const VIEW = (() => {
     await tween(260, k => u.war.scale.setScalar(Math.max(0.001, lerp(1.8, REST(), k))));
     if (!armyOn) u.war.visible = false;
   }
+  // a player's emote: their general rises from its piece and raises the weapon (left alone while a move is played),
+  // or in the hall, the figure on their pedestal (seat: its place from the left) leaps and raises it
+  function cheer(side, seat) {
+    if (hall) { const f = hall.figs[seat]; if (f && f.war) f.cheer = clock + 1500; return; }
+    if (busy) return;
+    const u = [...units.values()].find(x => x.piece === L.king(side));
+    if (!u || u.cheering) return;
+    u.cheering = true;
+    const j = u.war.userData.j, a = u.war.scale.x;
+    u.war.visible = true;
+    tween(260, k => u.war.scale.setScalar(Math.max(0.001, lerp(a, BIG(), backOut(k)))))
+      .then(() => tween(900, k => { if (j.armR) j.armR.rotation.x = (j.restArm || 0) - 2.6 * Math.sin(k * Math.PI); }))
+      .then(() => wait(400))
+      .then(() => (busy ? null : tween(240, k => u.war.scale.setScalar(Math.max(0.001, lerp(BIG(), REST(), k))))))
+      .then(() => { if (!armyOn && !busy) u.war.visible = false; u.cheering = false; });
+  }
   // a hero's silhouette, drawn once into a texture: white figure on black, weapon raised
   const shadowTex = new Map();
   function silhouette(id, side) {
@@ -733,9 +749,9 @@ const VIEW = (() => {
     // the hall: the generals breathe; one who is ready raises their weapon
     if (hall) for (const f of hall.figs) {
       if (!f.war) { f.ring.material.opacity = 0.25 + 0.2 * Math.sin(t / 380); continue; }
-      const j = f.war.userData.j;
-      f.war.position.y = Math.sin(t / 650 + f.i * 1.7) * 0.025;
-      if (j.armR) j.armR.rotation.x += ((j.restArm || 0) - (f.ready ? 2.4 : 0) - j.armR.rotation.x) * Math.min(1, dt * 5);
+      const j = f.war.userData.j, c = f.cheer > t ? Math.sin((1 - (f.cheer - t) / 1500) * Math.PI) : 0;   // an emote
+      f.war.position.y = Math.sin(t / 650 + f.i * 1.7) * 0.025 + 0.3 * c;
+      if (j.armR) j.armR.rotation.x += ((j.restArm || 0) - Math.max(f.ready ? 2.4 : 0, 2.6 * c) - j.armR.rotation.x) * Math.min(1, dt * 5);
       f.ring.material.opacity = f.ready ? 0.6 + 0.3 * Math.sin(t / 260) : 0.55;
     }
     const kk = Math.min(1, dt * 5);
@@ -751,7 +767,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },
