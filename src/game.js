@@ -2022,6 +2022,7 @@
     const online = !!info && info.online === true;
     G.online = online;
     $('#rankedBox').hidden = $('#bRanks').hidden = $('#sgRankedBox').hidden = $('#navRanks').hidden = !(online && info.accounts);
+    document.querySelectorAll('.dock .game').forEach(g => g.classList.toggle('no-rank', !(online && info.accounts)));   // the dock's row fills up
     $('#sgOnlineBox').classList.toggle('off', !online);
     if (online) ACCOUNT.init(info, { toast });
     DAILY_UI.setOnline(online);

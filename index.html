@@ -491,6 +491,8 @@
   #bResume { margin-left: auto; padding: 6px 14px; }
   /* a game's row: Chơi ngay and its ⚙, Phòng chơi, Xếp hạng; its heroes stand in the dock's left, above its top edge */
   .game { display: grid; grid-template-columns: minmax(0, 1.5fr) 50px minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  /* no ranked play (no accounts on this server, or offline): Phòng chơi takes the ranked button's room too */
+  .game.no-rank { grid-template-columns: minmax(0, 1.5fr) 50px minmax(0, 2fr); }
   #onlineBox, #sgOnlineBox { display: contents; }
   .game .art { position: absolute; left: 8px; bottom: 10px; width: 164px; height: 176px; pointer-events: none; }
   .game .art img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)); }
@@ -599,6 +601,7 @@
     .dock { padding: 10px; gap: 8px; }
     .game { position: relative; grid-template-columns: 1fr 1fr; }
     .game .play { grid-column: 1 / -1; padding-right: 60px; }
+    .game.no-rank .act.rooms { grid-column: 1 / -1; }
     .game .gear { position: absolute; top: 6px; right: 6px; width: 44px; height: 44px; }
     .game .art { left: auto; right: 6px; bottom: calc(100% + 34px); width: 150px; height: 104px; }
     .act { padding: 8px 10px; }
@@ -652,7 +655,8 @@
     .hcard .tag { padding: 2px 7px; font-size: 10.5px; }
     .rewards { grid-template-columns: 1fr; }
     #campaign .camp-head h2, #brief h2, #daily .camp-head h2, #history .camp-head h2 { font-size: 22px; }
-    .dtop { flex-wrap: wrap; }
+    .dtop { flex-wrap: nowrap; min-width: 0; }
+    .dtop:has(#bResume:not([hidden])) { flex-wrap: wrap; }   /* with Tiếp tục ván đang chơi there is no room for one row */
     .medals { grid-template-columns: 1fr; }
     .flist li { grid-template-columns: auto minmax(0, 1fr); }
     .flist .fa { grid-column: 1 / -1; justify-content: flex-end; }
@@ -664,7 +668,8 @@
     .ch.out .btn { grid-column: 3; }
     #challenges { top: calc(100px + env(safe-area-inset-top, 0px)); }
     .bubble { max-width: 70vw; font-size: 12.5px; }
-    .daily-chip small { display: none; }
+    .daily-chip { padding: 3px; flex: none; }
+    .daily-chip > span:last-child { display: none; }   /* just the seal on a phone: the tabs, the seal, one row */
     .dy-main { grid-template-columns: 1fr; }
     .dy-board { width: min(280px, 100%); margin: 0 auto; }
     #review { padding: 8px 10px; gap: 6px; }
@@ -815,10 +820,10 @@
       <div class="dock">
         <div class="dtop">
           <div class="dtabs" id="gameTabs" role="tablist"><button type="button" role="tab" data-v="xq"><span class="hz">象</span>Cờ tướng</button><button type="button" role="tab" data-v="sg"><span class="hz">三</span>Tam Quốc</button></div>
-          <button class="daily-chip" id="bDaily" type="button"><span class="hz">陣</span><span><b>Bát Trận Đồ</b><small id="dailyNote"></small></span></button>
+          <button class="daily-chip" id="bDaily" type="button" title="Bát Trận Đồ" aria-label="Bát Trận Đồ"><span class="hz">陣</span><span><b>Bát Trận Đồ</b><small id="dailyNote"></small></span></button>
           <button class="btn gold" id="bResume" type="button" hidden>Tiếp tục ván đang chơi</button>
         </div>
-        <div class="game xq" data-game="xq">
+        <div class="game xq no-rank" data-game="xq">
           <div class="art" aria-hidden="true"><img id="artXq" alt="" hidden></div>
           <button class="play" type="button" data-play="xq"><b>▶ Chơi ngay</b><small>Với máy · <span id="xqAiNote"></span></small></button>
           <button class="icon gear" type="button" data-go="xq-ai" title="Tùy chỉnh ván với máy" aria-label="Tùy chỉnh ván với máy"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
@@ -827,7 +832,7 @@
             <button class="act rank" type="button" data-go="xq-ranked" id="rankedBox" hidden><span class="hz">榜</span><span><b>Xếp hạng</b><small id="xqRankNote"></small></span></button>
           </div>
         </div>
-        <div class="game sg" data-game="sg" hidden>
+        <div class="game sg no-rank" data-game="sg" hidden>
           <div class="art" aria-hidden="true"><img id="artSg" alt="" hidden></div>
           <button class="play" type="button" data-play="sg"><b>▶ Chơi ngay</b><small>Với máy · <span id="sgAiNote"></span></small></button>
           <button class="icon gear" type="button" data-go="sg-ai" title="Tùy chỉnh ván với máy" aria-label="Tùy chỉnh ván với máy"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></button>
