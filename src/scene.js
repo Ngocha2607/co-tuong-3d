@@ -723,13 +723,7 @@ const VIEW = (() => {
     scene.add(stage.group);
     occluders = []; stage.group.traverse(o => { if (o.userData.clear) occluders.push(o); });
     stage.group.traverse(o => { if (o.isMesh && !o.material.transparent) o.receiveShadow = true; });
-    const L = stage.light;
-    hemiLight.color.set(L.hemi[0]); hemiLight.groundColor.set(L.hemi[1]); hemiLight.intensity = L.hemi[2];
-    keyLight.color.set(L.key[0]); keyLight.intensity = L.key[1];
-    rimLight.color.set(L.rim[0]); rimLight.intensity = L.rim[1];
-    scene.background = new THREE.Color(stage.background || stage.fog);
-    scene.fog.color.set(stage.fog);
-    makeEnvironment(L);
+    applyDaytime(true);                                  // its light, sky and haze, at this time of day
     SFX.music(stageId);
     if (!menu && !hall) showcase();
   }
@@ -751,6 +745,68 @@ const VIEW = (() => {
     envTarget = target;
     ball.dispose(); win.geometry.dispose();
   }
+  // ---------- day and night ----------
+  // The stages set by day follow the clock (or the player's choice, setDaytime): at dusk and dawn the light turns gold,
+  // at night the sky darkens to blue under stars and a moon, the light becomes moonlight and a lamp over the table
+  // keeps the pieces readable. The stages already set at night (NIGHT) keep their own.
+  const NIGHT = new Set(['room', 'xich-bich', 'ngu-truong']);
+  let daytime = 'auto', nightSky = null, nightLamp = null, dayShown = '', dayF = 0;
+  const smooth = (a, b, x) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+  // f: how far into the night (0 day, 1 night); w: the gold of dusk or dawn
+  function nightOf(now = new Date()) {
+    if (daytime === 'day') return { f: 0, w: 0 };
+    if (daytime === 'night') return { f: 1, w: 0 };
+    const h = now.getHours() + now.getMinutes() / 60;
+    const f = h >= 12 ? smooth(17.6, 19.4, h) : 1 - smooth(4.8, 6.4, h);
+    const w = h >= 12 ? Math.max(0, 1 - Math.abs(h - 18) / 1.6) : Math.max(0, 1 - Math.abs(h - 5.8) / 1.2);
+    return { f, w: w * (1 - f) };
+  }
+  function makeNightSky() {
+    const g = new THREE.Group(), n = 900, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {                        // over the upper part of a sphere inside the sky's dome
+      const yaw = Math.random() * Math.PI * 2, up = Math.asin(0.06 + Math.random() * 0.94), r = 88;
+      a[i * 3] = Math.cos(up) * Math.cos(yaw) * r; a[i * 3 + 1] = Math.sin(up) * r; a[i * 3 + 2] = Math.cos(up) * Math.sin(yaw) * r;
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.9, map: glowTex, color: '#e4ecff', transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(2.6, 40), new THREE.MeshBasicMaterial({ color: '#f6f0da', transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#9fb4ff', transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    moon.position.set(-34, 36, -62); moon.lookAt(0, 0, 0); halo.position.copy(moon.position); halo.scale.setScalar(22);
+    // the night itself: a veil over the stage's sky (and behind its scenery), drawn before anything else see-through
+    const veil = new THREE.Mesh(new THREE.SphereGeometry(92, 32, 16), new THREE.MeshBasicMaterial({ color: '#081129', side: THREE.BackSide, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    veil.renderOrder = -0.95; stars.renderOrder = halo.renderOrder = -0.9; moon.renderOrder = -0.85;
+    g.add(veil, stars, halo, moon);
+    g.userData = { stars, moon, halo, veil };
+    return g;
+  }
+  function applyDaytime(force) {
+    if (!scene || !stage) return;
+    const { f, w } = NIGHT.has(stageId) ? { f: 0, w: 0 } : nightOf(), key = Math.round(f * 24) + ':' + Math.round(w * 24);
+    if (!force && key === dayShown) return;
+    dayShown = key; dayF = f;
+    const L = stage.light, C = c => new THREE.Color(c), MOON = C('#7d8fc8'), GOLD = C('#ffb46a'), DARK = C('#070b18');
+    hemiLight.color.copy(C(L.hemi[0]).lerp(GOLD, w * 0.35).lerp(MOON, f)); hemiLight.groundColor.copy(C(L.hemi[1]).multiplyScalar(1 - 0.6 * f));
+    hemiLight.intensity = L.hemi[2] * (1 - 0.6 * f);
+    keyLight.color.copy(C(L.key[0]).lerp(GOLD, w * 0.6).lerp(C('#aebcff'), f)); keyLight.intensity = L.key[1] * (1 - 0.6 * f);
+    rimLight.color.copy(C(L.rim[0]).lerp(C('#6a84d8'), f)); rimLight.intensity = L.rim[1] * (1 + 0.4 * f);
+    scene.background = C(stage.background || stage.fog).lerp(GOLD, w * 0.3).lerp(DARK, f * 0.9);
+    scene.fog.color.copy(C(stage.fog).lerp(GOLD, w * 0.35).lerp(DARK, f * 0.85));
+    if (stage.sky) stage.sky.material.color.copy(C('#ffffff').lerp(C('#ffb27a'), w * 0.7));
+    if (!nightSky) {
+      nightSky = makeNightSky(); scene.add(nightSky);
+      nightLamp = new THREE.PointLight('#ffb064', 0, 26, 2); nightLamp.position.set(0, 7.5, 3); nightLamp.layers.enable(1); scene.add(nightLamp);
+    }
+    nightSky.visible = f > 0.01;
+    const n = nightSky.userData;
+    n.stars.material.opacity = f; n.moon.material.opacity = f; n.halo.material.opacity = 0.45 * f; n.veil.material.opacity = 0.9 * f;
+    nightLamp.intensity = 1.2 * f;
+    const hex = c => '#' + c.getHexString();
+    makeEnvironment({ hemi: [hex(hemiLight.color), hex(hemiLight.groundColor), hemiLight.intensity], key: [hex(keyLight.color), keyLight.intensity] });
+  }
+  // 'auto' (the clock), 'day' or 'night'
+  function setDaytime(mode) { daytime = ['day', 'night'].includes(mode) ? mode : 'auto'; applyDaytime(true); }
+  setInterval(() => applyDaytime(false), 60000);
+
   // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
   let showcaseRun = 0;
   function showcase() {
@@ -983,6 +1039,7 @@ const VIEW = (() => {
     }
     if (!busy) for (const u of units.values()) if (u.war.visible && !u.cheering) atEase(u, t / 1000);
     if (stage) stage.update(t, dt, camera);
+    if (nightSky && nightSky.visible) nightSky.userData.stars.material.opacity = dayF * (0.82 + 0.18 * Math.sin(t / 900));   // the stars twinkle
     // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
     for (const o of occluders) {
       const ax = camera.position.x, az = camera.position.z, bx = focus.x - ax, bz = focus.z - az, px = o.position.x - ax, pz = o.position.z - az;
@@ -1069,7 +1126,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, setDaytime, cheer,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },

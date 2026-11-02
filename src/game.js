@@ -1856,6 +1856,10 @@
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
   seg('#segVariant', pref.jq ? 1 : 0, v => { pref.jq = v; savePref(); renderAINote(); });
   seg('#segRoomVariant', pref.roomJq ? 1 : 0, v => { pref.roomJq = v; savePref(); });
+  // day and night on the stages set by day (scene.js): by the clock, or always one of them
+  const DAYTIME = ['auto', 'day', 'night'];
+  VIEW.setDaytime(DAYTIME[pref.daytime] || 'auto');
+  seg('#segDaytime', pref.daytime | 0, v => { pref.daytime = v; savePref(); VIEW.setDaytime(DAYTIME[v]); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
   renderAINote();
   // the three-kingdom page: who leads each kingdom, and how strong the computer is

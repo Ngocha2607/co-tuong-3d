@@ -70,6 +70,7 @@ Cờ tướng trên bàn cờ 3D. Quân cờ khắc chữ Hán, và khi ra trậ
   - **Tây Thành**: bàn cờ trên lầu thành lúc chiều tà, cổng thành mở toang, hai lính già quét đường. Khổng Minh ngồi gảy đàn bên cạnh, dưới chân thành là quân Tư Mã Ý dàn trận với cờ 魏, 懿. Âm thanh nền là gió và tiếng đàn.
 
   Khi chơi, camera nhìn xuống bàn cờ nên cảnh chỉ hiện quanh mép bàn. Ở menu, và trong vài giây sau khi đổi cảnh, camera hạ thấp để thấy toàn cảnh; kéo xoay bàn để ngắm lúc nào cũng được. Máy yếu hoặc màn hình nhỏ dùng ít hạt hơn.
+- **Ngày và đêm** (trang *Chủ tướng*, dưới Bối cảnh): sáu bối cảnh ban ngày đổi theo giờ trên máy. Khoảng 17 giờ 36 đến 19 giờ 24 trời chạng vạng, ánh sáng ngả vàng; đêm (đến khoảng 5 giờ sáng) trời xanh thẫm có sao lấp lánh và trăng, ánh sáng thành ánh trăng xanh, một ngọn đèn ấm trên bàn giữ quân cờ dễ nhìn; bình minh lại ngả vàng. Chọn *Theo giờ thật* (mặc định), *Ban ngày* hoặc *Ban đêm*. Quân trướng, Xích Bích, Ngũ Trượng Nguyên vốn là cảnh đêm nên giữ nguyên.
 - **Chiến binh:** khi đi quân, chiến binh trồi lên từ quân cờ và hành quân. Khi ăn quân, camera lia cận cảnh pha giao chiến; Pháo là máy bắn đá, bắn đá qua ngòi. Nút ⚔ ở góc trên bật chế độ đội quân: mọi quân luôn hiện chiến binh, chữ Hán in trên cờ hiệu.
 
 | Quân | Chữ (Đỏ / Đen) | Chiến binh |
