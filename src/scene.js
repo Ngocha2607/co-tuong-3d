@@ -32,7 +32,7 @@ const VIEW = (() => {
       const c = Math.round(x + 4), r = Math.round(z + 4.5);
       return c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(x + 4 - c, z + 4.5 - r) > 0.5 ? -1 : r * 9 + c;
     },
-    board: () => MODELS.board(skins.board), wet: MODELS.wet.classic,
+    board: () => MODELS.board(skins.board), wet: MODELS.wet.classic, river: MODELS.riverDist.classic,
     inside: (x, z) => Math.abs(x) < 4.55 && Math.abs(z) < 5.05,          // within the frame
     fit: [6.4, 5.5, 6.0], edge: 5.1, shadow: 9, far: 32,   // camera framing, the hero shadow's edge (the frame's inner edge), light, zoom out
   };
@@ -52,7 +52,7 @@ const VIEW = (() => {
       for (let s = 0; s < SG.SQ; s++) { const e = Math.hypot(x - SG.XZ[s * 2], z - SG.XZ[s * 2 + 1]); if (e < d) { d = e; best = s; } }
       return best;
     },
-    board: () => MODELS.sanguoBoard(skins.board), wet: MODELS.wet.sanguo,
+    board: () => MODELS.sanguoBoard(skins.board), wet: MODELS.wet.sanguo, river: MODELS.riverDist.sanguo,
     inside: (x, z) => [0, 1, 2, 3, 4, 5].every(i => x * Math.sin((i * Math.PI) / 3) + z * Math.cos((i * Math.PI) / 3) < SG.H + 0.45),
     fit: [9.0, 9.4, 9.6], edge: SG.BOARD_R - 0.3, shadow: 11.5, far: 42,
   };
@@ -147,6 +147,7 @@ const VIEW = (() => {
     keyLight.shadow.bias = -0.0005; keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
     rimLight = new THREE.DirectionalLight('#7fa4ff', 0.45); rimLight.position.set(8, 6, -10); scene.add(rimLight);
+    for (const l of [hemiLight, keyLight, rimLight]) l.layers.enable(1);   // they light the pieces seen in the water too
 
     boardMesh = L.board(); scene.add(boardMesh);
     setStage(wantStage);
@@ -977,7 +978,38 @@ const VIEW = (() => {
     // haze starts behind the board whatever the camera distance (portrait phones sit far back)
     scene.fog.near = cam.dist * cam.zoom + 6; scene.fog.far = scene.fog.near + (stage ? stage.fogSpan : 26);
     if (shake > 0) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; shake = Math.max(0, shake - dt * 1.2); }
+    if (reflections) reflect();
     renderer.render(scene, camera);
+  }
+  // the pieces near a river, seen from under its surface: drawn on their own (layer 1, with the lights) into a picture
+  // the water shows (models.js REFLECT). A camera mirrored in the water's plane, as three.js's Reflector does it.
+  let reflections = true;
+  const reflRT = new THREE.WebGLRenderTarget(512, 512), reflCam = new THREE.PerspectiveCamera();
+  reflCam.layers.set(1);
+  const RN = new THREE.Vector3(0, 1, 0), rp = new THREE.Vector3(), rv = new THREE.Vector3(), rlook = new THREE.Vector3(), rrot = new THREE.Matrix4();
+  const BIAS = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+  function reflect() {
+    // which pieces are near enough a river to show in it: they join layer 1, the others leave it
+    const far = L.river ? 1.6 : -1;                      // the rows either side of it, and the soldiers' behind them
+    for (const u of units.values()) {
+      const near = u.root.visible && L.river(u.root.position.x, u.root.position.z) < far;
+      if (near !== !!u.mirrored) { u.mirrored = near; for (const o of [u.disc, u.war]) o.traverse(m => { if (m.isMesh) near ? m.layers.enable(1) : m.layers.disable(1); }); }
+    }
+    const R = MODELS.REFLECT, Y = MODELS.WATER_Y;
+    rp.set(0, Y, 0);
+    camera.updateMatrixWorld(); rrot.extractRotation(camera.matrixWorld);
+    rv.copy(rp).sub(camera.position).reflect(RN).negate().add(rp);                       // the camera, mirrored
+    rlook.set(0, 0, -1).applyMatrix4(rrot).add(camera.position);
+    rlook.subVectors(rp, rlook).reflect(RN).negate().add(rp);                             // where it looks, mirrored
+    reflCam.position.copy(rv); reflCam.up.set(0, 1, 0).applyMatrix4(rrot).reflect(RN); reflCam.lookAt(rlook);
+    reflCam.projectionMatrix.copy(camera.projectionMatrix); reflCam.updateMatrixWorld();
+    R.matrix.value.copy(BIAS).multiply(reflCam.projectionMatrix).multiply(reflCam.matrixWorldInverse);
+    // drawn on a clear picture (no sky, no shadows worked out again)
+    const bg = scene.background, auto = renderer.shadowMap.autoUpdate, clear = renderer.getClearColor(new THREE.Color()), alpha = renderer.getClearAlpha();
+    scene.background = null; renderer.shadowMap.autoUpdate = false;
+    renderer.setRenderTarget(reflRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, reflCam);
+    renderer.setRenderTarget(null); renderer.setClearColor(clear, alpha); scene.background = bg; renderer.shadowMap.autoUpdate = auto;
+    R.map.value = reflRT.texture; R.strength.value = 0.55;
   }
 
   // getters via defineProperties: Object.assign would copy their value once

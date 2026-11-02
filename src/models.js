@@ -298,10 +298,22 @@ const MODELS = (() => {
     return (boardMats[id] = { ...lookMaterials(look, top, frame, boardCarving.top, boardCarving.frame), water: boardCarving.water });
   }
   // clear green water: the bed and the river's words show through it, the lights glint on its ripples
+  // The pieces near a river show in its water: scene.js renders them seen from under the surface into REFLECT.map,
+  // REFLECT.matrix carrying a point of the world to where it lands on that picture; the ripples shake it a little.
+  const REFLECT = { map: { value: null }, matrix: { value: new THREE.Matrix4() }, strength: { value: 0 } };
   function waterMaterial(ripples) {
-    return shine(new THREE.MeshStandardMaterial({
+    const m = new THREE.MeshStandardMaterial({
       color: '#1d5c68', transparent: true, opacity: 0.62, roughness: 0.1, normalMap: ripples, normalScale: new THREE.Vector2(0.45, 0.45), depthWrite: false,
-    }));
+    });
+    m.onBeforeCompile = sh => {
+      Object.assign(sh.uniforms, { reflMap: REFLECT.map, reflMatrix: REFLECT.matrix, reflStrength: REFLECT.strength });
+      sh.vertexShader = 'uniform mat4 reflMatrix;\nvarying vec4 vRefl;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vRefl = reflMatrix * modelMatrix * vec4(transformed, 1.0);');
+      sh.fragmentShader = 'uniform sampler2D reflMap;\nuniform float reflStrength;\nvarying vec4 vRefl;\n' + sh.fragmentShader.replace('#include <tonemapping_fragment>',
+        '{ vec4 r = texture2D(reflMap, vRefl.xy / vRefl.w + normal.xy * 0.03); float k = r.a * reflStrength;\n' +
+        '  gl_FragColor.rgb = mix(gl_FragColor.rgb, r.rgb * 0.8, k); gl_FragColor.a = mix(gl_FragColor.a, 1.0, k * 0.6); }\n#include <tonemapping_fragment>');
+    };
+    m.customProgramCacheKey = () => 'water-reflect';
+    return shine(m);
   }
   // the water's surface, a little below the banks' top, meets them this far from the river's middle
   const WATER_W = RIVER_Z[1] - (RIVER_Z[1] - RIVER_Z[0]) * (-WATER_Y / RIVER_D);
@@ -502,6 +514,11 @@ const MODELS = (() => {
   const wet = {
     classic: (x, z) => (Math.abs(x) < 4.6 ? ramp(Math.abs(z)) : 0),
     sanguo: (x, z) => Math.max(...RIVERS.map(a => { const [dx, dz] = dirOf(a); return x * dx + z * dz > -0.3 ? ramp(Math.abs(x * dz - z * dx)) : 0; })),
+  };
+  // how far a point is from the middle of the nearest river
+  const riverDist = {
+    classic: (x, z) => Math.abs(z),
+    sanguo: (x, z) => Math.min(...RIVERS.map(a => { const [dx, dz] = dirOf(a); return x * dx + z * dz > -0.3 ? Math.abs(x * dz - z * dx) : Infinity; })),
   };
   function table() {
     const t = tableTexture(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 6);
@@ -1028,5 +1045,5 @@ const MODELS = (() => {
     return root;
   }
 
-  return { board, sanguoBoard, wet, WATER_Y, table, lantern, disc, warrior, setFigure, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, wet, riverDist, WATER_Y, REFLECT, table, lantern, disc, warrior, setFigure, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();
