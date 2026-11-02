@@ -465,6 +465,28 @@ const I18N = (() => {
       'Unlocked with Campaign stars, achievements, ranked seasons and weekly quests. Online, your opponents see your pieces and warriors; the board is the host’s.',
     'Chiếu bí!': 'Checkmate!',
 
+    // ván kinh điển (classics.js)
+    'Ván kinh điển': 'Classic games', 'Đi thay danh thủ': 'Play the master’s move', 'Dừng thử tài': 'Stop the challenge', 'Chờ máy phân tích xong…': 'Waiting for the analysis…',
+    'Hồ Vinh Hoa': 'Hu Ronghua', 'Lữ Khâm': 'Lü Qin', 'Hứa Ngân Xuyên': 'Xu Yinchuan', 'Lý Lai Quần': 'Li Laiqun', 'Triệu Quốc Vinh': 'Zhao Guorong',
+    'Giải đồng đội toàn quốc Trung Quốc {0}': 'Chinese National Team Championship {0}', 'Giải vô địch cá nhân toàn quốc Trung Quốc {0}': 'Chinese National Individual Championship {0}',
+    'Cúp Ngũ Dương lần thứ {0}': 'Wuyang Cup, {0}th edition', 'Cúp Ngũ Dương lần thứ {0}, trận chung kết': 'Wuyang Cup, {0}th edition, final',
+    'Quảng Châu': 'Guangzhou', 'Tùng Giang, Thượng Hải': 'Songjiang, Shanghai', 'Phủ Châu, Giang Tây': 'Fuzhou, Jiangxi', 'Nam Kinh': 'Nanjing', 'Côn Minh': 'Kunming',
+    'Khai cuộc {0}': 'Opening {0}', '(biên bản: xqbase.com)': '(record: xqbase.com)', 'Biên bản dừng ở nước này': 'The record ends here',
+    'Pháo đầu Xe qua hà, Mã 7 đối Bình phong mã': 'Central Cannon, river-crossing Chariot and seventh-file Horse vs Screen Horses',
+    'Ngũ cửu pháo đối Bình phong mã': 'Five-Nine Cannons vs Screen Horses', 'Ngũ thất pháo đối Bình phong mã': 'Five-Seven Cannons vs Screen Horses',
+    'Pháo đầu Pháo tuần hà đối Bình phong mã': 'Central Cannon and river-patrol Cannon vs Screen Horses',
+    'Tiên nhân chỉ lộ chuyển Pháo đầu trái, đối Tốt đáy pháo phi Tượng trái': 'Pawn Opening into a left Central Cannon vs Cannon Behind the Pawn and left Elephant',
+    'Phi Tượng tiến Tốt 3 đối Pháo góc Sĩ phải': 'Elephant Opening with the third Pawn vs right Palace-corner Cannon',
+    'Khởi Mã chuyển Pháo góc Sĩ đối tiến Tốt 7': 'Horse Opening into a Palace-corner Cannon vs seventh Pawn', 'Tiên nhân chỉ lộ tiến Mã phải đối phi Tượng': 'Pawn Opening with the right Horse vs Elephant',
+    '{0} nước': '{0} moves', 'Đỏ thắng': 'Red won', 'Đen thắng': 'Black won', 'Thử tài {0}/{1}': 'Challenge {0}/{1}',
+    'Bạn là {0} ({1}). Đây là lúc quyết định: chạm quân để đi nước bạn chọn.': 'You are {0} ({1}). This is a deciding moment: tap a piece and play your move.',
+    'Đúng nước của {0}: {1}': '{0}’s move exactly: {1}', 'Bạn đi {0}. {1} đi {2}': 'You played {0}. {1} played {2}', 'Bạn đi {0}. {1} đi {2}. Nước của bạn trùng nước máy chọn': 'You played {0}. {1} played {2}. Yours was the computer’s choice',
+    'Xuất sắc! Bạn đi đúng cả {0} nước của danh thủ': 'Superb! You found all {0} of the master’s moves', 'Bạn đi đúng {0}/{1} nước của danh thủ': 'You found {0} of the master’s {1} moves',
+    'Máy đang phân tích ván để tìm những nước quyết định…': 'The computer is analysing the game for its deciding moves…', 'Ván này không có nước quyết định nào để thử': 'This game has no deciding moves to try',
+    'Các ván giữa những đại kiện tướng: Hồ Vinh Hoa, Lữ Khâm, Hứa Ngân Xuyên, Lý Lai Quần, Triệu Quốc Vinh. Biên bản lấy từ cơ sở dữ liệu xqbase.com, lời bình do máy phân tích.':
+      'Games between grandmasters: Hu Ronghua, Lü Qin, Xu Yinchuan, Li Laiqun, Zhao Guorong. Records from the xqbase.com database, commentary by the computer’s analysis.',
+    'Chính xác!': 'Exactly!', ': ở những nước quyết định, bạn thử đi trước rồi xem danh thủ đã đi gì.': ': at the deciding moves, try your own first, then see what the master played.',
+
     // cờ úp (jieqi.js)
     'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
     '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',

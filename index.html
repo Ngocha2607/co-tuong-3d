@@ -295,6 +295,7 @@
   .tmatch .btn { align-self: flex-start; padding: 5px 12px; min-height: 0; font-size: 13px; }
   .tchamp { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: linear-gradient(180deg, rgba(246, 220, 148, 0.18), rgba(227, 180, 72, 0.08)); border: 1px solid rgba(232, 182, 80, 0.5); }
   .tchamp b { font: 700 20px/1.2 var(--serif); color: var(--gold); }
+  #history h4.sub { margin: 20px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
   #friends h4.sub { margin: 16px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
   .frhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px; }
   .frhead h4.sub { margin-bottom: 4px !important; }
@@ -814,6 +815,7 @@
     </div>
     <div class="rv-sum" id="rvSum" hidden></div>
     <button class="btn gold" id="bAnalyse" type="button">Phân tích ván</button>
+    <button class="btn primary" id="bQuiz" type="button" hidden>Đi thay danh thủ</button>
   </div>
   <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
   <ol id="moves"></ol>
@@ -1156,6 +1158,9 @@
     <div class="camp-head"><span class="seal">譜</span><div><h2>Ván đã chơi</h2><p id="hiSum"></p></div></div>
     <ul class="glist" id="hiList"></ul>
     <p class="note">Lưu 30 ván cờ tướng gần nhất trên máy này, kèm phần phân tích. Ván xếp hạng còn xem lại được trong Hồ sơ.</p>
+    <h4 class="sub">Ván kinh điển</h4>
+    <ul class="glist" id="clList"></ul>
+    <p class="note">Các ván giữa những đại kiện tướng: Hồ Vinh Hoa, Lữ Khâm, Hứa Ngân Xuyên, Lý Lai Quần, Triệu Quốc Vinh. Biên bản lấy từ cơ sở dữ liệu xqbase.com, lời bình do máy phân tích. <i>Đi thay danh thủ</i>: ở những nước quyết định, bạn thử đi trước rồi xem danh thủ đã đi gì.</p>
   </div>
 </div>
 
@@ -1183,6 +1188,7 @@
 <script src="src/xiangqi.js"></script>
 <script src="src/jieqi.js"></script>
 <script src="src/review.js"></script>
+<script src="src/classics.js"></script>
 <script src="src/sanguo.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/heroes.js"></script>

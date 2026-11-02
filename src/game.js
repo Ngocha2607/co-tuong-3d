@@ -1192,7 +1192,7 @@
   // animating), evals and vs (the searches so far and the verdicts from them), busy, run, timer (playing on its own),
   // from ('end', 'history', 'profile'), room (a friendly room to go back to) }.
   const rvCache = new Map();
-  const RV_WHY = { ...REASON, time: 'Hết giờ', abandon: 'Bỏ ván', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai', held: 'Cầm cự đủ số nước', limit: 'Hết số nước cho phép' };
+  const RV_WHY = { ...REASON, record: 'Biên bản dừng ở nước này', time: 'Hết giờ', abandon: 'Bỏ ván', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai', held: 'Cầm cự đủ số nước', limit: 'Hết số nước cho phép' };
   const rvDone = () => G.rv.evals.length > G.rv.n && G.rv.evals.every(Boolean);
   const rvTurn = i => XQ.Pos.fromFen(G.rv.g.fen0).turn * (i % 2 ? -1 : 1);
   function rvOpen(g, from = '') {
@@ -1213,7 +1213,8 @@
     G.mode = 'review'; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.over = null; G.lv = null;
     chain = Promise.resolve(); G.animating = 0;
     G.fen0 = game.fen0; reset(); clearSel();
-    const evals = (g.id ? REVIEW.evalsOf(g) : rvCache.get(g.key)) || [];
+    let evals = (g.id ? REVIEW.evalsOf(g) : rvCache.get(g.key)) || [];
+    if (!evals.length && game.classic) try { evals = JSON.parse(localStorage.getItem('cotuong_cl_' + game.classic)) || []; } catch (e) { }
     G.rv = {
       g: { ...game, moves }, id: g.id || '', key: g.key || '', boards, caps, checks, legalN, log, n: moves.length, ply: 0, shown: -1, moving: false,
       evals, vs: REVIEW.verdicts(game.fen0, moves, evals), busy: false, run: 0, timer: 0, from, room: from === 'end' && game.room ? game.room : '',
@@ -1249,6 +1250,7 @@
   // the analysis so far goes with the game
   function rvKeep(rv = G.rv) {
     if (rv.id) REVIEW.saveEvals(rv.id, rv.evals); else if (rv.key) rvCache.set(rv.key, rv.evals.slice());
+    if (rv.g.classic) try { localStorage.setItem('cotuong_cl_' + rv.g.classic, JSON.stringify(rv.evals)); } catch (e) { }
   }
 
   // ---------- the board, a position at a time ----------
@@ -1327,7 +1329,7 @@
       if (rv.shown === i + 1 || rv.shown === i) rvMarks();
     }
     rv.busy = false; rvKeep(); renderMoves(); updateStatus(); rvMarks();
-    toast('Đã phân tích xong: chọn từng nước để xem lời bình');
+    if (rv.wantQuiz) { rv.wantQuiz = false; quizStart(); } else toast('Đã phân tích xong: chọn từng nước để xem lời bình');
   }
 
   // ---------- the panel ----------
@@ -1366,6 +1368,8 @@
     }
     if (e) say += ` <small>${REVIEW.standText(e.s, rvTurn(i))}</small>`;
     if (i === n) say += ` <small>${rvEndText()}</small>`;
+    if (!i && rv.g.classic) { const c = CLASSICS.byId[rv.g.classic]; say = `<span>${ACCOUNT.esc(c.event)}</span>${c.place ? ` · <span>${ACCOUNT.esc(c.place)}</span>` : ''} · ${c.date}<br><span>Khai cuộc ${c.ecco}</span>: <span>${ACCOUNT.esc(c.opening)}</span> <small>(biên bản: xqbase.com)</small>`; }
+    if (rv.quiz) say = quizSay();
     $('#rvSay').innerHTML = say;
     $('#rvChart').hidden = !got;
     if (got) $('#rvChart').innerHTML = REVIEW.chart(rv.g.fen0, rv.g.moves, rv.evals, rv.vs, i);
@@ -1376,6 +1380,9 @@
       return `<div class="${side > 0 ? 'r' : 'b'}"><b>${SIDE[side]}</b><span class="acc">${acc == null ? '–' : acc + '%'}</span>`
         + `<span title="Nước hay">! ${c.good}</span><span title="Chưa chính xác">?! ${c.inaccuracy}</span><span title="Sai lầm">? ${c.mistake}</span><span title="Nước hớ">?? ${c.blunder}</span></div>`;
     }).join('');
+    const qz = $('#bQuiz');                                  // a classic: play in the master's place
+    qz.hidden = !rv.g.classic; qz.disabled = !!rv.wantQuiz;
+    qz.textContent = rv.quiz ? 'Dừng thử tài' : rv.wantQuiz ? 'Chờ máy phân tích xong…' : 'Đi thay danh thủ';
     const an = $('#bAnalyse');
     an.hidden = done; an.disabled = rv.busy;
     an.textContent = rv.busy ? `Máy đang chấm từng nước… ${Math.round((100 * got) / (n + 1))}%` : got ? 'Phân tích tiếp' : 'Phân tích ván';
@@ -1385,9 +1392,78 @@
     renderMoves();
   }
 
+  // ---------- ván kinh điển (classics.js): the masters' games, and playing in their place ----------
+  function openClassic(id, quiz) {
+    const c = CLASSICS.byId[id];
+    if (!c) return;
+    rvOpen({ key: 'classic:' + id, classic: id, fen0: XQ.START, moves: CLASSICS.movesOf(c), me: 0, names: { 1: c.red, '-1': c.black }, winner: c.winner, reason: 'record', title: `${c.red} – ${c.black}` }, 'history');
+    if (quiz) { if (rvDone()) quizStart(); else { G.rv.wantQuiz = true; rvRender(); toast('Máy đang phân tích ván để tìm những nước quyết định…'); } }
+  }
+  // the moments: the winner's moves the computer calls fine (!), then those where the best move stood furthest above
+  // the next best, up to five, in the order played
+  function quizMoments(rv) {
+    const w = rv.g.winner, ok = k => rv.vs[k] && rvTurn(k) === w && rv.legalN[k] > 2 && k >= 6;
+    const gap = k => { const e = rv.evals[k]; return e && e.a != null ? REVIEW.win(e.s) - REVIEW.win(e.a) : 0; };
+    const ks = rv.vs.map((v, k) => k);
+    const fine = ks.filter(k => ok(k) && rv.vs[k].mark === 'good');
+    const best = ks.filter(k => ok(k) && rv.vs[k].mark === 'best' && !fine.includes(k)).sort((a, b) => gap(b) - gap(a));
+    return fine.concat(best).slice(0, 5).sort((a, b) => a - b).map(k => k + 1);
+  }
+  function quizStart() {
+    const rv = G.rv;
+    if (!rv || !rvDone()) return;
+    const list = quizMoments(rv);
+    if (!list.length) { toast('Ván này không có nước quyết định nào để thử'); return; }
+    rv.quiz = { list, k: 0, right: 0, pos: null, busy: false };
+    rvAuto(false); quizNext();
+  }
+  function quizStop() { const rv = G.rv; if (!rv) return; rv.quiz = null; clearSel(); VIEW.setViewer(rv.viewer || 1); rvShow(rv.ply); rvRender(); }
+  function quizNext() {
+    const rv = G.rv, q = rv && rv.quiz;
+    if (!q) return;
+    if (q.k >= q.list.length) {
+      const n = q.list.length; quizStop();
+      banner(`${q.right}/${n}`, q.right * 2 >= n ? 'open' : 'check');
+      toast(q.right === n ? `Xuất sắc! Bạn đi đúng cả ${n} nước của danh thủ` : `Bạn đi đúng ${q.right}/${n} nước của danh thủ`);
+      return;
+    }
+    const ply = q.list[q.k], pos = XQ.Pos.fromFen(rv.g.fen0);
+    for (const m of rv.g.moves.slice(0, ply - 1)) pos.make(m);
+    q.pos = pos; q.busy = false;
+    clearSel(); VIEW.setViewer(pos.turn, false); rvGo(ply - 1); SFX.gong();
+  }
+  function quizSay() {
+    const rv = G.rv, q = rv.quiz, ply = q.list[q.k], side = rvTurn(ply - 1);
+    return `<b class="${side > 0 ? 'r' : 'b'}">Thử tài ${q.k + 1}/${q.list.length}</b> Bạn là ${ACCOUNT.esc(rv.g.names[side])} (${SIDE[side]}). Đây là lúc quyết định: chạm quân để đi nước bạn chọn.`;
+  }
+  function quizTap(s) {
+    const q = G.rv.quiz, p = q.pos;
+    if (q.busy || G.rv.moving) return;
+    if (G.sel >= 0 && G.targets.includes(s)) { const m = XQ.mv(G.sel, s); clearSel(); quizAnswer(m); return; }
+    const pc = p.b[s];
+    if (pc && Math.sign(pc) === p.turn && s !== G.sel) { const t = p.legal().filter(m => XQ.from(m) === s).map(XQ.to); G.sel = s; G.targets = t; VIEW.select(s, t); SFX.pick(); }
+    else if (G.sel >= 0) clearSel();
+  }
+  async function quizAnswer(m) {
+    const rv = G.rv, q = rv.quiz, ply = q.list[q.k], master = rv.g.moves[ply - 1], e = rv.evals[ply - 1], name = rv.g.names[rvTurn(ply - 1)];
+    q.busy = true;
+    if (m === master) { q.right++; SFX.win(); banner('Chính xác!', 'open'); toast(`Đúng nước của ${name}: ${rv.log[ply - 1].text}`); }
+    else {
+      SFX.error();
+      toast(`Bạn đi ${XQ.notation(q.pos, m)}. ${name} đi ${rv.log[ply - 1].text}${e && e.b === m ? '. Nước của bạn trùng nước máy chọn' : ''}`);
+    }
+    await rvGo(ply, true);
+    setTimeout(() => { if (G.rv === rv && rv.quiz === q) { q.k++; quizNext(); } }, 2400);
+  }
+
   // ---------- the games kept on this device (Ván đã chơi) ----------
   function openHistory() { $('#history').hidden = false; renderHistory(); }
   function renderHistory() {
+    $('#clList').innerHTML = CLASSICS.LIST.map(c => {
+      const res = c.winner > 0 ? 'Đỏ thắng' : c.winner < 0 ? 'Đen thắng' : 'Hòa';
+      return `<li class="draw"><span class="r">譜</span><span class="vs"><b>${ACCOUNT.esc(c.red)} – ${ACCOUNT.esc(c.black)}</b><br><small>${ACCOUNT.esc(c.event)} · ${c.date} · ${Math.ceil(c.iccs.split(' ').length / 2)} nước · ${res}</small></span>`
+        + `<span class="d"><button class="btn" type="button" data-classic="${c.id}">Xem</button><button class="btn gold" type="button" data-classic="${c.id}" data-quiz>Đi thay danh thủ</button></span></li>`;
+    }).join('');
     const list = REVIEW.list(), box = $('#hiList');
     $('#hiSum').textContent = list.length ? `${list.length} ván gần nhất trên máy này` : 'Chưa có ván nào';
     if (!list.length) { box.innerHTML = '<li class="empty"><p class="note">Đánh xong một ván cờ tướng (với máy, chiến dịch, Chân Long Kỳ Trận hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.</p></li>'; return; }
@@ -1409,6 +1485,8 @@
     SFX.init(); SFX.pick();
     if (g) rvOpen(g, 'history'); else renderHistory();
   });
+  $('#clList').addEventListener('click', e => { const b = e.target.closest('[data-classic]'); if (!b) return; SFX.init(); SFX.pick(); openClassic(+b.dataset.classic, b.hasAttribute('data-quiz')); });
+  $('#bQuiz').addEventListener('click', () => { const rv = G.rv; if (!rv) return; SFX.init(); SFX.pick(); if (rv.quiz) quizStop(); else if (rvDone()) quizStart(); else { rv.wantQuiz = true; rvAnalyse(); rvRender(); } });
   $('#bHistoryClose').addEventListener('click', () => { $('#history').hidden = true; });
   // a ranked game from a profile: fetched, then watched like the others
   ACCOUNT.onReplay(async id => {
@@ -1455,7 +1533,7 @@
   VIEW.onQuality = q => toast(q === 'low' ? 'Máy hơi chậm: đã tắt bóng đổ để chơi mượt hơn' : 'Máy hơi chậm: đã giảm hiệu ứng để chơi mượt hơn');
   VIEW.onTap = s => {
     SFX.init();
-    if (G.mode === 'review') return;
+    if (G.mode === 'review') { if (G.rv && G.rv.quiz) quizTap(s); return; }
     if (G.mode === 'sanguo') { sgTap(s); return; }
     if (!canAct()) return;
     if (G.sel >= 0 && G.targets.includes(s)) {
@@ -1474,7 +1552,8 @@
     else if (pc) SFX.error();
   };
   VIEW.onHover(s => {
-    if (s < 0 || G.mode === 'review') return false;
+    if (s < 0) return false;
+    if (G.mode === 'review') { const q = G.rv && G.rv.quiz; return !!q && !q.busy && ((q.pos.b[s] && Math.sign(q.pos.b[s]) === q.pos.turn) || G.targets.includes(s)); }
     if (G.mode === 'sanguo') return sgCanAct() && ((G.sg.pos.b[s] && SG.OWN(G.sg.pos.b[s]) === G.sg.pos.turn) || G.targets.includes(s));
     return canAct() && ((G.pos.b[s] && Math.sign(G.pos.b[s]) === G.me) || G.targets.includes(s));
   });
