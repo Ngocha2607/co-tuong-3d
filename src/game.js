@@ -33,7 +33,7 @@
   const myHero = () => heroAllowed(pref.hero) ? pref.hero : '';
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // looks (skins.js) open with the campaign's stars, achievements and a top ten season finish
-  const skinRecord = () => ({ stars: CAMPAIGN_UI.unlocked().total, ach: ACH_UI.earned, season: !!(ACCOUNT.user && (ACCOUNT.user.titles || []).some(t => String(t).startsWith('s:'))) });
+  const skinRecord = () => ({ quests: questState().stars | 0, stars: CAMPAIGN_UI.unlocked().total, ach: ACH_UI.earned, season: !!(ACCOUNT.user && (ACCOUNT.user.titles || []).some(t => String(t).startsWith('s:'))) });
   const skinAllowed = (kind, id) => SKINS.valid(kind, id) && SKINS.earned(kind, id, skinRecord());
   function mySkins() { const s = SKINS.unpack(pref.skin); for (const k of SKINS.NAMES) if (!skinAllowed(k, s[k])) s[k] = SKINS.DEFAULT[k]; return s; }
   // a signed-in player's hero and stage follow them: each pick is saved to the account
@@ -45,17 +45,56 @@
   if (!STAGES.valid(pref.stage)) pref.stage = 'room';
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
 
+  // ---------- weekly quests (quests.js) ----------
+  // each finished game counts towards the week's three tasks; a task done gives a quest star (they open a look)
+  function questState() { try { return JSON.parse(localStorage.getItem('cotuong_quests')) || {}; } catch (e) { return {}; } }
+  function questGame(g) {
+    const r = QUESTS.count(questState(), g);
+    try { localStorage.setItem('cotuong_quests', JSON.stringify(r.st)); } catch (e) { }
+    r.done.forEach((q, i) => setTimeout(() => { SFX.gong(); toast(`Xong nhiệm vụ tuần: ${q.text} · +1 sao`); }, 2600 + i * 2200));
+    renderQuests();
+    if (r.done.length) renderSkins();
+  }
+  function renderQuests() {
+    const st = questState(), week = QUESTS.weekOf(), got = st.week === week ? st.got || {} : {}, stars = st.stars | 0;
+    $('#questList').innerHTML = QUESTS.of(week).map(id => {
+      const q = QUESTS.byId[id], n = Math.min(q.goal, got[id] | 0), done = n >= q.goal;
+      return `<li class="${done ? 'done' : ''}"><span class="qt">${q.text}</span><span class="qbar"><i style="width:${(100 * n) / q.goal}%"></i></span><span class="qn">${done ? '✓' : `${n}/${q.goal}`}</span></li>`;
+    }).join('');
+    const left = Math.max(1, Math.ceil((QUESTS.weekEnds(week) - Date.now()) / 86400000));
+    $('#questNote').textContent = `Còn ${left} ngày · ${stars} sao nhiệm vụ${stars < 6 ? ` · 6 sao mở quân Sơn son` : ''}`;
+  }
+  // a game of xiangqi over: how it went, for the quests
+  function questXq(won, reason) {
+    const me = G.mode === 'online' ? G.you : G.me;
+    if (!me || G.mode === 'lesson' || G.mode === 'menu') return;
+    questGame({ mode: G.mode, level: G.level, won, reason, plies: G.moves.length, jq: !!G.pos.dark, daily: !!(G.lv && G.lv.daily), me, log: G.log });
+  }
+
   // ---------- game record ----------
-  function reset() { G.pos = XQ.Pos.fromFen(G.fen0); G.moves = []; G.keys = []; G.log = []; G.quiet = 0; G.captured = []; G.over = null; }
-  function record(m) {
-    const pos = G.pos, text = XQ.notation(pos, m), side = Math.sign(pos.b[XQ.from(m)]);
+  // cờ úp (jieqi.js) against the computer or in a friendly room: G.deal is known here only against the computer;
+  // G.turns keeps what each move turned up ({ r, c }), which is all a room tells
+  const jqOn = () => G.variant === 'jq' && (G.mode === 'ai' || G.mode === 'online');
+  function reset() { G.pos = jqOn() ? JQ.start() : XQ.Pos.fromFen(G.fen0); G.moves = []; G.keys = []; G.log = []; G.quiet = 0; G.captured = []; G.turns = []; G.over = null; }
+  function record(m, info) {
+    const pos = G.pos, side = Math.sign(pos.b[XQ.from(m)]);
+    let text, cap, turned = 0;
     G.keys.push(pos.key());
-    const cap = pos.make(m);
-    G.moves.push(m); G.log.push({ text, side, cap });
-    if (cap) { G.captured.push(cap); G.quiet = 0; } else G.quiet++;
+    if (pos.dark) {
+      info = info || (G.deal ? JQ.reveals(pos, m, G.deal) : { r: 0, c: 0 });
+      text = JQ.notation(pos, m, info);
+      ({ cap, turned } = JQ.apply(pos, m, info));
+      G.turns.push(info);
+    } else { text = XQ.notation(pos, m); cap = pos.make(m); }
+    G.moves.push(m); G.log.push({ text, side, cap, pc: pos.b[XQ.to(m)] });   // pc: the piece that moved, as it is now
+    if (cap) G.captured.push(cap);
+    G.quiet = cap || turned ? 0 : G.quiet + 1;            // turning a piece up can't be undone either
     return cap;
   }
-  function rebuild(moves) { reset(); for (const m of moves) record(m); }
+  function rebuild(moves, turns = G.turns) { const t = turns.slice(); reset(); moves.forEach((m, i) => record(m, t[i])); }
+  // the position as the computer is given it: an ordinary game from its start and moves; cờ úp as it stands now,
+  // without the deal
+  const aiJob = () => (G.pos.dark ? { fen: G.pos.fen(), moves: [], keys: G.keys.slice(), dark: JQ.darkList(G.pos) } : { fen: G.fen0, moves: G.moves.slice() });
   const kingOf = side => G.pos.kings[side > 0 ? 0 : 1];
   const legalFrom = s => G.pos.legal().filter(m => XQ.from(m) === s).map(XQ.to);
 
@@ -64,21 +103,25 @@
   const enqueue = fn => { G.animating++; chain = chain.then(fn).catch(e => console.error(e)).then(() => { G.animating--; if (!G.animating) updateStatus(); }); return chain; };
 
   // apply a move to the record now, animate it when its turn comes
-  function commit(m, fast) {
+  // info: in a room's game of cờ úp, what the move turned up, as the room told it (the player's own move too, which
+  // waits for the room: only the room knows the deal)
+  function commit(m, fast, info) {
     // against the clock the animations cost the player time: no close-ups, and none at all when time runs short
     const timed = G.mode === 'online' && !!G.clock;
     const opts = { fast: fast || (timed && G.you && clockOf(G.you) < 60000), closeUp: !timed };
     const mover = G.pos.turn;
-    if (timed && mover === G.you) { G.clock.left[mover] = clockOf(mover); G.clock.running = 0; G.clock.at = performance.now(); }   // the server's reply restarts it
+    if (timed && mover === G.you && !info) { G.clock.left[mover] = clockOf(mover); G.clock.running = 0; G.clock.at = performance.now(); }   // the server's reply restarts it
     if (G.mode === 'online' && mover === G.you && G.drawOffer === -G.you) G.drawOffer = 0;   // playing on turns the offer down
-    record(m);
+    G.sent = 0;
+    record(m, info);
+    if (G.pos.dark || info) { const t = G.turns[G.turns.length - 1]; opts.reveal = t.r; opts.taken = t.c; }
     const st = XQ.status(G.pos, G.keys, G.quiet, G.moves), turn = G.pos.turn, king = kingOf(turn), gen = G.gen;
     renderMoves();
     enqueue(async () => {
       if (gen !== G.gen) return;                           // a new game started meanwhile
       await VIEW.play(m, opts);
       if (gen !== G.gen) return;
-      VIEW.check(-1);
+      VIEW.check(-1); moods();
       if (G.mode === 'lesson') { lessonJudge(m, st); return; }
       if (G.mode === 'campaign') { const r = CAMPAIGN.judge(G.lv, G.moves); if (r.over) { endCampaign(r); return; } }
       if (st.over) { endGame(st); return; }
@@ -87,6 +130,14 @@
       if (vsAI() && G.pos.turn !== G.me && !G.over && G.animating <= 1) aiMove();
     });
     G.lastMover = mover; updateStatus();
+  }
+
+  // how the warriors feel (scene.js setMood): the pieces the side that just moved really threatens (XQ.threats: left
+  // unprotected, or worth more than the attacker) are afraid, a general in check is on the alert
+  function moods() {
+    if (G.over || !['ai', 'campaign', 'online', 'lesson'].includes(G.mode)) { VIEW.setMood({}); return; }
+    const afraid = [...new Set(XQ.threats(G.pos.clone(), -G.pos.turn).map(XQ.to))];
+    VIEW.setMood({ afraid, alert: G.pos.inCheck() ? kingOf(G.pos.turn) : -1 });
   }
 
   // ---------- computer player ----------
@@ -114,7 +165,7 @@
   function aiMove() {
     const id = ++aiId, L = G.mode === 'campaign' ? CAMPAIGN.AI[G.lv.ai] : LEVELS[G.level], t0 = Date.now();
     G.thinking = true; updateStatus();
-    ask({ fen: G.fen0, moves: G.moves.slice(), time: L.time, depth: L.depth, noise: L.noise ? (Math.random() * 1e9) | 1 : 0 }).then(r => {
+    ask({ ...aiJob(), time: L.time, depth: L.depth, noise: L.noise ? (Math.random() * 1e9) | 1 : 0 }).then(r => {
       if (id !== aiId || !vsAI() || G.over) return;
       setTimeout(() => {
         if (id !== aiId || !vsAI()) return;
@@ -128,14 +179,15 @@
   function startAI() {
     disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'ai'; G.me = pref.side; G.level = pref.level; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
+    G.variant = pref.jq ? 'jq' : 'xq'; G.deal = pref.jq ? JQ.deal() : null;
     G.fen0 = XQ.START; G.lv = null; VIEW.setLayout('classic'); VIEW.setStage(myStage());
     const rivals = HEROES.list.filter(h => h.id !== pref.hero);  // the computer may lead with a hero still to earn
     G.heroes = { [G.me]: myHero(), [-G.me]: rivals[(Math.random() * rivals.length) | 0].id };
     VIEW.setHeroes(G.heroes);
     reset(); clearSel();
-    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
-    SFX.init(); SFX.gong(); banner('Khai cuộc', 'open');
+    SFX.init(); SFX.gong(); banner(G.pos.dark ? 'Cờ úp' : 'Khai cuộc', 'open');
     updateStatus();
     if (G.me < 0) setTimeout(() => { if (G.mode === 'ai' && !G.moves.length) aiMove(); }, 900);
   }
@@ -167,7 +219,7 @@
     G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
     reset(); clearSel();
     VIEW.setMenu(false); if (!i) VIEW.setViewer(1);
-    VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(G.pos.inCheck() ? kingOf(1) : -1); VIEW.hint(-1, -1);
+    VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(G.pos.inCheck() ? kingOf(1) : -1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init(); if (!i) { SFX.gong(); banner(`Học chơi · ${l.name}`, 'open'); }
     updateStatus();
@@ -202,7 +254,7 @@
     G.heroes = { [G.me]: myHero(), [-G.me]: foe };
     VIEW.setHeroes(G.heroes); VIEW.setStage(stage);
     reset(); clearSel();
-    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init(); SFX.gong(); banner(lv.daily ? 'Chân Long Kỳ Trận' : lv.name, 'open');
     toast(CAMPAIGN.goal(lv));
@@ -216,6 +268,7 @@
     aiId++; G.thinking = false;
     G.over = { winner: r.reason === 'held' || r.reason === 'limit' || (lv.type === 'survive' && r.win) ? 0 : winner, reason: r.reason, shown: true, camp: r, stars: CAMPAIGN.stars(lv, r, G.help), lv };
     G.over.kept = keepGame();
+    questXq(!!r.win, r.reason);
     VIEW.check(-1); clearSel();
     const onBoard = r.reason === 'checkmate' || r.reason === 'stalemate';
     const finale = onBoard ? VIEW.defeat(kingOf(-winner), true) : 0;
@@ -241,9 +294,9 @@
     if (!n && !G.over) return;
     rebuild(G.moves.slice(0, G.moves.length - n));
     G.gen = (G.gen || 0) + 1;
-    VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
+    VIEW.setBoard(G.pos.b, G.captured, G.pos.dark); clearSel(); VIEW.hint(-1, -1);
     const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
-    const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(st.check ? kingOf(G.pos.turn) : -1);
+    const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(st.check ? kingOf(G.pos.turn) : -1); moods();
     showEnd(false); renderMoves(); updateStatus(); SFX.pick();
     if (G.pos.turn !== G.me) aiMove();
   }
@@ -252,11 +305,11 @@
     if (!vsAI() || G.over || G.pos.turn !== G.me || G.thinking || G.animating) return;
     if (G.mode === 'campaign') { G.help = true; updateStatus(); }
     const b = $('#bHint'); b.disabled = true; b.textContent = 'Đang tìm…';
-    ask({ fen: G.fen0, moves: G.moves.slice(), time: G.mode === 'campaign' ? 1500 : 900 }).then(r => {
+    ask({ ...aiJob(), time: G.mode === 'campaign' ? 1500 : 900 }).then(r => {
       b.disabled = false; b.textContent = 'Gợi ý';
       if (!r.move || G.pos.turn !== G.me) return;
       VIEW.hint(XQ.from(r.move), XQ.to(r.move));
-      toast('Gợi ý: ' + XQ.notation(G.pos, r.move));
+      toast('Gợi ý: ' + (G.pos.dark ? JQ.notation(G.pos, r.move, { r: 0, c: 0 }) : XQ.notation(G.pos, r.move)));
     });
   }
   let resignArm = 0;
@@ -278,8 +331,9 @@
     if (G.over && G.over.shown) return;
     G.over = Object.assign({}, st, { shown: true });
     G.over.kept = keepGame();
-    VIEW.check(-1); clearSel();
-    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
+    questXq(!!st.winner && st.winner === (G.mode === 'online' ? G.you : G.me), st.reason);
+    VIEW.check(-1); VIEW.setMood({}); clearSel();
+    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'noshow', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     const finale = st.winner && onBoard ? VIEW.defeat(kingOf(-st.winner), true) : 0;
     recordFinale(finale);
     if (st.winner) VIEW.heroShadow(st.winner, true);
@@ -290,14 +344,14 @@
   // a finished game goes into the games kept on this device (Ván đã chơi), to be watched again and analysed
   function keepGame() {
     const o = G.over;
-    if (!G.moves.length || !o || o.reason === 'aborted') return null;
+    if (!G.moves.length || !o || o.reason === 'aborted' || G.pos.dark) { if (o) o.ach = []; return null; }
     const online = G.mode === 'online', lv = G.lv;
     const me = online ? G.you : G.me, you = ACCOUNT.user ? ACCOUNT.user.name : 'Bạn';
     const name = side => online ? (G.info[side] ? G.info[side].name : side === G.you ? you : G.you ? 'Đối thủ' : SIDE[side])
       : side === G.me ? you : G.mode === 'ai' ? `Máy · ${LEVELS[G.level].name}` : (lv && CAMPAIGN.chapter(lv.chapter) || {}).foeName || (HEROES.byId[G.heroes[side]] || {}).name || 'Máy';
     const kind = online ? (G.rated ? 'ranked' : 'online') : G.mode === 'campaign' ? (lv.daily ? 'daily' : 'campaign') : 'ai';
     o.ach = me ? ACH_UI.check({ fen0: G.fen0, moves: G.moves.slice(), me }) : [];   // feats of the board (achievements-ui.js)
-    const title = { ranked: 'Trận xếp hạng', online: `Phòng ${G.room}`, daily: lv && lv.name, campaign: lv && `Chiến dịch ${lv.id} · ${lv.name}`, ai: `Với máy · ${LEVELS[G.level].name}` }[kind];
+    const title = { ranked: 'Trận xếp hạng', online: G.tour ? `Giải ${G.tour.name}` : `Phòng ${G.room}`, daily: lv && lv.name, campaign: lv && `Chiến dịch ${lv.id} · ${lv.name}`, ai: `Với máy · ${LEVELS[G.level].name}` }[kind];
     try {
       return REVIEW.add({ at: Date.now(), kind, title, fen0: G.fen0, moves: G.moves.slice(), me, names: { 1: name(1), '-1': name(-1) }, winner: o.winner, reason: o.reason, heroes: { ...G.heroes }, room: online && !G.rated ? G.room : '' }).id;
     } catch (e) { return null; }
@@ -343,6 +397,7 @@
       'perpetual-check': `${SIDE[-st.winner]} chiếu dai, phạm luật`,
       'perpetual-chase': `${SIDE[-st.winner]} đuổi dai, phạm luật`,
       abandon: `${SIDE[-st.winner]} rời ván quá 60 giây`,
+      noshow: `${SIDE[-st.winner]} không vào trận sau 3 phút`,
     }[st.reason] || REASON[st.reason] || '';
     const after = `sau ${Math.ceil(G.moves.length / 2)} nước`;
     return [title, st.reason === 'agreement' ? `${why} ${after}` : `${why} · ${who} ${after}`];
@@ -393,15 +448,15 @@
   const roomLink = () => `${location.origin}${location.pathname}?${G.mode === 'sanguo' ? 'tq' : 'room'}=${G.room}`;
   const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
-  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
+  function resetOnline() { G.tour = null; G.variant = 'xq'; G.deal = null; G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
   // tc: time control asked for by the player opening a friendly room ('' = untimed)
-  function goOnline(room, tc = '') {
+  function goOnline(room, tc = '', jq = false) {
     disconnect(); stopSeek(); resetOnline(); rvClose();
-    G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++;
+    G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.wantJq = jq; G.gen = (G.gen || 0) + 1; aiId++;
     G.fen0 = XQ.START; G.lv = null; VIEW.setLayout('classic'); VIEW.setStage(myStage());
     G.players = { 1: false, '-1': false }; G.rematch = { 1: false, '-1': false };
     history.replaceState(null, '', roomLink());
-    reset(); clearSel(); VIEW.setMenu(false); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    reset(); clearSel(); VIEW.setMenu(false); VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init();
     connect();
@@ -416,7 +471,7 @@
     clearTimeout(retryT);
     const sg = G.mode === 'sanguo', ws = new WebSocket(`${wsBase()}/ws${sg ? '/sg' : ''}?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero(), stage: myStage(), skin: SKINS.pack(mySkins()) })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, variant: !sg && G.wantJq ? 'jq' : '', hero: myHero(), stage: myStage(), skin: SKINS.pack(mySkins()) })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (sg) sgNetMsg(m); else onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -427,23 +482,26 @@
   function disconnect() { clearTimeout(retryT); if (G.ws) { const w = G.ws; G.ws = null; try { w.close(); } catch (e) { } } }
   const send = o => { if (G.ws && G.ws.readyState === 1) G.ws.send(JSON.stringify(o)); };
   function onNet(m) {
+    if ('watchers' in m) G.watchers = m.watchers | 0;
     switch (m.t) {
+      case 'cheer': onCheer(m); updateStatus(); break;
       case 'state': {
         const firstSeat = !G.you && m.you;
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
         G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
         G.heroes = m.heroes || { 1: '', '-1': '' }; G.skins = m.skins || {}; G.boardSkin = m.board || '';
+        G.variant = m.variant === 'jq' ? 'jq' : 'xq'; G.deal = null; G.sent = 0; G.tour = m.tour || null;
         if (hallUpdate(m)) { updateStatus(); break; }
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
-        rebuild(m.moves || []);
+        rebuild(m.moves || [], m.turns || []);
         G.heroes = m.heroes || { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes);
-        VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
+        VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured, G.pos.dark); clearSel(); VIEW.hint(-1, -1);
         const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
         const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(!m.over && st.check ? kingOf(G.pos.turn) : -1);
         G.over = m.over ? Object.assign({}, m.over, { shown: true }) : null;
         showEnd(!!m.over); renderMoves(); updateStatus();
         if (!G.moves.length && !m.over && (firstSeat || m.fresh)) {
-          SFX.gong(); banner(G.you ? `Bạn cầm quân ${SIDE[G.you]}` : 'Bạn đang xem trận', 'open');
+          SFX.gong(); banner(G.you ? `Bạn cầm quân ${SIDE[G.you]}${G.pos.dark ? ' · Cờ úp' : ''}` : 'Bạn đang xem trận', 'open');
           const opp = G.you && G.info[-G.you];
           if (G.rated && opp) toast(`Trận xếp hạng: gặp ${opp.name} · ${opp.rating} điểm`);
         }
@@ -452,7 +510,7 @@
       case 'move':
         setTiming(m);
         if ('draw' in m) G.drawOffer = m.draw;
-        if (m.ply === G.moves.length) { commit(m.m); }
+        if (m.ply === G.moves.length) { commit(m.m, false, G.pos.dark ? { r: m.r | 0, c: m.c | 0 } : undefined); }
         else if (m.ply > G.moves.length) send({ t: 'sync' });
         break;
       case 'presence':
@@ -676,6 +734,7 @@
   // ---------- the end ----------
   function sgEnd(st) {
     if (G.over && G.over.shown) { if (st.places && !G.over.places) Object.assign(G.over, { places: st.places }); return; }
+    if (sgNet() ? G.sg.net.you >= 0 : sgPeople().length) questGame({ mode: 'sanguo' });
     aiId++; G.thinking = false;
     const [title, sub, result] = sgEndText(st);
     G.over = Object.assign({}, st, { shown: true, sg: true, title, sub, result });
@@ -770,7 +829,9 @@
   function sgNetMsg(m) {
     const sg = G.sg, net = sg && sg.net;
     if (!net) return;
+    if ('watchers' in m) G.watchers = m.watchers | 0;
     switch (m.t) {
+      case 'cheer': onCheer(m); break;
       case 'state': {
         const first = net.you < 0 && m.you >= 0;
         Object.assign(net, { you: m.you, players: m.players, info: m.info, rated: !!m.rated, tc: m.tc || null, rematch: m.rematch });
@@ -855,7 +916,7 @@
     else if (net && net.you < 0) text = `Đang xem · Lượt ${KNAME[turn]}`;
     else if (net && !pos.alive[net.you]) text = `Bạn đã mất nước · Lượt ${KNAME[turn]}`;
     else text = solo === turn ? `Lượt bạn · ${KNAME[turn]}` : `Lượt ${KNAME[turn]}`;
-    const st = $('#status'); st.textContent = text; st.classList.toggle('mine', sgCanAct());
+    const st = $('#status'); st.textContent = text + watchText(); st.classList.toggle('mine', sgCanAct());
     // the three kingdoms in the panel: Shu in the red slot, Wu in the green one, Wei in the black one
     PL.forEach((id, k) => {
       const el = $(id), hero = HEROES.byId[G.heroes[k]], who = el.querySelector('.who');
@@ -931,7 +992,7 @@
       return { ...h, kind: '3 người chơi · Tam Quốc', sides: [0, 1, 2], me: net.you >= 0 ? net.you : null, players: net.players, info: net.info,
         label: k => KNAME[k], piece: k => 20 + 10 * k + SG.K, hero: k => G.heroes[k], raw: k => (net.heroesRaw || [])[k] || '' };
     }
-    return { ...h, kind: '2 người chơi · Cờ tướng', sides: [1, -1], me: G.you || null, players: G.players, info: G.info,
+    return { ...h, kind: `2 người chơi · ${G.variant === 'jq' ? 'Cờ úp' : 'Cờ tướng'}`, sides: [1, -1], me: G.you || null, players: G.players, info: G.info,
       label: k => `${SIDE[k]} · ${ARMY[k]}`, piece: k => k * XQ.K, hero: k => G.heroes[k] || '', raw: k => G.heroes[k] || '' };
   }
   // what still keeps the game from starting (as the server will judge it)
@@ -997,7 +1058,9 @@
     $('#hallStageNote').textContent = `Bối cảnh: ${stage.name}${host ? '' : ' · chủ phòng chọn'}`;
     const tc = G.mode === 'sanguo' ? G.sg.net.tc : G.tc;
     $('#hallTc').querySelectorAll('button').forEach(b => b.classList.toggle('on', (TC[+b.dataset.v] || '') === (tc ? `${tc.base / 60000}+${tc.inc / 1000}` : '')));
-    $('#hallInfo').textContent = `${r.public ? 'Công khai' : 'Riêng tư'} · ${tc ? TC_NAME[`${tc.base}+${tc.inc}`] : 'Không giờ'}`;
+    $('#hallInfo').textContent = `${r.public ? 'Công khai' : 'Riêng tư'} · ${tc ? TC_NAME[`${tc.base}+${tc.inc}`] : 'Không giờ'}${G.mode === 'online' && G.variant === 'jq' ? ' · Cờ úp' : ''}`;
+    $('#hallVariant').closest('label').hidden = G.mode !== 'online';
+    $('#hallVariant').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === (G.variant === 'jq' ? 1 : 0)));
     $('#hallInfo').title = r.public ? 'Phòng hiện trong danh sách phòng đang mở: ai cũng vào được' : 'Chỉ ai có link hoặc mã phòng mới vào được';
     $('#hallPublic').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === (r.public ? 1 : 0)));
 
@@ -1040,25 +1103,54 @@
   let emoteAt = 0;
   function emotePop(open, anchor) {
     const pop = $('#emotePop'), side = emoteSide();
-    if (!open || side === null) { pop.hidden = true; return; }
+    if (!open || (side === null && !watching())) { pop.hidden = true; return; }
+    if (side === null) {                                    // watching: cheers, and Cố lên … for each side
+      const sides = G.mode === 'sanguo' ? [0, 1, 2] : [1, -1];
+      pop.innerHTML = sides.map(k => `<button type="button" class="cry" data-cheer="len" data-for="${k}">${EMOTES.cheerText('len', sideName(k))}</button>`).join('')
+        + EMOTES.CHEERS.map(l => `<button type="button" data-cheer="${l.id}">${l.text}</button>`).join('')
+        + `<label class="mute"><input type="checkbox" id="emoteMute"${pref.muteEmotes ? ' checked' : ''}> Ẩn biểu cảm của người khác</label>`;
+      return placePop(pop, anchor);
+    }
     const id = cryHero(side, G.mode === 'sanguo' ? (G.sg.net.heroesRaw || [])[side] : G.heroes[side]), hero = HEROES.byId[id];
     pop.innerHTML = `<button type="button" class="cry" data-emote="cry"><span class="hz">${hero ? hero.han : '帥'}</span><span>${ACCOUNT.esc(EMOTES.text('cry', id))}</span></button>`
       + EMOTES.LINES.map(l => `<button type="button" data-emote="${l.id}">${l.text}</button>`).join('')
       + `<label class="mute"><input type="checkbox" id="emoteMute"${pref.muteEmotes ? ' checked' : ''}> Ẩn biểu cảm của người khác</label>`;
+    placePop(pop, anchor);
+  }
+  // over the button that opened it, kept on the screen
+  function placePop(pop, anchor) {
     pop.hidden = false;
-    // over the button that opened it, kept on the screen
     const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
     pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
     pop.style.top = (r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8) + 'px';
   }
   $('#emotePop').addEventListener('click', e => {
-    const b = e.target.closest('[data-emote]'); if (!b) return;
+    const b = e.target.closest('[data-emote], [data-cheer]'); if (!b) return;
     SFX.init();
     if (Date.now() - emoteAt < EMOTES.GAP_MS) { toast('Chờ một chút rồi nói tiếp'); return; }
-    emoteAt = Date.now(); send({ t: 'emote', id: b.dataset.emote }); emotePop(false);
+    emoteAt = Date.now(); emotePop(false);
+    send(b.dataset.cheer ? { t: 'cheer', id: b.dataset.cheer, for: +b.dataset.for } : { t: 'emote', id: b.dataset.emote });
   });
   $('#emotePop').addEventListener('change', e => { if (e.target.id === 'emoteMute') { pref.muteEmotes = e.target.checked; savePref(); } });
   for (const id of ['#bEmote', '#bHallEmote']) $(id).addEventListener('click', e => { SFX.init(); SFX.pick(); emotePop($('#emotePop').hidden, e.currentTarget); });
+  // watching an online game (a room's page without a seat)
+  const watching = () => (G.mode === 'online' && !G.you && !!G.ws) || (sgNet() && G.sg.net.you < 0);
+  const sideName = k => (G.mode === 'sanguo' ? KNAME[k] : SIDE[k]);
+  const watchText = () => (G.watchers > 0 && (G.mode === 'online' || sgNet()) ? ` · ${G.watchers} người xem` : '');
+  // a cheer from someone watching: it rises over the board, and the side cheered on raises its arms
+  function onCheer(m) {
+    if (pref.muteEmotes && !watching()) return;
+    const sides = G.mode === 'sanguo' ? [0, 1, 2] : [1, -1];
+    if (m.id === 'len' && !sides.includes(m.for)) return;
+    const text = EMOTES.cheerText(m.id, sideName(m.for)); if (!text) return;
+    const el = document.createElement('div');
+    el.className = 'cheer'; el.textContent = text;
+    el.style.left = (18 + Math.random() * 64) + '%';
+    $('#bubbles').appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+    if (m.id === 'len') VIEW.cheer(m.for, -1);
+    SFX.pick();
+  }
   function onEmote(m) {
     if (pref.muteEmotes && m.side !== emoteSide()) return;
     const text = EMOTES.text(m.id, cryHero(m.side, m.hero));
@@ -1089,7 +1181,7 @@
     history.replaceState(null, '', location.pathname);
     VIEW.setLayout('classic'); reset(); clearSel();
     G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
-    VIEW.setBoard(G.pos.b, []); VIEW.setStage(myStage());
+    VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.setStage(myStage());
     showEnd(false); renderMoves(); layoutMode(); updateStatus(); showMenu(true);
   }
 
@@ -1100,7 +1192,7 @@
   // animating), evals and vs (the searches so far and the verdicts from them), busy, run, timer (playing on its own),
   // from ('end', 'history', 'profile'), room (a friendly room to go back to) }.
   const rvCache = new Map();
-  const RV_WHY = { ...REASON, time: 'Hết giờ', abandon: 'Bỏ ván', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai', held: 'Cầm cự đủ số nước', limit: 'Hết số nước cho phép' };
+  const RV_WHY = { ...REASON, record: 'Biên bản dừng ở nước này', time: 'Hết giờ', abandon: 'Bỏ ván', 'perpetual-check': 'Chiếu dai', 'perpetual-chase': 'Đuổi dai', held: 'Cầm cự đủ số nước', limit: 'Hết số nước cho phép' };
   const rvDone = () => G.rv.evals.length > G.rv.n && G.rv.evals.every(Boolean);
   const rvTurn = i => XQ.Pos.fromFen(G.rv.g.fen0).turn * (i % 2 ? -1 : 1);
   function rvOpen(g, from = '') {
@@ -1121,7 +1213,8 @@
     G.mode = 'review'; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false; G.over = null; G.lv = null;
     chain = Promise.resolve(); G.animating = 0;
     G.fen0 = game.fen0; reset(); clearSel();
-    const evals = (g.id ? REVIEW.evalsOf(g) : rvCache.get(g.key)) || [];
+    let evals = (g.id ? REVIEW.evalsOf(g) : rvCache.get(g.key)) || [];
+    if (!evals.length && game.classic) try { evals = JSON.parse(localStorage.getItem('cotuong_cl_' + game.classic)) || []; } catch (e) { }
     G.rv = {
       g: { ...game, moves }, id: g.id || '', key: g.key || '', boards, caps, checks, legalN, log, n: moves.length, ply: 0, shown: -1, moving: false,
       evals, vs: REVIEW.verdicts(game.fen0, moves, evals), busy: false, run: 0, timer: 0, from, room: from === 'end' && game.room ? game.room : '',
@@ -1150,13 +1243,14 @@
     G.mode = 'menu'; G.fen0 = XQ.START; reset(); clearSel();
     G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
     VIEW.setViewer(1, true);                                 // a game watched from Black's side leaves the menu's board Red-side down
-    VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1); VIEW.setStage(myStage());
+    VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1); VIEW.setStage(myStage());
     renderMoves(); layoutMode(); updateStatus(); showMenu(true);
     if (from === 'history') openHistory();
   }
   // the analysis so far goes with the game
   function rvKeep(rv = G.rv) {
     if (rv.id) REVIEW.saveEvals(rv.id, rv.evals); else if (rv.key) rvCache.set(rv.key, rv.evals.slice());
+    if (rv.g.classic) try { localStorage.setItem('cotuong_cl_' + rv.g.classic, JSON.stringify(rv.evals)); } catch (e) { }
   }
 
   // ---------- the board, a position at a time ----------
@@ -1182,7 +1276,12 @@
     if (rv.moving) return;
     if (animate && i === rv.shown + 1) {
       rv.moving = true; VIEW.hint(-1, -1); VIEW.check(-1);
-      await VIEW.play(rv.g.moves[i - 1], { closeUp: false });
+      // the moments worth a close look: a fine move, a blunder, and the mate that ended the game
+      const v = rv.vs[i - 1], mate = i === rv.n && rv.g.reason === 'checkmate' && rv.g.winner;
+      const cinema = !pref.cinema ? '' : mate ? 'mate' : v && (v.mark === 'good' || v.mark === 'blunder') ? v.mark : '';
+      if (cinema) banner({ good: 'Nước hay!', blunder: 'Nước hớ!', mate: 'Chiếu bí!' }[cinema], cinema === 'blunder' ? 'check' : 'open');
+      await VIEW.play(rv.g.moves[i - 1], { closeUp: false, cinema });
+      if (cinema === 'mate' && G.rv === rv) { SFX.drum(); VIEW.defeat(rv.boards[i].indexOf(XQ.K * -rv.g.winner), true); }
       rv.moving = false;
       if (G.rv !== rv) return;
       rv.shown = i;
@@ -1230,7 +1329,7 @@
       if (rv.shown === i + 1 || rv.shown === i) rvMarks();
     }
     rv.busy = false; rvKeep(); renderMoves(); updateStatus(); rvMarks();
-    toast('Đã phân tích xong: chọn từng nước để xem lời bình');
+    if (rv.wantQuiz) { rv.wantQuiz = false; quizStart(); } else toast('Đã phân tích xong: chọn từng nước để xem lời bình');
   }
 
   // ---------- the panel ----------
@@ -1269,6 +1368,8 @@
     }
     if (e) say += ` <small>${REVIEW.standText(e.s, rvTurn(i))}</small>`;
     if (i === n) say += ` <small>${rvEndText()}</small>`;
+    if (!i && rv.g.classic) { const c = CLASSICS.byId[rv.g.classic]; say = `<span>${ACCOUNT.esc(c.event)}</span>${c.place ? ` · <span>${ACCOUNT.esc(c.place)}</span>` : ''} · ${c.date}<br><span>Khai cuộc ${c.ecco}</span>: <span>${ACCOUNT.esc(c.opening)}</span> <small>(biên bản: xqbase.com)</small>`; }
+    if (rv.quiz) say = quizSay();
     $('#rvSay').innerHTML = say;
     $('#rvChart').hidden = !got;
     if (got) $('#rvChart').innerHTML = REVIEW.chart(rv.g.fen0, rv.g.moves, rv.evals, rv.vs, i);
@@ -1279,6 +1380,9 @@
       return `<div class="${side > 0 ? 'r' : 'b'}"><b>${SIDE[side]}</b><span class="acc">${acc == null ? '–' : acc + '%'}</span>`
         + `<span title="Nước hay">! ${c.good}</span><span title="Chưa chính xác">?! ${c.inaccuracy}</span><span title="Sai lầm">? ${c.mistake}</span><span title="Nước hớ">?? ${c.blunder}</span></div>`;
     }).join('');
+    const qz = $('#bQuiz');                                  // a classic: play in the master's place
+    qz.hidden = !rv.g.classic; qz.disabled = !!rv.wantQuiz;
+    qz.textContent = rv.quiz ? 'Dừng thử tài' : rv.wantQuiz ? 'Chờ máy phân tích xong…' : 'Đi thay danh thủ';
     const an = $('#bAnalyse');
     an.hidden = done; an.disabled = rv.busy;
     an.textContent = rv.busy ? `Máy đang chấm từng nước… ${Math.round((100 * got) / (n + 1))}%` : got ? 'Phân tích tiếp' : 'Phân tích ván';
@@ -1288,9 +1392,78 @@
     renderMoves();
   }
 
+  // ---------- ván kinh điển (classics.js): the masters' games, and playing in their place ----------
+  function openClassic(id, quiz) {
+    const c = CLASSICS.byId[id];
+    if (!c) return;
+    rvOpen({ key: 'classic:' + id, classic: id, fen0: XQ.START, moves: CLASSICS.movesOf(c), me: 0, names: { 1: c.red, '-1': c.black }, winner: c.winner, reason: 'record', title: `${c.red} – ${c.black}` }, 'history');
+    if (quiz) { if (rvDone()) quizStart(); else { G.rv.wantQuiz = true; rvRender(); toast('Máy đang phân tích ván để tìm những nước quyết định…'); } }
+  }
+  // the moments: the winner's moves the computer calls fine (!), then those where the best move stood furthest above
+  // the next best, up to five, in the order played
+  function quizMoments(rv) {
+    const w = rv.g.winner, ok = k => rv.vs[k] && rvTurn(k) === w && rv.legalN[k] > 2 && k >= 6;
+    const gap = k => { const e = rv.evals[k]; return e && e.a != null ? REVIEW.win(e.s) - REVIEW.win(e.a) : 0; };
+    const ks = rv.vs.map((v, k) => k);
+    const fine = ks.filter(k => ok(k) && rv.vs[k].mark === 'good');
+    const best = ks.filter(k => ok(k) && rv.vs[k].mark === 'best' && !fine.includes(k)).sort((a, b) => gap(b) - gap(a));
+    return fine.concat(best).slice(0, 5).sort((a, b) => a - b).map(k => k + 1);
+  }
+  function quizStart() {
+    const rv = G.rv;
+    if (!rv || !rvDone()) return;
+    const list = quizMoments(rv);
+    if (!list.length) { toast('Ván này không có nước quyết định nào để thử'); return; }
+    rv.quiz = { list, k: 0, right: 0, pos: null, busy: false };
+    rvAuto(false); quizNext();
+  }
+  function quizStop() { const rv = G.rv; if (!rv) return; rv.quiz = null; clearSel(); VIEW.setViewer(rv.viewer || 1); rvShow(rv.ply); rvRender(); }
+  function quizNext() {
+    const rv = G.rv, q = rv && rv.quiz;
+    if (!q) return;
+    if (q.k >= q.list.length) {
+      const n = q.list.length; quizStop();
+      banner(`${q.right}/${n}`, q.right * 2 >= n ? 'open' : 'check');
+      toast(q.right === n ? `Xuất sắc! Bạn đi đúng cả ${n} nước của danh thủ` : `Bạn đi đúng ${q.right}/${n} nước của danh thủ`);
+      return;
+    }
+    const ply = q.list[q.k], pos = XQ.Pos.fromFen(rv.g.fen0);
+    for (const m of rv.g.moves.slice(0, ply - 1)) pos.make(m);
+    q.pos = pos; q.busy = false;
+    clearSel(); VIEW.setViewer(pos.turn, false); rvGo(ply - 1); SFX.gong();
+  }
+  function quizSay() {
+    const rv = G.rv, q = rv.quiz, ply = q.list[q.k], side = rvTurn(ply - 1);
+    return `<b class="${side > 0 ? 'r' : 'b'}">Thử tài ${q.k + 1}/${q.list.length}</b> Bạn là ${ACCOUNT.esc(rv.g.names[side])} (${SIDE[side]}). Đây là lúc quyết định: chạm quân để đi nước bạn chọn.`;
+  }
+  function quizTap(s) {
+    const q = G.rv.quiz, p = q.pos;
+    if (q.busy || G.rv.moving) return;
+    if (G.sel >= 0 && G.targets.includes(s)) { const m = XQ.mv(G.sel, s); clearSel(); quizAnswer(m); return; }
+    const pc = p.b[s];
+    if (pc && Math.sign(pc) === p.turn && s !== G.sel) { const t = p.legal().filter(m => XQ.from(m) === s).map(XQ.to); G.sel = s; G.targets = t; VIEW.select(s, t); SFX.pick(); }
+    else if (G.sel >= 0) clearSel();
+  }
+  async function quizAnswer(m) {
+    const rv = G.rv, q = rv.quiz, ply = q.list[q.k], master = rv.g.moves[ply - 1], e = rv.evals[ply - 1], name = rv.g.names[rvTurn(ply - 1)];
+    q.busy = true;
+    if (m === master) { q.right++; SFX.win(); banner('Chính xác!', 'open'); toast(`Đúng nước của ${name}: ${rv.log[ply - 1].text}`); }
+    else {
+      SFX.error();
+      toast(`Bạn đi ${XQ.notation(q.pos, m)}. ${name} đi ${rv.log[ply - 1].text}${e && e.b === m ? '. Nước của bạn trùng nước máy chọn' : ''}`);
+    }
+    await rvGo(ply, true);
+    setTimeout(() => { if (G.rv === rv && rv.quiz === q) { q.k++; quizNext(); } }, 2400);
+  }
+
   // ---------- the games kept on this device (Ván đã chơi) ----------
   function openHistory() { $('#history').hidden = false; renderHistory(); }
   function renderHistory() {
+    $('#clList').innerHTML = CLASSICS.LIST.map(c => {
+      const res = c.winner > 0 ? 'Đỏ thắng' : c.winner < 0 ? 'Đen thắng' : 'Hòa';
+      return `<li class="draw"><span class="r">譜</span><span class="vs"><b>${ACCOUNT.esc(c.red)} – ${ACCOUNT.esc(c.black)}</b><br><small>${ACCOUNT.esc(c.event)} · ${c.date} · ${Math.ceil(c.iccs.split(' ').length / 2)} nước · ${res}</small></span>`
+        + `<span class="d"><button class="btn" type="button" data-classic="${c.id}">Xem</button><button class="btn gold" type="button" data-classic="${c.id}" data-quiz>Đi thay danh thủ</button></span></li>`;
+    }).join('');
     const list = REVIEW.list(), box = $('#hiList');
     $('#hiSum').textContent = list.length ? `${list.length} ván gần nhất trên máy này` : 'Chưa có ván nào';
     if (!list.length) { box.innerHTML = '<li class="empty"><p class="note">Đánh xong một ván cờ tướng (với máy, chiến dịch, Chân Long Kỳ Trận hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.</p></li>'; return; }
@@ -1312,6 +1485,8 @@
     SFX.init(); SFX.pick();
     if (g) rvOpen(g, 'history'); else renderHistory();
   });
+  $('#clList').addEventListener('click', e => { const b = e.target.closest('[data-classic]'); if (!b) return; SFX.init(); SFX.pick(); openClassic(+b.dataset.classic, b.hasAttribute('data-quiz')); });
+  $('#bQuiz').addEventListener('click', () => { const rv = G.rv; if (!rv) return; SFX.init(); SFX.pick(); if (rv.quiz) quizStop(); else if (rvDone()) quizStart(); else { rv.wantQuiz = true; rvAnalyse(); rvRender(); } });
   $('#bHistoryClose').addEventListener('click', () => { $('#history').hidden = true; });
   // a ranked game from a profile: fetched, then watched like the others
   ACCOUNT.onReplay(async id => {
@@ -1329,6 +1504,11 @@
   $('#rvPlay').addEventListener('click', () => { SFX.init(); rvAuto(!G.rv.timer); });
   $('#rvNext').addEventListener('click', () => { SFX.init(); rvStep(1); });
   $('#rvLast').addEventListener('click', () => { rvAuto(false); rvGo(G.rv.n); });
+  // the review's camera moments (rvGo), on unless turned off
+  const cinemaBtn = () => { $('#rvCinema').classList.toggle('on', !!pref.cinema); $('#rvCinema').setAttribute('aria-pressed', !!pref.cinema); };
+  if (pref.cinema === undefined) pref.cinema = true;
+  cinemaBtn();
+  $('#rvCinema').addEventListener('click', () => { SFX.init(); SFX.pick(); pref.cinema = !pref.cinema; savePref(); cinemaBtn(); toast(pref.cinema ? 'Bật camera điện ảnh: nước hay, nước hớ và chiếu bí được quay cận cảnh' : 'Tắt camera điện ảnh'); });
   $('#rvFlip').addEventListener('click', () => { const v = -(G.rv.viewer || G.rv.g.me || 1); G.rv.viewer = v; VIEW.setViewer(v); rvShow(G.rv.shown); });
   $('#bAnalyse').addEventListener('click', () => rvAnalyse());
   $('#rvChart').addEventListener('click', e => {
@@ -1348,17 +1528,18 @@
   // ---------- input on the board ----------
   function clearSel() { G.sel = -1; G.targets = []; VIEW.select(-1, []); }
   const myTurn = () => G.mode !== 'menu' && !G.over && !G.thinking && G.pos.turn === G.me && (G.mode !== 'online' || G.you === G.me);
-  const canAct = () => myTurn() && !G.animating;
+  const canAct = () => myTurn() && !G.animating && !(G.sent && performance.now() - G.sent < 4000);
   // the scene took its effects down a step on a slow device (scene.js setQuality)
   VIEW.onQuality = q => toast(q === 'low' ? 'Máy hơi chậm: đã tắt bóng đổ để chơi mượt hơn' : 'Máy hơi chậm: đã giảm hiệu ứng để chơi mượt hơn');
   VIEW.onTap = s => {
     SFX.init();
-    if (G.mode === 'review') return;
+    if (G.mode === 'review') { if (G.rv && G.rv.quiz) quizTap(s); return; }
     if (G.mode === 'sanguo') { sgTap(s); return; }
     if (!canAct()) return;
     if (G.sel >= 0 && G.targets.includes(s)) {
       const m = XQ.mv(G.sel, s); clearSel(); VIEW.hint(-1, -1);
       if (G.mode === 'online') send({ t: 'move', m, ply: G.moves.length });
+      if (G.mode === 'online' && G.pos.dark) { G.sent = performance.now(); SFX.pick(); return; }
       commit(m);
       return;
     }
@@ -1371,7 +1552,8 @@
     else if (pc) SFX.error();
   };
   VIEW.onHover(s => {
-    if (s < 0 || G.mode === 'review') return false;
+    if (s < 0) return false;
+    if (G.mode === 'review') { const q = G.rv && G.rv.quiz; return !!q && !q.busy && ((q.pos.b[s] && Math.sign(q.pos.b[s]) === q.pos.turn) || G.targets.includes(s)); }
     if (G.mode === 'sanguo') return sgCanAct() && ((G.sg.pos.b[s] && SG.OWN(G.sg.pos.b[s]) === G.sg.pos.turn) || G.targets.includes(s));
     return canAct() && ((G.pos.b[s] && Math.sign(G.pos.b[s]) === G.me) || G.targets.includes(s));
   });
@@ -1441,8 +1623,9 @@
   }
   function updateStatus() {
     applySkins();
-    $('#bEmote').hidden = emoteSide() === null;              // emotes: the seated players of an online room
-    if (emoteSide() === null) $('#emotePop').hidden = true;
+    $('#bEmote').hidden = emoteSide() === null && !watching();   // emotes: the seated players of an online room; cheers: those watching
+    $('#bEmote').textContent = emoteSide() === null ? 'Cổ vũ' : 'Biểu cảm';
+    if (emoteSide() === null && !watching()) $('#emotePop').hidden = true;
     if (inHall()) { renderHall(); return; }
     if (G.mode === 'sanguo') { sgStatus(); return; }
     if (G.mode === 'review') { rvStatus(); return; }
@@ -1462,6 +1645,8 @@
       else if (!G.you) text = `Đang xem · Lượt ${SIDE[turn]}`;
       else text = turn === G.you ? `Lượt bạn · ${SIDE[G.you]}` : 'Lượt đối thủ';
     }
+    if (text && G.pos.dark && !G.over && G.mode !== 'menu') text = 'Cờ úp · ' + text;
+    if (text && G.mode === 'online') text += watchText();
     st.textContent = text;
     st.classList.toggle('mine', !G.over && !G.animating && myTurn());
     for (const side of [1, -1]) {
@@ -1537,7 +1722,8 @@
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
-    FRIENDS.setStatus(G.mode === 'menu' || G.mode === 'review' ? 'online' : 'playing');   // what friends see
+    // what friends see, and the room they can come and watch
+    FRIENDS.setStatus(G.mode === 'menu' || G.mode === 'review' ? 'online' : 'playing', G.mode === 'online' ? 'xq:' + G.room : sgNet() ? 'sg:' + G.room : '');
     frameBoard();
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
@@ -1631,7 +1817,7 @@
     }
     box.innerHTML = list.map(r => {
       const code = cleanRoom(r.code), open = r.status === 'waiting' && r.seated < r.max, stage = STAGES.byId[r.stage];
-      const bits = [r.host ? `Chủ phòng ${ACCOUNT.esc(r.host)}` : '', stage ? stage.name : '', TC_LABEL[r.tc] || 'Không giờ'].filter(Boolean).join(' · ');
+      const bits = [r.host ? `Chủ phòng ${ACCOUNT.esc(r.host)}` : '', r.jq ? 'Cờ úp' : '', stage ? stage.name : '', TC_LABEL[r.tc] || 'Không giờ'].filter(Boolean).join(' · ');
       return `<button type="button" class="room-row" data-code="${code}" data-v="${r.v === 'sg' ? 'sg' : 'xq'}"><span class="st ${r.status === 'playing' ? 'playing' : 'waiting'}">${ROOM_STATUS[r.status] || ''}</span>`
         + `<span class="ri"><b>Phòng ${code}</b><small>${bits}</small></span><span class="cnt">${r.count | 0}/${r.max | 0}</span><span class="go">${open ? 'Vào' : 'Xem'}</span></button>`;
     }).join('');
@@ -1668,7 +1854,10 @@
     const again = $('#bAgain');
     again.hidden = G.mode === 'online' && !G.you;
     if (sgNet()) sgRenderEnd();
-    else if (G.mode === 'online' && G.rated) {
+    else if (G.mode === 'online' && G.tour) {                // a tournament's match: back to its bracket
+      again.textContent = 'Về giải đấu'; again.disabled = false; again.hidden = false;
+      $('#endNote').textContent = G.tour.name + (G.over && !G.over.winner ? ' · Hòa thì Đen đi tiếp' : '');
+    } else if (G.mode === 'online' && G.rated) {
       again.textContent = 'Tìm trận mới'; again.disabled = false;
       $('#endNote').textContent = ratingNote();
     } else if (G.mode === 'online') {
@@ -1765,6 +1954,7 @@
       startCampaign(next && CAMPAIGN_UI.unlocked().levels.has(next.id) ? next.id : G.lv.id);
       return;
     }
+    if (G.mode === 'online' && G.tour) { openTour(G.tour.id); return; }
     if (G.mode === 'online' && G.rated) { seek(); return; }
     if (G.mode === 'online') { send({ t: 'rematch' }); G.rematch[G.you] = true; renderEnd(); return; }
     if (sgNet()) {
@@ -1786,10 +1976,16 @@
   // the home page's game cards: beside Đánh với máy, the computer game as set up
   const renderAINote = () => {
     const side = pref.side > 0 ? 'Đỏ' : 'Đen', level = ['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường';
-    $('#xqAiNote').textContent = `${side} · ${level}`;
+    $('#xqAiNote').textContent = `${pref.jq ? 'Cờ úp · ' : ''}${side} · ${level}`;
   };
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); renderAINote(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
+  seg('#segVariant', pref.jq ? 1 : 0, v => { pref.jq = v; savePref(); renderAINote(); });
+  seg('#segRoomVariant', pref.roomJq ? 1 : 0, v => { pref.roomJq = v; savePref(); });
+  // day and night on the stages set by day (scene.js): by the clock, or always one of them
+  const DAYTIME = ['auto', 'day', 'night'];
+  VIEW.setDaytime(DAYTIME[pref.daytime] || 'auto');
+  seg('#segDaytime', pref.daytime | 0, v => { pref.daytime = v; savePref(); VIEW.setDaytime(DAYTIME[v]); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
   renderAINote();
   // the three-kingdom page: who leads each kingdom, and how strong the computer is
@@ -1902,12 +2098,17 @@
     $('#bDaily').classList.toggle('done', done);
   };
   DAILY_UI.onChange(dailyChip); dailyChip();
+  renderQuests(); setInterval(renderQuests, 600000);   // a new week while the page is open
   // friends and challenges (friends.js): a challenge accepted opens a new private friendly room for both; whoever
   // challenged goes in first, so they hold the room (and Red), the other a moment later
+  // tournaments (tournament-ui.js): a match's room, played or watched; from a match's end, back to its bracket
+  TOUR_UI.init({ toast, play: room => { closePages(); goOnline(room); } });
+  function openTour(id) { leaveRoom(); FRIENDS.open(); TOUR_UI.show(id); }
   FRIENDS.init({
     toast,
     busy: () => ((G.mode === 'online' && G.you && !G.over && G.moves.length) || (sgNet() && G.sg.net.you >= 0 && !G.over && sgMoves().length)
       ? 'Bạn đang trong một ván online: nhận lời sẽ là xin thua ván này. Bấm Nhận lần nữa nếu chắc chắn.' : ''),
+    watch(r) { const [v, code] = r.split(':'); SFX.init(); closePages(); if (v === 'sg') sgOnline(code); else goOnline(code); },
     onGo(room, tc, host) {
       if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });   // a game under way here is given up
       G.privateRoom = room;
@@ -1963,6 +2164,7 @@
     SFX.pick(); send({ t: 'stage', stage: b.dataset.id });
   });
   $('#hallPublic').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'public', on: b.dataset.v === '1' }); });
+  $('#hallVariant').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'variant', on: b.dataset.v === '1' }); });
   $('#hallTc').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'tc', tc: TC[+b.dataset.v] || '' }); });
   $('#bHallGo').addEventListener('click', () => {
     const r = hallModel();
@@ -1989,7 +2191,7 @@
   $('#inSgRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinSg(); });
   $('#bSgRanked').addEventListener('click', () => seek('sg'));
   $('#bSgRanks').addEventListener('click', () => ACCOUNT.openRanks(2));
-  $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || ''));
+  $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || '', !!pref.roomJq));
   const joinTyped = () => { const r = cleanRoom($('#inRoom').value); if (r.length < 4) { toast('Nhập mã phòng 4 ký tự'); $('#inRoom').focus(); return; } goOnline(r); };
   $('#bJoin').addEventListener('click', joinTyped);
   $('#inRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinTyped(); });
@@ -2136,7 +2338,7 @@
     VIEW.setStage(myStage());
     VIEW.init($('#view'));
     G.heroes[1] = myHero(); VIEW.setHeroes(G.heroes);
-    VIEW.setBoard(G.pos.b, []);
+    VIEW.setBoard(G.pos.b, [], G.pos.dark);
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();
     $('#boot').remove();
@@ -2163,6 +2365,7 @@
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
     else if (online && invited.length >= 4) goOnline(invited);
     else { showMenu(true); if (q.has('daily')) { history.replaceState(null, '', location.pathname); DAILY_UI.open(); } }   // the app's shortcut
+    if (/^[A-Z0-9]{6}$/.test(q.get('giai') || '')) { FRIENDS.open(); TOUR_UI.show(q.get('giai')); }   // a tournament's link
     registerSW();
   }
 

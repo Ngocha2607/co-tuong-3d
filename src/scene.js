@@ -64,7 +64,7 @@ const VIEW = (() => {
   let trays = { 1: [], '-1': [] };         // pieces captured by each side (meshes)
   let armyOn = false, viewer = 1, menu = false, busy = false;
   let heroes = { 1: '', '-1': '' };        // hero leading each side (heroes.js id, '' = the plain general)
-  let clock = performance.now(), last = clock;
+  let clock = performance.now(), last = clock, slowmo = 1;   // slowmo: the review's cinematic moments run slower
   const tweens = [], parts = [];
   const pos = s => L.pos(s);
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -229,21 +229,22 @@ const VIEW = (() => {
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
   })() });
-  function makeUnit(piece, s) {
-    const side = L.sideOf(piece), root = new THREE.Group(), disc = MODELS.disc(piece, false, skins.pieces[side]), war = MODELS.warrior(piece, heroes[side], skins.army[side]);
+  // dark: a face-down piece (cờ úp)
+  function makeUnit(piece, s, dark) {
+    const side = L.sideOf(piece), root = new THREE.Group(), disc = MODELS.disc(piece, false, skins.pieces[side], dark), war = MODELS.warrior(piece, heroes[side], skins.army[side], dark);
     root.add(disc); war.rotation.y = rest(piece); root.add(war);
     const blob = new THREE.Mesh(blobGeo, blobMat); blob.renderOrder = 1; blob.visible = false; root.add(blob);
     disc.rotation.y = L.yaw(viewer);
     war.visible = armyOn; war.scale.setScalar(REST());
     root.position.copy(pos(s)); root.userData.sq = s; root.visible = !hall;
     scene.add(root);
-    return { piece, root, disc, war, blob, sq: s, phase: Math.random() * 100 };
+    return { piece, root, disc, war, blob, sq: s, phase: Math.random() * 100, dark: !!dark };
   }
   function disposeUnit(u) { scene.remove(u.root); }
-  // captured: the pieces already taken, each a piece or [piece, side that took it]
-  function setBoard(b, captured) {
+  // captured: the pieces already taken, each a piece or [piece, side that took it]; dark: cờ úp's face-down points
+  function setBoard(b, captured, dark) {
     for (const u of units.values()) disposeUnit(u); units.clear();
-    for (let s = 0; s < b.length; s++) if (b[s]) units.set(s, makeUnit(b[s], s));
+    for (let s = 0; s < b.length; s++) if (b[s]) units.set(s, makeUnit(b[s], s, !!(dark && dark[s])));
     for (const side of Object.keys(trays)) for (const d of trays[side]) scene.remove(d);
     trays = Object.fromEntries(L.sides.map(side => [side, []]));
     if (captured) for (const c of captured) Array.isArray(c) ? addToTray(c[0], false, c[1]) : addToTray(c, false);
@@ -269,7 +270,7 @@ const VIEW = (() => {
     if (skins.board !== was.board && boardMesh) { scene.remove(boardMesh); boardMesh = L.board(); boardMesh.visible = !hall; scene.add(boardMesh); }
     const same = k => (skins.pieces[k] || '') === (was.pieces[k] || '') && (skins.army[k] || '') === (was.army[k] || '');
     if (L.sides.every(same)) return;
-    for (const [s, u] of units) { const fresh = makeUnit(u.piece, s); disposeUnit(u); units.set(s, fresh); }
+    for (const [s, u] of units) { const fresh = makeUnit(u.piece, s, u.dark); disposeUnit(u); units.set(s, fresh); }
     for (const side of Object.keys(trays)) trays[side] = trays[side].map(d => {
       const p = d.userData.piece, n = MODELS.disc(p, true, skins.pieces[L.sideOf(p)]);
       n.userData.piece = p; n.position.copy(d.position); n.rotation.copy(d.rotation); n.visible = d.visible;
@@ -434,6 +435,36 @@ const VIEW = (() => {
     if (j.trunk) j.trunk.rotation.x = 0.5 + Math.sin(p * 0.9) * 0.2;
     if (cloth) cloth.rotation.y = Math.sin(p * 2.1) * 0.22 + Math.sin(p * 3.7) * 0.07;
   }
+  // how a warrior feels about where it stands (mood, set by the game after each move): 'afraid', a piece the enemy can
+  // take next, leans back behind its shield with its head down and trembles (a piece on the board shivers);
+  // 'alert', a general in check, holds the sword up and looks round. u.fear and u.alarm ease in and out.
+  function setMood(m = {}) {
+    const afraid = new Set(m.afraid || []);
+    for (const [s, u] of units) u.mood = afraid.has(s) ? 'afraid' : s === m.alert ? 'alert' : '';
+  }
+  function calm(u) {
+    const j = u.war.userData.j;
+    u.mood = ''; u.fear = u.alarm = 0;
+    u.war.rotation.x = 0; u.war.position.x = 0; u.disc.rotation.z = 0;
+    if (j.head) j.head.rotation.x = 0;
+    if (j.armL) j.armL.rotation.x = 0;
+    if (j.armR) j.armR.rotation.x = j.restArm || 0;
+  }
+  function feel(u, s, dt) {
+    const ease = Math.min(1, dt * 5);
+    u.fear = (u.fear || 0) + ((u.mood === 'afraid' ? 1 : 0) - (u.fear || 0)) * ease;
+    u.alarm = (u.alarm || 0) + ((u.mood === 'alert' ? 1 : 0) - (u.alarm || 0)) * ease;
+    const f = u.fear, a = u.alarm, j = u.war.userData.j;
+    if (f < 0.01 && a < 0.01) { if (u.felt) { u.felt = false; calm(u); } return; }
+    u.felt = true;
+    u.disc.rotation.z = Math.sin(s * 41 + u.phase) * 0.035 * f;
+    if (!u.war.visible) return;
+    u.war.rotation.x = -0.2 * f;
+    u.war.position.x = Math.sin(s * 47 + u.phase) * 0.012 * f;
+    if (j.head) { j.head.rotation.x = 0.3 * f; if (a > 0.01) j.head.rotation.y = Math.sin(s * 2.2 + u.phase) * 0.7 * a; }
+    if (j.armL) j.armL.rotation.x = -1.1 * f;
+    if (j.armR && a > 0.01) j.armR.rotation.x = (j.restArm || 0) - 2.2 * a;
+  }
   // the length of a route: from where the unit stands through the points given
   const routeLen = (u, pts) => pts.reduce((s, p, i) => s + p.distanceTo(i ? pts[i - 1] : u.root.position.clone().setY(0)), 0);
   // march to a point, or through a list of points (the lines of the three-kingdom board bend), turning at each bend
@@ -576,11 +607,41 @@ const VIEW = (() => {
 
   // play one move; captured is the piece taken (0 for none). Resolves when the animation is over.
   // opts.via: the points the move passes over, when the lines it follows bend (the three-kingdom board)
+  // cờ úp: a face-down piece is turned up, its hooded figure vanishing in a puff as the piece flips over to show what
+  // it really is
+  function wear(u, piece) {
+    const side = L.sideOf(piece), disc = MODELS.disc(piece, false, skins.pieces[side]), war = MODELS.warrior(piece, heroes[side], skins.army[side]);
+    disc.rotation.y = L.yaw(viewer); war.rotation.y = u.war.rotation.y; war.visible = u.war.visible; war.scale.copy(u.war.scale);
+    u.root.remove(u.disc); u.root.remove(u.war); u.root.add(disc); u.root.add(war);
+    u.mirrored = false; Object.assign(u, { piece, disc, war, dark: false });
+  }
+  async function turnUp(u, piece, fast) {
+    if (!u || !u.dark || !piece) return;
+    if (fast) { wear(u, piece); return; }
+    const at = u.root.position.clone().setY(0.45), s0 = u.war.scale.x;
+    SFX.whoosh(); smoke(at, 12, '#d9cfbf', 0.8); sparks(at, '#ffe6a8', 18, 0.18);
+    await tween(170, k => { u.disc.rotation.x = k * Math.PI / 2; u.disc.position.y = k * 0.3; u.war.scale.setScalar(Math.max(0.001, s0 * (1 - k))); });
+    wear(u, piece);
+    u.disc.rotation.x = -Math.PI / 2; u.disc.position.y = 0.3;
+    await tween(230, k => { const e = out(k); u.disc.rotation.x = -Math.PI / 2 * (1 - e); u.disc.position.y = 0.3 * (1 - e); u.war.scale.setScalar(Math.max(0.001, s0 * backOut(k))); });
+    SFX.place();
+  }
+  // opts.reveal: the piece the move turns up (cờ úp); opts.taken: the face-down piece it takes, as it really is;
+  // opts.cinema: a moment of the review ('good', 'blunder', 'mate'): the camera drops low beside the move and the
+  // field slows down, then it all comes back
   async function play(m, opts = {}) {
     const f = L.from(m), t = L.to(m), u = units.get(f);
     if (!u) return;
     busy = true; clearMarks(); hint(-1, -1);
-    const target = units.get(t), dest = pos(t), type = L.typeOf(u.piece), fast = opts.fast, by = L.sideOf(u.piece);
+    for (const x of units.values()) if (x.felt || x.mood) calm(x);   // the move changes everything: moods are set again after it
+    if (opts.cinema && !opts.fast) {
+      dragged = false; showing++;
+      tFocus.copy(pos(f)).lerp(pos(t), 0.6).setY(0.4); cam.tZoom = 0.4; cam.tPhi = 0.6; cam.tTheta = cam.theta + (Math.random() < 0.5 ? -0.5 : 0.5);
+      await wait(350); slowmo = 0.6;
+    }
+    const target = units.get(t), fast = opts.fast;
+    await Promise.all([target && opts.taken ? turnUp(target, opts.taken, fast) : null, opts.reveal ? turnUp(u, opts.reveal, fast) : null]);
+    const dest = pos(t), type = L.typeOf(u.piece), by = L.sideOf(u.piece);
     u.root.userData.sq = t;
     if (fast) {
       if (target) { disposeUnit(target); units.delete(t); addToTray(target.piece, false, by); }
@@ -621,7 +682,13 @@ const VIEW = (() => {
     dustRing(dest); SFX.place();
     units.delete(f); units.set(t, u); u.sq = t; u.lift = 0;
     lastMove(f, t);
-    tFocus.copy(HOME); cam.tZoom = 1;
+    if (opts.cinema) {                                     // the moment lands: gold for a fine move, ash for a blunder
+      const at = dest.clone().setY(0.6);
+      if (opts.cinema === 'blunder') smoke(at, 14, '#3a3030', 1.1); else { sparks(at, '#ffd27a', 36, 0.26); flash(at, '#ffcf6a', 5); }
+      await wait(300); slowmo = 1;
+      if (opts.cinema !== 'mate') await wait(450);
+    }
+    if (opts.cinema !== 'mate') { tFocus.copy(HOME); cam.tZoom = 1; if (opts.cinema) resetCamera(); }
     await dismiss(u);
     busy = false;
   }
@@ -700,13 +767,7 @@ const VIEW = (() => {
     scene.add(stage.group);
     occluders = []; stage.group.traverse(o => { if (o.userData.clear) occluders.push(o); });
     stage.group.traverse(o => { if (o.isMesh && !o.material.transparent) o.receiveShadow = true; });
-    const L = stage.light;
-    hemiLight.color.set(L.hemi[0]); hemiLight.groundColor.set(L.hemi[1]); hemiLight.intensity = L.hemi[2];
-    keyLight.color.set(L.key[0]); keyLight.intensity = L.key[1];
-    rimLight.color.set(L.rim[0]); rimLight.intensity = L.rim[1];
-    scene.background = new THREE.Color(stage.background || stage.fog);
-    scene.fog.color.set(stage.fog);
-    makeEnvironment(L);
+    applyDaytime(true);                                  // its light, sky and haze, at this time of day
     SFX.music(stageId);
     if (!menu && !hall) showcase();
   }
@@ -728,6 +789,68 @@ const VIEW = (() => {
     envTarget = target;
     ball.dispose(); win.geometry.dispose();
   }
+  // ---------- day and night ----------
+  // The stages set by day follow the clock (or the player's choice, setDaytime): at dusk and dawn the light turns gold,
+  // at night the sky darkens to blue under stars and a moon, the light becomes moonlight and a lamp over the table
+  // keeps the pieces readable. The stages already set at night (NIGHT) keep their own.
+  const NIGHT = new Set(['room', 'xich-bich', 'ngu-truong']);
+  let daytime = 'auto', nightSky = null, nightLamp = null, dayShown = '', dayF = 0;
+  const smooth = (a, b, x) => Math.max(0, Math.min(1, (x - a) / (b - a)));
+  // f: how far into the night (0 day, 1 night); w: the gold of dusk or dawn
+  function nightOf(now = new Date()) {
+    if (daytime === 'day') return { f: 0, w: 0 };
+    if (daytime === 'night') return { f: 1, w: 0 };
+    const h = now.getHours() + now.getMinutes() / 60;
+    const f = h >= 12 ? smooth(17.6, 19.4, h) : 1 - smooth(4.8, 6.4, h);
+    const w = h >= 12 ? Math.max(0, 1 - Math.abs(h - 18) / 1.6) : Math.max(0, 1 - Math.abs(h - 5.8) / 1.2);
+    return { f, w: w * (1 - f) };
+  }
+  function makeNightSky() {
+    const g = new THREE.Group(), n = 900, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {                        // over the upper part of a sphere inside the sky's dome
+      const yaw = Math.random() * Math.PI * 2, up = Math.asin(0.06 + Math.random() * 0.94), r = 88;
+      a[i * 3] = Math.cos(up) * Math.cos(yaw) * r; a[i * 3 + 1] = Math.sin(up) * r; a[i * 3 + 2] = Math.cos(up) * Math.sin(yaw) * r;
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.9, map: glowTex, color: '#e4ecff', transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+    const moon = new THREE.Mesh(new THREE.CircleGeometry(2.6, 40), new THREE.MeshBasicMaterial({ color: '#f6f0da', transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#9fb4ff', transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
+    moon.position.set(-34, 36, -62); moon.lookAt(0, 0, 0); halo.position.copy(moon.position); halo.scale.setScalar(22);
+    // the night itself: a veil over the stage's sky (and behind its scenery), drawn before anything else see-through
+    const veil = new THREE.Mesh(new THREE.SphereGeometry(92, 32, 16), new THREE.MeshBasicMaterial({ color: '#081129', side: THREE.BackSide, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+    veil.renderOrder = -0.95; stars.renderOrder = halo.renderOrder = -0.9; moon.renderOrder = -0.85;
+    g.add(veil, stars, halo, moon);
+    g.userData = { stars, moon, halo, veil };
+    return g;
+  }
+  function applyDaytime(force) {
+    if (!scene || !stage) return;
+    const { f, w } = NIGHT.has(stageId) ? { f: 0, w: 0 } : nightOf(), key = Math.round(f * 24) + ':' + Math.round(w * 24);
+    if (!force && key === dayShown) return;
+    dayShown = key; dayF = f;
+    const L = stage.light, C = c => new THREE.Color(c), MOON = C('#7d8fc8'), GOLD = C('#ffb46a'), DARK = C('#070b18');
+    hemiLight.color.copy(C(L.hemi[0]).lerp(GOLD, w * 0.35).lerp(MOON, f)); hemiLight.groundColor.copy(C(L.hemi[1]).multiplyScalar(1 - 0.6 * f));
+    hemiLight.intensity = L.hemi[2] * (1 - 0.6 * f);
+    keyLight.color.copy(C(L.key[0]).lerp(GOLD, w * 0.6).lerp(C('#aebcff'), f)); keyLight.intensity = L.key[1] * (1 - 0.6 * f);
+    rimLight.color.copy(C(L.rim[0]).lerp(C('#6a84d8'), f)); rimLight.intensity = L.rim[1] * (1 + 0.4 * f);
+    scene.background = C(stage.background || stage.fog).lerp(GOLD, w * 0.3).lerp(DARK, f * 0.9);
+    scene.fog.color.copy(C(stage.fog).lerp(GOLD, w * 0.35).lerp(DARK, f * 0.85));
+    if (stage.sky) stage.sky.material.color.copy(C('#ffffff').lerp(C('#ffb27a'), w * 0.7));
+    if (!nightSky) {
+      nightSky = makeNightSky(); scene.add(nightSky);
+      nightLamp = new THREE.PointLight('#ffb064', 0, 26, 2); nightLamp.position.set(0, 7.5, 3); nightLamp.layers.enable(1); scene.add(nightLamp);
+    }
+    nightSky.visible = f > 0.01;
+    const n = nightSky.userData;
+    n.stars.material.opacity = f; n.moon.material.opacity = f; n.halo.material.opacity = 0.45 * f; n.veil.material.opacity = 0.9 * f;
+    nightLamp.intensity = 1.2 * f;
+    const hex = c => '#' + c.getHexString();
+    makeEnvironment({ hemi: [hex(hemiLight.color), hex(hemiLight.groundColor), hemiLight.intensity], key: [hex(keyLight.color), keyLight.intensity] });
+  }
+  // 'auto' (the clock), 'day' or 'night'
+  function setDaytime(mode) { daytime = ['day', 'night'].includes(mode) ? mode : 'auto'; applyDaytime(true); }
+  setInterval(() => applyDaytime(false), 60000);
+
   // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
   let showcaseRun = 0;
   function showcase() {
@@ -930,7 +1053,7 @@ const VIEW = (() => {
   }
   function loop(t) {
     requestAnimationFrame(loop);
-    const gap = (t - last) / 1000, dt = Math.min(0.05, gap); last = t; clock = t;
+    const gap = (t - last) / 1000, dt = Math.min(0.05, gap); clock += (t - last) * slowmo; last = t;
     watchPace(t, gap);
     for (let i = tweens.length - 1; i >= 0; i--) {
       const w = tweens[i], k = Math.min(1, (clock - w.t0) / w.ms);
@@ -958,8 +1081,9 @@ const VIEW = (() => {
       u.blob.visible = show;
       if (show) { u.blob.position.y = 0.004 - p.y; u.blob.scale.setScalar(u.war.scale.x * 0.62 / (1 + up * 2)); }
     }
-    if (!busy) for (const u of units.values()) if (u.war.visible && !u.cheering) atEase(u, t / 1000);
+    if (!busy) for (const u of units.values()) { if (u.war.visible && !u.cheering) atEase(u, t / 1000); if (!u.cheering) feel(u, t / 1000, dt); }
     if (stage) stage.update(t, dt, camera);
+    if (nightSky && nightSky.visible) nightSky.userData.stars.material.opacity = dayF * (0.82 + 0.18 * Math.sin(t / 900));   // the stars twinkle
     // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
     for (const o of occluders) {
       const ax = camera.position.x, az = camera.position.z, bx = focus.x - ax, bz = focus.z - az, px = o.position.x - ax, pz = o.position.z - az;
@@ -1046,7 +1170,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, setDaytime, cheer, setMood,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },

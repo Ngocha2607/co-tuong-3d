@@ -420,6 +420,78 @@ const I18N = (() => {
     'Trang phục này chưa mở khóa': 'This look is not unlocked yet',
     'Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.':
       'Unlocked with Campaign stars, achievements and ranked seasons. Online, your opponents see your pieces and warriors; the board is the host’s.',
+
+    // watching: cheers, how many watch, friends' games
+    'Cổ vũ': 'Cheer', 'Hay quá!': 'Brilliant!', 'Vỗ tay!': 'Applause!', 'Căng quá!': 'So tense!', 'Cố lên {0}!': 'Go {0}!',
+    '{0} người xem': '{0} watching', 'Đang đánh online': 'Playing online',
+
+    // tournaments (tournament-ui.js)
+    'Giải đấu': 'Tournaments', 'Mở giải': 'New tournament', 'Mở giải đấu': 'New tournament', 'Mở': 'Open', 'Tên giải': 'Name',
+    'Thời gian mỗi ván': 'Time per game', 'Giải của {0}': '{0}’s tournament', 'Chủ giải {0}': 'Host {0}', '{0} mỗi ván': '{0} per game', '{0} người': '{0} players',
+    'Chép link mời': 'Copy invite link', 'Đã chép link mời vào giải': 'Invite link copied', 'Vào giải': 'Join', 'Rời giải': 'Leave',
+    'Bốc thăm và bắt đầu': 'Draw and start', 'Chủ giải': 'Host', 'Đã vào giải': 'Joined', 'Bạn là chủ giải': 'You host it',
+    'Đang chờ người · {0}': 'Waiting for players · {0}', 'Đang đấu · {0} người': 'Under way · {0} players', 'Vô địch: {0}': 'Champion: {0}', 'Vô địch': 'Champion',
+    'Tứ kết': 'Quarter-finals', 'Bán kết': 'Semi-finals', 'Chung kết': 'Final', 'Vòng {0}': 'Round {0}', 'Miễn đấu': 'Bye', 'Chờ đối thủ': 'Waiting for opponent',
+    'Vào trận': 'Play', 'Hòa, Đen đi tiếp': 'Draw, Black goes on', 'Bỏ trận': 'Walked out', 'Không vào trận': 'No show', 'Đã xong': 'Played',
+    'Chiếu dai': 'Perpetual check', 'Đuổi dai': 'Perpetual chase', 'Về giải đấu': 'Back to the tournament', 'Giải {0}': 'Tournament {0}', '{0} · Hòa thì Đen đi tiếp': '{0} · On a draw Black goes on',
+    '{0} không vào trận sau 3 phút': '{0} did not show up within 3 minutes', 'Không tìm thấy giải đấu này.': 'No such tournament.', 'Đăng nhập để vào giải.': 'Sign in to join.',
+    'Đăng nhập để vào giải': 'Sign in to join', 'Đăng nhập để mở giải': 'Sign in to open a tournament',
+    '{0} của bạn đã sẵn sàng: gặp {1}': 'Your {0} is ready: against {1}', '{0} vô địch {1}!': '{0} wins {1}!', '{0} đã bốc thăm': '{0} has been drawn',
+    'Mở một giải cho 3 đến 8 người, gửi link cho bạn bè, rồi bốc thăm đấu loại trực tiếp.': 'Open a tournament for 3 to 8 players, send its link to friends, then draw a knock-out bracket.',
+    'Đấu loại trực tiếp, mỗi trận một ván. Hòa thì người cầm Đen đi tiếp. Ai không đi nước đầu trong 3 phút là thua trận đó.': 'Knock-out, one game a match. On a draw Black goes on. Whoever does not make their first move within 3 minutes loses that match.',
+    'Cần ít nhất {0} người (tối đa {1}). Gửi link mời cho bạn bè. Khi chủ giải bốc thăm, mỗi trận có phòng riêng: vào từ trang này.': 'At least {0} players needed (at most {1}). Send the invite link to friends. Once the host draws, each match has its own room: go in from this page.',
+    'Gửi link mời cho bạn bè. Khi chủ giải bốc thăm, mỗi trận có phòng riêng: vào từ trang này.': 'Send the invite link to friends. Once the host draws, each match has its own room: go in from this page.',
+    'Giải đã bốc thăm, không vào thêm được': 'The bracket is drawn, no more players', 'Giải đã đủ {0} người': 'The tournament already has {0} players',
+    'Chỉ chủ giải mới bốc thăm được': 'Only the host can draw', 'Cần ít nhất {0} người': 'At least {0} players needed', 'Chủ giải không rời giải được': 'The host cannot leave',
+
+    // day and night
+    'Ngày và đêm': 'Day and night', 'Theo giờ thật': 'By the clock', 'Ban ngày': 'Day', 'Ban đêm': 'Night',
+    'Bối cảnh ban ngày đổi theo giờ trên máy: chạng vạng ánh vàng, đêm có trăng sao. Quân trướng, Xích Bích, Ngũ Trượng Nguyên vốn là cảnh đêm.': 'Daytime battlefields follow your device’s clock: golden light at dusk, moon and stars at night. Command Tent, Red Cliffs and Wuzhang Plains are night scenes already.',
+
+    // the review's camera
+    'Nước hớ!': 'Blunder!', 'Camera điện ảnh': 'Cinematic camera', 'Tắt camera điện ảnh': 'Cinematic camera off',
+    'Camera điện ảnh: quay cận cảnh nước hay, nước hớ và chiếu bí': 'Cinematic camera: close-ups of fine moves, blunders and the mate',
+    'Bật camera điện ảnh: nước hay, nước hớ và chiếu bí được quay cận cảnh': 'Cinematic camera on: fine moves, blunders and the mate in close-up',
+
+    // weekly quests (quests.js)
+    'Nhiệm vụ tuần': 'Weekly quests', 'Xong nhiệm vụ tuần: {0} · +1 sao': 'Weekly quest done: {0} · +1 star', 'Còn {0} ngày': '{0} days left',
+    '{0} sao nhiệm vụ': '{0} quest stars', '6 sao mở quân Sơn son': '6 stars open the Vermilion pieces', 'Sơn son': 'Vermilion', 'Hoàn thành {0} nhiệm vụ tuần': 'Complete {0} weekly quests',
+    'Ăn 3 quân bằng Mã': 'Take 3 pieces with a horse', 'Ăn 4 quân bằng Pháo': 'Take 4 pieces with a cannon', 'Tốt ăn 2 quân': 'Take 2 pieces with soldiers',
+    'Ăn 2 Xe của đối phương': 'Take 2 enemy chariots', 'Thắng 3 ván cờ tướng': 'Win 3 xiangqi games', 'Thắng máy ở mức Khó': 'Beat the computer on Hard',
+    'Thắng một ván mà không mất Pháo nào': 'Win a game without losing a cannon', 'Thắng một ván mà không mất Xe nào': 'Win a game without losing a chariot',
+    'Chiếu bí bằng Mã': 'Checkmate with a horse', 'Thắng trong vòng 30 nước': 'Win within 30 moves', 'Đánh 2 ván online': 'Play 2 online games',
+    'Chơi 2 ván cờ úp': 'Play 2 games of jieqi', 'Thắng 2 trận Chiến dịch': 'Win 2 Campaign battles', 'Chơi 1 ván Tam Quốc': 'Play a Three Kingdoms game',
+    'Mở khóa bằng sao Chiến dịch, thành tựu, mùa giải xếp hạng và nhiệm vụ tuần. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.':
+      'Unlocked with Campaign stars, achievements, ranked seasons and weekly quests. Online, your opponents see your pieces and warriors; the board is the host’s.',
+    'Chiếu bí!': 'Checkmate!',
+
+    // ván kinh điển (classics.js)
+    'Ván kinh điển': 'Classic games', 'Đi thay danh thủ': 'Play the master’s move', 'Dừng thử tài': 'Stop the challenge', 'Chờ máy phân tích xong…': 'Waiting for the analysis…',
+    'Hồ Vinh Hoa': 'Hu Ronghua', 'Lữ Khâm': 'Lü Qin', 'Hứa Ngân Xuyên': 'Xu Yinchuan', 'Lý Lai Quần': 'Li Laiqun', 'Triệu Quốc Vinh': 'Zhao Guorong',
+    'Giải đồng đội toàn quốc Trung Quốc {0}': 'Chinese National Team Championship {0}', 'Giải vô địch cá nhân toàn quốc Trung Quốc {0}': 'Chinese National Individual Championship {0}',
+    'Cúp Ngũ Dương lần thứ {0}': 'Wuyang Cup, {0}th edition', 'Cúp Ngũ Dương lần thứ {0}, trận chung kết': 'Wuyang Cup, {0}th edition, final',
+    'Quảng Châu': 'Guangzhou', 'Tùng Giang, Thượng Hải': 'Songjiang, Shanghai', 'Phủ Châu, Giang Tây': 'Fuzhou, Jiangxi', 'Nam Kinh': 'Nanjing', 'Côn Minh': 'Kunming',
+    'Khai cuộc {0}': 'Opening {0}', '(biên bản: xqbase.com)': '(record: xqbase.com)', 'Biên bản dừng ở nước này': 'The record ends here',
+    'Pháo đầu Xe qua hà, Mã 7 đối Bình phong mã': 'Central Cannon, river-crossing Chariot and seventh-file Horse vs Screen Horses',
+    'Ngũ cửu pháo đối Bình phong mã': 'Five-Nine Cannons vs Screen Horses', 'Ngũ thất pháo đối Bình phong mã': 'Five-Seven Cannons vs Screen Horses',
+    'Pháo đầu Pháo tuần hà đối Bình phong mã': 'Central Cannon and river-patrol Cannon vs Screen Horses',
+    'Tiên nhân chỉ lộ chuyển Pháo đầu trái, đối Tốt đáy pháo phi Tượng trái': 'Pawn Opening into a left Central Cannon vs Cannon Behind the Pawn and left Elephant',
+    'Phi Tượng tiến Tốt 3 đối Pháo góc Sĩ phải': 'Elephant Opening with the third Pawn vs right Palace-corner Cannon',
+    'Khởi Mã chuyển Pháo góc Sĩ đối tiến Tốt 7': 'Horse Opening into a Palace-corner Cannon vs seventh Pawn', 'Tiên nhân chỉ lộ tiến Mã phải đối phi Tượng': 'Pawn Opening with the right Horse vs Elephant',
+    '{0} nước': '{0} moves', 'Đỏ thắng': 'Red won', 'Đen thắng': 'Black won', 'Thử tài {0}/{1}': 'Challenge {0}/{1}',
+    'Bạn là {0} ({1}). Đây là lúc quyết định: chạm quân để đi nước bạn chọn.': 'You are {0} ({1}). This is a deciding moment: tap a piece and play your move.',
+    'Đúng nước của {0}: {1}': '{0}’s move exactly: {1}', 'Bạn đi {0}. {1} đi {2}': 'You played {0}. {1} played {2}', 'Bạn đi {0}. {1} đi {2}. Nước của bạn trùng nước máy chọn': 'You played {0}. {1} played {2}. Yours was the computer’s choice',
+    'Xuất sắc! Bạn đi đúng cả {0} nước của danh thủ': 'Superb! You found all {0} of the master’s moves', 'Bạn đi đúng {0}/{1} nước của danh thủ': 'You found {0} of the master’s {1} moves',
+    'Máy đang phân tích ván để tìm những nước quyết định…': 'The computer is analysing the game for its deciding moves…', 'Ván này không có nước quyết định nào để thử': 'This game has no deciding moves to try',
+    'Các ván giữa những đại kiện tướng: Hồ Vinh Hoa, Lữ Khâm, Hứa Ngân Xuyên, Lý Lai Quần, Triệu Quốc Vinh. Biên bản lấy từ cơ sở dữ liệu xqbase.com, lời bình do máy phân tích.':
+      'Games between grandmasters: Hu Ronghua, Lü Qin, Xu Yinchuan, Li Laiqun, Zhao Guorong. Records from the xqbase.com database, commentary by the computer’s analysis.',
+    'Chính xác!': 'Exactly!', ': ở những nước quyết định, bạn thử đi trước rồi xem danh thủ đã đi gì.': ': at the deciding moves, try your own first, then see what the master played.',
+
+    // cờ úp (jieqi.js)
+    'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
+    '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',
+    'Cờ úp: mọi quân trừ Tướng úp mặt, xáo lẫn trên các điểm xuất phát. Quân úp đi như quân vốn đứng ở điểm đó, đi rồi mới lật ra; Sĩ, Tượng đã lật đi được khắp bàn.':
+      'Jieqi: every piece but the general starts face down, shuffled over the starting points. A face-down piece moves as the piece that starts on its point, and is turned up by that move; an advisor or elephant once turned up may go anywhere.',
   };
 
   // ---------- translating ----------
@@ -444,6 +516,7 @@ const I18N = (() => {
     if (exact.has(t)) return exact.get(t);
     let m = MOVE.exec(t);
     if (m) return WHICH[m[2]] ? `${WHICH[m[2]]}${PIECE[m[1]]}${ACT[m[3]]}${m[4]}` : `${PIECE[m[1]]}${m[2]}${ACT[m[3]]}${m[4]}`;
+    if ((m = /^(Tướng|Sĩ|Tượng|Mã|Xe|Pháo|Tốt) úp (.+)$/.exec(t))) return '?' + one(m[1] + ' ' + m[2]);   // cờ úp: a face-down piece
     if ((m = SGMOVE.exec(t))) return `${EN[m[1]]} ${one(m[2])} → ${one(m[3])}${m[4] ? ` takes ${EN[m[4]].toLowerCase()}` : ''}`;
     if (!VI.test(t)) return t;
     const dotted = t.includes(' · ');

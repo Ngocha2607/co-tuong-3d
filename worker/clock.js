@@ -2,7 +2,8 @@
 // The clocks start after each side has made its first move (as on most chess servers). Until then a ranked game
 // is aborted if the side to move does nothing for ABORT_MS. In a ranked game, a player who is disconnected while it is
 // their turn loses after ABANDON_MS. All times are in milliseconds; `st` is the room state (see room.js).
-export const ABORT_MS = 30000, ABANDON_MS = 60000;
+// A tournament game (st.tour) is not aborted: the side that does not make its first move within NOSHOW_MS loses.
+export const ABORT_MS = 30000, ABANDON_MS = 60000, NOSHOW_MS = 180000;
 export const CONTROLS = { '10+5': { base: 600000, inc: 5000 }, '5+3': { base: 300000, inc: 3000 } };
 export const RANKED_TC = '10+5';
 
@@ -34,7 +35,8 @@ export function deadline(st) {
   const side = turnOf(st), list = [];
   if (running(st)) list.push({ at: st.turnAt + st.left[side], kind: 'time', side });
   if (st.rated && st.moves.length < 2) list.push({ at: st.turnAt + ABORT_MS, kind: 'abort', side });
-  if (st.rated && st.away && st.away[side]) list.push({ at: Math.max(st.away[side], st.turnAt) + ABANDON_MS, kind: 'abandon', side });
+  if (st.tour && st.moves.length < 2) list.push({ at: st.turnAt + NOSHOW_MS, kind: 'noshow', side });
+  if ((st.rated || st.tour) && st.away && st.away[side]) list.push({ at: Math.max(st.away[side], st.turnAt) + ABANDON_MS, kind: 'abandon', side });
   return list.sort((a, b) => a.at - b.at)[0] || null;
 }
 
@@ -42,6 +44,7 @@ export function deadline(st) {
 export function expire(d, canMate) {
   if (d.kind === 'abort') return { winner: 0, reason: 'aborted' };
   if (d.kind === 'abandon') return { winner: -d.side, reason: 'abandon' };
+  if (d.kind === 'noshow') return { winner: -d.side, reason: 'noshow' };
   return canMate(-d.side) ? { winner: -d.side, reason: 'time' } : { winner: 0, reason: 'time' };
 }
 

@@ -252,6 +252,9 @@
   .bubble.cry::after { border-top-color: #e3b448; }
   .bubble.cry.left::after { border-top-color: transparent; border-left-color: #ecc562; }
   .bubble.gone { opacity: 0; transform: translateY(-6px); }
+  /* a cheer from someone watching: it rises from the bottom of the board and fades */
+  .cheer { position: absolute; bottom: 18%; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(20, 12, 8, 0.72); border: 1px solid rgba(240, 200, 120, 0.5); color: #ffe2a0; font: 700 15px/1.2 var(--serif); white-space: nowrap; animation: cheer-up 3.2s ease-out forwards; }
+  @keyframes cheer-up { 0% { opacity: 0; translate: 0 20px; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; translate: 0 -160px; } }
   @keyframes pop-in { from { opacity: 0; transform: scale(0.85) translateY(6px); } }
   .hlinks { display: flex; justify-content: center; gap: 18px; }
   /* the ranked games under way */
@@ -265,6 +268,34 @@
   #friends .card { width: min(620px, 100%); position: relative; }
   #bFriendsClose { position: absolute; top: 18px; right: 18px; }
   #friends .camp-head h2 { margin: 0; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  /* weekly quests (quests.js) on the Chủ tướng page */
+  .quests { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .quests li { display: grid; grid-template-columns: 1fr 90px 34px; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font: 600 14px/1.3 var(--ui); }
+  .quests .qbar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+  .quests .qbar i { display: block; height: 100%; background: var(--gold); border-radius: 3px; }
+  .quests .qn { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
+  .quests li.done { border-color: rgba(232, 182, 80, 0.55); }
+  .quests li.done .qn { color: var(--gold); opacity: 1; }
+  /* tournaments (tournament-ui.js), inside the Bạn bè page: one shown hides the rest of it */
+  #friends.touring .card > :not(#tourView):not(#bFriendsClose) { display: none; }
+  #tourView .tname { margin: 8px 0 4px; font: 700 24px/1.2 var(--serif); color: var(--ink); }
+  #tourView .tfield { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font: 600 13px/1.2 var(--ui); color: var(--muted, #b9a88c); }
+  #tourView .row2 { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .bracket { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 10px; }
+  .tround { display: flex; flex-direction: column; justify-content: space-around; gap: 10px; min-width: 170px; }
+  .tround h4.sub { margin: 0 0 2px; }
+  .tmatch { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+  .tmatch.mine { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(232, 182, 80, 0.3); }
+  .tmatch .tp { display: flex; align-items: center; gap: 6px; font: 600 14px/1.25 var(--ui); color: var(--ink); opacity: 0.8; }
+  .tmatch .tp.won { color: var(--gold); opacity: 1; }
+  .tmatch .tp.you b, .tmatch .tp.you { text-decoration: underline; text-underline-offset: 3px; }
+  .tmatch .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .tmatch .dot.r { background: #c0392b; } .tmatch .dot.b { background: #2f4160; border: 1px solid #8aa0c0; }
+  .tmatch small { font: 500 12px/1.2 var(--ui); opacity: 0.75; }
+  .tmatch .btn { align-self: flex-start; padding: 5px 12px; min-height: 0; font-size: 13px; }
+  .tchamp { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: linear-gradient(180deg, rgba(246, 220, 148, 0.18), rgba(227, 180, 72, 0.08)); border: 1px solid rgba(232, 182, 80, 0.5); }
+  .tchamp b { font: 700 20px/1.2 var(--serif); color: var(--gold); }
+  #history h4.sub { margin: 20px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
   #friends h4.sub { margin: 16px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
   .frhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px; }
   .frhead h4.sub { margin-bottom: 4px !important; }
@@ -779,10 +810,12 @@
       <button class="icon" id="rvPlay" type="button" aria-label="Tự chạy"></button>
       <button class="icon" id="rvNext" type="button" aria-label="Tới một nước"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
       <button class="icon" id="rvLast" type="button" aria-label="Đến nước cuối"><svg viewBox="0 0 24 24"><path d="M18 5v14M6 5l8 7-8 7"/></svg></button>
+      <button class="icon" id="rvCinema" type="button" title="Camera điện ảnh: quay cận cảnh nước hay, nước hớ và chiếu bí" aria-label="Camera điện ảnh"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="11" rx="2"/><path d="M16 11l5-3v9l-5-3"/><path d="M5 7l2-3M10 7l2-3"/></svg></button>
       <button class="icon" id="rvFlip" type="button" title="Lật bàn cờ" aria-label="Lật bàn cờ"><svg viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3"/></svg></button>
     </div>
     <div class="rv-sum" id="rvSum" hidden></div>
     <button class="btn gold" id="bAnalyse" type="button">Phân tích ván</button>
+    <button class="btn primary" id="bQuiz" type="button" hidden>Đi thay danh thủ</button>
   </div>
   <div class="mhead"><span>Biên bản</span><span id="moveCount"></span></div>
   <ol id="moves"></ol>
@@ -810,6 +843,7 @@
     <div class="hstrip" id="hallStages" hidden></div>
     <div class="hopts" id="hallRoomOpts" hidden>
       <label>Ai được vào<div class="seg mini" id="hallPublic"><button type="button" data-v="1">Công khai</button><button type="button" data-v="0">Riêng tư</button></div></label>
+      <label>Kiểu cờ<div class="seg mini" id="hallVariant"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Cờ úp</button></div></label>
       <label>Thời gian mỗi bên<div class="seg mini" id="hallTc"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div></label>
     </div>
     <div class="hgo"><p id="hallWait"></p><button class="btn primary" id="bHallGo" type="button">Sẵn sàng</button><span class="hlinks"><button class="linkish" id="bHallEmote" type="button" hidden>Biểu cảm</button><button class="linkish" id="bHallLeave" type="button">Rời phòng</button></span></div>
@@ -863,6 +897,9 @@
         <div class="seg" id="segSide"><button type="button" data-v="1">Đỏ (đi trước)</button><button type="button" data-v="-1">Đen</button></div>
         <h2>Độ khó</h2>
         <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+        <h2>Kiểu cờ</h2>
+        <div class="seg" id="segVariant"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Cờ úp</button></div>
+        <p class="note">Cờ úp: mọi quân trừ Tướng úp mặt, xáo lẫn trên các điểm xuất phát. Quân úp đi như quân vốn đứng ở điểm đó, đi rồi mới lật ra; Sĩ, Tượng đã lật đi được khắp bàn.</p>
       </section>
       <button class="btn primary wide" id="bPlayAI" type="button">Vào trận</button>
     </div>
@@ -882,6 +919,8 @@
       <section>
         <h2>Thời gian mỗi bên</h2>
         <div class="seg" id="segTc" title="Thời gian mỗi bên"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
+        <h2>Kiểu cờ</h2>
+        <div class="seg" id="segRoomVariant"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Cờ úp</button></div>
         <p class="note">Bạn làm chủ phòng: trong sảnh chờ còn đổi được thời gian, bối cảnh, và chọn phòng công khai hay riêng tư. Gửi link mời cho bạn bè, hoặc chờ người vào từ danh sách phòng.</p>
       </section>
       <button class="btn primary wide" id="bCreate" type="button">Tạo phòng</button>
@@ -958,13 +997,21 @@
         <h2>Bối cảnh</h2>
         <div class="picks" id="segStage"></div>
         <p class="note" id="stageNote"></p>
+        <h2>Ngày và đêm</h2>
+        <div class="seg" id="segDaytime"><button type="button" data-v="0">Theo giờ thật</button><button type="button" data-v="1">Ban ngày</button><button type="button" data-v="2">Ban đêm</button></div>
+        <p class="note">Bối cảnh ban ngày đổi theo giờ trên máy: chạng vạng ánh vàng, đêm có trăng sao. Quân trướng, Xích Bích, Ngũ Trượng Nguyên vốn là cảnh đêm.</p>
+      </section>
+      <section>
+        <h2>Nhiệm vụ tuần</h2>
+        <ul class="quests" id="questList"></ul>
+        <p class="note" id="questNote"></p>
       </section>
       <section>
         <h2>Trang phục</h2>
         <p class="skin-kind">Bàn cờ</p><div class="picks" data-skins="board"></div>
         <p class="skin-kind">Quân cờ</p><div class="picks" data-skins="pieces"></div>
         <p class="skin-kind">Chiến binh</p><div class="picks" data-skins="army"></div>
-        <p class="note">Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.</p>
+        <p class="note">Mở khóa bằng sao Chiến dịch, thành tựu, mùa giải xếp hạng và nhiệm vụ tuần. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.</p>
       </section>
       <section>
         <div class="rhead"><h2>Thành tựu</h2><small id="achSum"></small></div>
@@ -1111,6 +1158,9 @@
     <div class="camp-head"><span class="seal">譜</span><div><h2>Ván đã chơi</h2><p id="hiSum"></p></div></div>
     <ul class="glist" id="hiList"></ul>
     <p class="note">Lưu 30 ván cờ tướng gần nhất trên máy này, kèm phần phân tích. Ván xếp hạng còn xem lại được trong Hồ sơ.</p>
+    <h4 class="sub">Ván kinh điển</h4>
+    <ul class="glist" id="clList"></ul>
+    <p class="note">Các ván giữa những đại kiện tướng: Hồ Vinh Hoa, Lữ Khâm, Hứa Ngân Xuyên, Lý Lai Quần, Triệu Quốc Vinh. Biên bản lấy từ cơ sở dữ liệu xqbase.com, lời bình do máy phân tích. <i>Đi thay danh thủ</i>: ở những nước quyết định, bạn thử đi trước rồi xem danh thủ đã đi gì.</p>
   </div>
 </div>
 
@@ -1124,6 +1174,9 @@
     <div class="frhead"><h4 class="sub">Bạn bè</h4><label>Thách đấu với<div class="seg mini" id="frTc"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div></label></div>
     <ul class="flist" id="frList"></ul>
     <div id="frOutgoing"></div>
+    <div class="frhead"><h4 class="sub">Giải đấu</h4><button class="btn gold" id="bTourNew" type="button">Mở giải</button></div>
+    <ul class="flist" id="tourList"></ul>
+    <div id="tourView" hidden></div>
     <p class="note">Kết bạn cần cả hai đồng ý. Chỉ bạn bè mới thấy nhau đang online và thách đấu nhau: nhận lời là cả hai vào một phòng riêng, người thách đấu cầm quân Đỏ.</p>
   </div>
 </div>
@@ -1133,7 +1186,9 @@
 <script src="src/i18n.js"></script>
 <script src="src/vendor/three.min.js"></script>
 <script src="src/xiangqi.js"></script>
+<script src="src/jieqi.js"></script>
 <script src="src/review.js"></script>
+<script src="src/classics.js"></script>
 <script src="src/sanguo.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/heroes.js"></script>
@@ -1141,6 +1196,7 @@
 <script src="src/portraits.js"></script>
 <script src="src/stage-list.js"></script>
 <script src="src/skins.js"></script>
+<script src="src/quests.js"></script>
 <script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
 <script src="src/campaign.js"></script>
@@ -1155,6 +1211,8 @@
 <script src="src/achievements-ui.js"></script>
 <script src="src/emotes.js"></script>
 <script src="src/friends.js"></script>
+<script src="src/bracket.js"></script>
+<script src="src/tournament-ui.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>

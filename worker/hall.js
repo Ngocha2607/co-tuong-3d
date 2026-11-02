@@ -72,7 +72,7 @@ export function listing(st, sides, present, v) {
     count: sides.filter(k => st.seats[k] && present[k]).length, seated: sides.filter(k => st.seats[k]).length,
     status: st.phase === 'lobby' ? 'waiting' : 'playing',
     host: host !== null && st.info[host] ? st.info[host].name : '', stage: st.stage || '',
-    tc: st.tc ? `${st.tc.base / 60000}+${st.tc.inc / 1000}` : '',
+    tc: st.tc ? `${st.tc.base / 60000}+${st.tc.inc / 1000}` : '', ...(st.variant === 'jq' ? { jq: true } : {}),   // cờ úp
   };
 }
 // whether a friendly room shows in the list: public (the host may make it private) and somebody in it
