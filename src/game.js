@@ -1349,6 +1349,8 @@
   function clearSel() { G.sel = -1; G.targets = []; VIEW.select(-1, []); }
   const myTurn = () => G.mode !== 'menu' && !G.over && !G.thinking && G.pos.turn === G.me && (G.mode !== 'online' || G.you === G.me);
   const canAct = () => myTurn() && !G.animating;
+  // the scene took its effects down a step on a slow device (scene.js setQuality)
+  VIEW.onQuality = q => toast(q === 'low' ? 'Máy hơi chậm: đã tắt bóng đổ để chơi mượt hơn' : 'Máy hơi chậm: đã giảm hiệu ứng để chơi mượt hơn');
   VIEW.onTap = s => {
     SFX.init();
     if (G.mode === 'review') return;

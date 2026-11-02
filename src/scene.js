@@ -915,9 +915,23 @@ const VIEW = (() => {
 
   // ---------- frame ----------
   const tmp = new THREE.Vector3();
+  // stepping down when the frames come slowly: over each two seconds, if most frames took longer than 1/40 s, that is
+  // a slow spell, and two in a row take the quality one step down (never back up by itself). Gaps of 0.75 s and more
+  // don't count: a covered window gets a frame a second from the browser, whatever the drawing costs.
+  const pace = { t0: 0, n: 0, slow: 0, spells: 0 };
+  function watchPace(t, gap) {
+    if (quality === 'low' || gap >= 0.75) return;
+    if (!pace.t0) pace.t0 = t;
+    pace.n++; if (gap > 1 / 40) pace.slow++;
+    if (t - pace.t0 < 2000) return;
+    pace.spells = pace.n >= 5 && pace.slow / pace.n > 0.6 ? pace.spells + 1 : 0;
+    if (pace.spells >= 2) { pace.spells = 0; setQuality(quality === 'high' ? 'medium' : 'low'); }
+    pace.t0 = t; pace.n = pace.slow = 0;
+  }
   function loop(t) {
     requestAnimationFrame(loop);
-    const dt = Math.min(0.05, (t - last) / 1000); last = t; clock = t;
+    const gap = (t - last) / 1000, dt = Math.min(0.05, gap); last = t; clock = t;
+    watchPace(t, gap);
     for (let i = tweens.length - 1; i >= 0; i--) {
       const w = tweens[i], k = Math.min(1, (clock - w.t0) / w.ms);
       try { w.fn(k); } catch (e) { console.error(e); }
@@ -984,6 +998,23 @@ const VIEW = (() => {
   // the pieces near a river, seen from under its surface: drawn on their own (layer 1, with the lights) into a picture
   // the water shows (models.js REFLECT). A camera mirrored in the water's plane, as three.js's Reflector does it.
   let reflections = true;
+  // how much the device can take. 'high': everything. 'medium': no pieces in the rivers' water, a smaller shadow map,
+  // at most 1.5 pixels to the screen's px. 'low': no cast shadows (the patches under warriors' feet stay), 1 pixel.
+  let quality = 'high';
+  function setQuality(q) {
+    if (!renderer || !['high', 'medium', 'low'].includes(q) || q === quality) return;
+    quality = q;
+    reflections = q === 'high'; if (!reflections) MODELS.REFLECT.strength.value = 0;
+    renderer.setPixelRatio(Math.min(q === 'high' ? 2 : q === 'medium' ? 1.5 : 1, window.devicePixelRatio || 1)); resize();
+    const size = q === 'high' ? 2048 : 1024;
+    if (keyLight.shadow.mapSize.x !== size) { keyLight.shadow.mapSize.set(size, size); if (keyLight.shadow.map) { keyLight.shadow.map.dispose(); keyLight.shadow.map = null; } }
+    const shadows = q !== 'low';
+    if (renderer.shadowMap.enabled !== shadows) {                // the shaders change with it
+      renderer.shadowMap.enabled = shadows;
+      scene.traverse(o => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
+    }
+    if (S.onQuality) S.onQuality(q);
+  }
   const reflRT = new THREE.WebGLRenderTarget(512, 512), reflCam = new THREE.PerspectiveCamera();
   reflCam.layers.set(1);
   const RN = new THREE.Vector3(0, 1, 0), rp = new THREE.Vector3(), rv = new THREE.Vector3(), rlook = new THREE.Vector3(), rrot = new THREE.Matrix4();
@@ -1015,7 +1046,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },
