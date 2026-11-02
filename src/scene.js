@@ -112,7 +112,7 @@ const VIEW = (() => {
   }
 
   // ---------- setup ----------
-  let keyLight, hemiLight, rimLight, checkRing, checkLight, selRing, hintRings = [], dots = [], capRings = [], lastMarks = [];
+  let keyLight, hemiLight, rimLight, checkRing, checkLight, selRing, hintRings = [], dots = [], lastMarks = [];
   let stage = null, stageId = '';          // what surrounds the table (stages.js)
   let occluders = [];                      // its scenery that may come between the camera and the board
   const glowTex = (() => {
@@ -265,21 +265,41 @@ const VIEW = (() => {
   }
 
   // ---------- highlights ----------
-  function dot(color, r) {
-    const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, depthWrite: false }));
-    m.rotation.x = -Math.PI / 2; m.renderOrder = 3; scene.add(m); return m;
+  // where the selected piece can go: a mark cut into the wood that glows from inside, gold for an empty point and red,
+  // notched like a target, round an enemy it can take. They light up nearest first and breathe while shown.
+  function markTexture(rgb, take) {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'), m = 64;
+    const glow = g.createRadialGradient(m, m, 0, m, m, m);
+    glow.addColorStop(0, `rgba(${rgb}, ${take ? 0.1 : 0.7})`); glow.addColorStop(take ? 0.78 : 0.5, `rgba(${rgb}, 0.3)`); glow.addColorStop(1, `rgba(${rgb}, 0)`);
+    g.fillStyle = glow; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = `rgba(${rgb}, 1)`; g.fillStyle = `rgba(${rgb}, 1)`; g.lineWidth = take ? 8 : 6;
+    g.beginPath(); g.arc(m, m, take ? 48 : 30, 0, Math.PI * 2); g.stroke();
+    if (take) for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2, cs = Math.cos(a), sn = Math.sin(a); g.beginPath(); g.moveTo(m + cs * 48, m + sn * 48); g.lineTo(m + cs * 63, m + sn * 63); g.stroke(); }
+    else { g.beginPath(); g.moveTo(m, m - 14); g.lineTo(m + 14, m); g.lineTo(m, m + 14); g.lineTo(m - 14, m); g.closePath(); g.fill(); }
+    return new THREE.CanvasTexture(c);
   }
-  function clearMarks() { for (const d of dots) scene.remove(d); dots = []; for (const r of capRings) scene.remove(r); capRings = []; selRing.visible = false; for (const u of units.values()) u.lift = 0; }
+  let markGo = null, markTake = null;
+  const markGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  function mark(take) {
+    if (!markGo) { markGo = markTexture('255, 214, 120'); markTake = markTexture('255, 72, 48', true); }
+    const m = new THREE.Mesh(markGeo, new THREE.MeshBasicMaterial({ map: take ? markTake : markGo, transparent: true, depthWrite: false,
+      blending: take ? THREE.NormalBlending : THREE.AdditiveBlending }));   // red added onto the pale wood would wash out to white
+    m.renderOrder = 3; m.userData.size = take ? 1.45 : 0.75; m.scale.setScalar(0.001); scene.add(m); return m;
+  }
+  function clearMarks() {
+    for (const d of dots) { scene.remove(d); d.material.dispose(); } dots = [];
+    selRing.visible = false; for (const u of units.values()) u.lift = 0;
+  }
   function select(s, targets) {
     clearMarks();
     if (s < 0) return;
     const u = units.get(s); if (u) u.lift = 1;
-    selRing.visible = true; selRing.position.copy(pos(s)).setY(0.012);
-    for (const t of targets) {
-      const p = pos(t);
-      if (units.has(t)) { const r = ringMesh(0.45, 0.55, '#ff3a2a', 0.9); r.position.copy(p).setY(0.014); scene.add(r); capRings.push(r); }
-      else { const d = dot('#46e0b0', 0.13); d.position.copy(p).setY(0.015); dots.push(d); }
-    }
+    const from = pos(s);
+    selRing.visible = true; selRing.position.copy(from).setY(0.012);
+    targets.map(t => [t, pos(t)]).sort((a, b) => a[1].distanceTo(from) - b[1].distanceTo(from)).forEach(([t, p], i) => {
+      const m = mark(units.has(t)); m.position.copy(p).setY(0.016); m.userData.ph = i * 0.7; dots.push(m);
+      wait(i * 30).then(() => tween(220, k => { if (m.parent) m.scale.setScalar(m.userData.size * backOut(k)); }));
+    });
   }
   function lastMove(f, t) {
     lastMarks.forEach((m, i) => { const s = i ? t : f; m.visible = s >= 0; if (s >= 0) m.position.copy(pos(s)).setY(0.01); });
@@ -898,6 +918,7 @@ const VIEW = (() => {
     }
     if (checkRing.visible) { const k = 0.5 + 0.5 * Math.sin(t / 160); checkRing.material.opacity = 0.5 + 0.45 * k; checkLight.intensity = 1.5 + k * 1.5; } else checkLight.intensity = 0;
     if (selRing.visible) selRing.scale.setScalar(1 + Math.sin(t / 200) * 0.04);
+    for (const d of dots) d.material.opacity = 0.72 + 0.28 * Math.sin(t / 280 - d.userData.ph);
     // banners turn towards the camera so the characters on them always read the right way round
     for (const u of units.values()) {
       const f = u.war.userData.flag; if (!f || !u.war.visible) continue;
