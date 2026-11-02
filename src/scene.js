@@ -32,7 +32,7 @@ const VIEW = (() => {
       return c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(x + 4 - c, z + 4.5 - r) > 0.5 ? -1 : r * 9 + c;
     },
     board: () => MODELS.board(),
-    fit: [6.4, 5.5, 6.0], edge: 5.4, shadow: 9, far: 32,   // camera framing, the hero shadow's edge, light, zoom out
+    fit: [6.4, 5.5, 6.0], edge: 5.1, shadow: 9, far: 32,   // camera framing, the hero shadow's edge (the frame's inner edge), light, zoom out
   };
   // the three kingdoms; pieces are drawn as 20 + 10 * kingdom + type (models.js)
   const local = (k, X, Y) => { const y = SG.YAW(k), sn = Math.sin(y), cs = Math.cos(y); return new THREE.Vector3(X * cs + Y * sn, 0, -X * sn + Y * cs); };
@@ -220,9 +220,9 @@ const VIEW = (() => {
   // ---------- units ----------
   function makeUnit(piece, s) {
     const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece, heroes[L.sideOf(piece)]);
-    root.add(disc); war.position.y = DISC_H; war.rotation.y = rest(piece); root.add(war);
+    root.add(disc); war.rotation.y = rest(piece); root.add(war);
     disc.rotation.y = L.yaw(viewer);
-    war.visible = armyOn; war.scale.setScalar(armyOn ? 1 : 0.001);
+    war.visible = armyOn; war.scale.setScalar(REST());
     root.position.copy(pos(s)); root.userData.sq = s; root.visible = !hall;
     scene.add(root);
     return { piece, root, disc, war, sq: s };
@@ -259,8 +259,8 @@ const VIEW = (() => {
   function setArmy(on) {
     armyOn = on;
     for (const u of units.values()) {
-      if (on) { u.war.visible = true; tween(400, k => u.war.scale.setScalar(Math.max(0.001, backOut(k)))); }
-      else tween(300, k => u.war.scale.setScalar(Math.max(0.001, 1 - k))).then(() => { if (!armyOn) u.war.visible = false; });
+      if (on) { u.war.visible = true; tween(400, k => u.war.scale.setScalar(Math.max(0.001, ARMY * backOut(k)))); }
+      else tween(300, k => u.war.scale.setScalar(Math.max(0.001, ARMY * (1 - k)))).then(() => { if (!armyOn) u.war.visible = false; });
     }
   }
 
@@ -330,7 +330,8 @@ const VIEW = (() => {
   }
   function restFacing(u) { u.war.rotation.y = rest(u.piece); }
   // a warrior grows out of its piece, larger than life so the fight reads from across the table
-  const BIG = () => (armyOn ? 1.35 : 1.8), REST = () => (armyOn ? 1 : 0.001);
+  // in the army view a warrior stands larger, on the board where its piece was
+  const ARMY = 1.3, BIG = () => (armyOn ? 1.35 * ARMY : 1.8), REST = () => (armyOn ? ARMY : 0.001);
   async function summon(u) {
     u.war.visible = true;
     const a = u.war.scale.x, b = BIG();
@@ -350,7 +351,7 @@ const VIEW = (() => {
     if (j.body && type === N) j.body.rotation.x = Math.sin(ph * 1.6) * 0.08;
     if (j.wheels) j.wheels.forEach(w => { w.rotation.x = k * dist * 6; });
     const bob = type === N ? Math.abs(Math.sin(ph * 0.8)) * 0.12 : type === R ? 0 : Math.abs(Math.sin(ph)) * 0.04;
-    u.war.position.y = DISC_H + bob;
+    u.war.position.y = bob;
   }
   function restPose(u) {
     const j = u.war.userData.j;
@@ -358,7 +359,7 @@ const VIEW = (() => {
     if (j.legs) j.legs.forEach(L => { L.rotation.x = 0; });
     if (j.body) j.body.rotation.x = 0;
     if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
-    u.war.position.y = DISC_H;
+    u.war.position.y = 0;
   }
   // the length of a route: from where the unit stands through the points given
   const routeLen = (u, pts) => pts.reduce((s, p, i) => s + p.distanceTo(i ? pts[i - 1] : u.root.position.clone().setY(0)), 0);
@@ -541,7 +542,7 @@ const VIEW = (() => {
         const shown = u.war.visible, scale = u.war.scale.x;
         u.root.remove(u.war);
         u.war = MODELS.warrior(u.piece, heroes[side]);
-        u.war.position.y = DISC_H; u.war.rotation.y = rest(u.piece); u.war.visible = shown; u.war.scale.setScalar(scale);
+        u.war.rotation.y = rest(u.piece); u.war.visible = shown; u.war.scale.setScalar(scale);
         u.root.add(u.war);
       }
     }
@@ -729,6 +730,8 @@ const VIEW = (() => {
     }
     // lifted selection, lantern sway, check pulse
     for (const u of units.values()) { const y = (u.lift || 0) * 0.22; if (!busy || u.lift) u.root.position.y += (y - u.root.position.y) * Math.min(1, dt * 12); }
+    // a warrior stands on the board itself: once it has grown out of its piece the piece is put away (still tappable)
+    for (const u of units.values()) u.disc.visible = !(u.war.visible && u.war.scale.x > 0.3);
     if (stage) stage.update(t, dt, camera);
     // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
     for (const o of occluders) {
