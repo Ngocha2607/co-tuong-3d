@@ -425,6 +425,25 @@ const I18N = (() => {
     'Cổ vũ': 'Cheer', 'Hay quá!': 'Brilliant!', 'Vỗ tay!': 'Applause!', 'Căng quá!': 'So tense!', 'Cố lên {0}!': 'Go {0}!',
     '{0} người xem': '{0} watching', 'Đang đánh online': 'Playing online',
 
+    // tournaments (tournament-ui.js)
+    'Giải đấu': 'Tournaments', 'Mở giải': 'New tournament', 'Mở giải đấu': 'New tournament', 'Mở': 'Open', 'Tên giải': 'Name',
+    'Thời gian mỗi ván': 'Time per game', 'Giải của {0}': '{0}’s tournament', 'Chủ giải {0}': 'Host {0}', '{0} mỗi ván': '{0} per game', '{0} người': '{0} players',
+    'Chép link mời': 'Copy invite link', 'Đã chép link mời vào giải': 'Invite link copied', 'Vào giải': 'Join', 'Rời giải': 'Leave',
+    'Bốc thăm và bắt đầu': 'Draw and start', 'Chủ giải': 'Host', 'Đã vào giải': 'Joined', 'Bạn là chủ giải': 'You host it',
+    'Đang chờ người · {0}': 'Waiting for players · {0}', 'Đang đấu · {0} người': 'Under way · {0} players', 'Vô địch: {0}': 'Champion: {0}', 'Vô địch': 'Champion',
+    'Tứ kết': 'Quarter-finals', 'Bán kết': 'Semi-finals', 'Chung kết': 'Final', 'Vòng {0}': 'Round {0}', 'Miễn đấu': 'Bye', 'Chờ đối thủ': 'Waiting for opponent',
+    'Vào trận': 'Play', 'Hòa, Đen đi tiếp': 'Draw, Black goes on', 'Bỏ trận': 'Walked out', 'Không vào trận': 'No show', 'Đã xong': 'Played',
+    'Chiếu dai': 'Perpetual check', 'Đuổi dai': 'Perpetual chase', 'Về giải đấu': 'Back to the tournament', 'Giải {0}': 'Tournament {0}', '{0} · Hòa thì Đen đi tiếp': '{0} · On a draw Black goes on',
+    '{0} không vào trận sau 3 phút': '{0} did not show up within 3 minutes', 'Không tìm thấy giải đấu này.': 'No such tournament.', 'Đăng nhập để vào giải.': 'Sign in to join.',
+    'Đăng nhập để vào giải': 'Sign in to join', 'Đăng nhập để mở giải': 'Sign in to open a tournament',
+    '{0} của bạn đã sẵn sàng: gặp {1}': 'Your {0} is ready: against {1}', '{0} vô địch {1}!': '{0} wins {1}!', '{0} đã bốc thăm': '{0} has been drawn',
+    'Mở một giải cho 3 đến 8 người, gửi link cho bạn bè, rồi bốc thăm đấu loại trực tiếp.': 'Open a tournament for 3 to 8 players, send its link to friends, then draw a knock-out bracket.',
+    'Đấu loại trực tiếp, mỗi trận một ván. Hòa thì người cầm Đen đi tiếp. Ai không đi nước đầu trong 3 phút là thua trận đó.': 'Knock-out, one game a match. On a draw Black goes on. Whoever does not make their first move within 3 minutes loses that match.',
+    'Cần ít nhất {0} người (tối đa {1}). Gửi link mời cho bạn bè. Khi chủ giải bốc thăm, mỗi trận có phòng riêng: vào từ trang này.': 'At least {0} players needed (at most {1}). Send the invite link to friends. Once the host draws, each match has its own room: go in from this page.',
+    'Gửi link mời cho bạn bè. Khi chủ giải bốc thăm, mỗi trận có phòng riêng: vào từ trang này.': 'Send the invite link to friends. Once the host draws, each match has its own room: go in from this page.',
+    'Giải đã bốc thăm, không vào thêm được': 'The bracket is drawn, no more players', 'Giải đã đủ {0} người': 'The tournament already has {0} players',
+    'Chỉ chủ giải mới bốc thăm được': 'Only the host can draw', 'Cần ít nhất {0} người': 'At least {0} players needed', 'Chủ giải không rời giải được': 'The host cannot leave',
+
     // cờ úp (jieqi.js)
     'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
     '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',

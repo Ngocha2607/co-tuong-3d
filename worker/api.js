@@ -13,6 +13,7 @@ import SKINS from '../src/skins.js';
 import ACHIEVEMENTS from '../src/achievements.js';
 import SEASONS from '../src/seasons.js';
 import { titlesOf as seasonTitlesOf } from './seasons.js';
+import * as TOUR from './tournament.js';
 
 export const authReady = env => !!(env.DB && env.GOOGLE_CLIENT_ID && env.SESSION_SECRET);
 const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage, skin, sg_rating, sg_games, sg_wins, sg_draws, sg_losses, season_games, sg_season_games';
@@ -302,6 +303,25 @@ export async function api(req, env, url) {
       : `SELECT ${USER_COLS} FROM users WHERE season_games >= 10 ORDER BY rating DESC, season_games DESC LIMIT 100`;
     const { results } = await env.DB.prepare(q).all();
     return json({ season: info, top: results, provisional: PROVISIONAL });
+  }
+  // tournaments between friends (worker/tournament.js): one's own list, opening one; one tournament, and joining,
+  // leaving or drawing it
+  if (p === '/api/tournaments') {
+    const user = await currentUser(req, env);
+    if (!user) return fail(401, 'not signed in');
+    if (!post) return json({ list: await TOUR.mine(env, user) });
+    const b = await body(req), raw = String(b.name || '').normalize('NFC').replace(/\s+/g, ' ').trim();
+    const name = /^[\p{L}\p{N}][\p{L}\p{M}\p{N} .,!'&()_-]{1,39}$/u.test(raw) ? raw : `Giải của ${user.name}`;
+    const r = await TOUR.create(env, user, name, b.tc);
+    return r.error ? fail(r.status, r.error) : json({ tournament: TOUR.view(r.t) });
+  }
+  const tm = p.match(/^\/api\/tournament\/([A-Z0-9]{6})$/);
+  if (tm) {
+    if (!post) { const t = await TOUR.load(env.DB, tm[1]); return t ? json({ tournament: TOUR.view(t) }) : fail(404, 'Không có giải đấu này'); }
+    const user = await currentUser(req, env);
+    if (!user) return fail(401, 'not signed in');
+    const r = await TOUR.act(env, user, tm[1], (await body(req)).act);
+    return r.error ? fail(r.status, r.error) : json({ tournament: TOUR.view(r.t) });
   }
   const m = p.match(/^\/api\/user\/(\d{1,12})$/);
   if (m) {

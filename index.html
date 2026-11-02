@@ -268,6 +268,25 @@
   #friends .card { width: min(620px, 100%); position: relative; }
   #bFriendsClose { position: absolute; top: 18px; right: 18px; }
   #friends .camp-head h2 { margin: 0; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  /* tournaments (tournament-ui.js), inside the Bạn bè page: one shown hides the rest of it */
+  #friends.touring .card > :not(#tourView):not(#bFriendsClose) { display: none; }
+  #tourView .tname { margin: 8px 0 4px; font: 700 24px/1.2 var(--serif); color: var(--ink); }
+  #tourView .tfield { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font: 600 13px/1.2 var(--ui); color: var(--muted, #b9a88c); }
+  #tourView .row2 { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
+  .bracket { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 10px; }
+  .tround { display: flex; flex-direction: column; justify-content: space-around; gap: 10px; min-width: 170px; }
+  .tround h4.sub { margin: 0 0 2px; }
+  .tmatch { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255, 255, 255, 0.03); }
+  .tmatch.mine { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(232, 182, 80, 0.3); }
+  .tmatch .tp { display: flex; align-items: center; gap: 6px; font: 600 14px/1.25 var(--ui); color: var(--ink); opacity: 0.8; }
+  .tmatch .tp.won { color: var(--gold); opacity: 1; }
+  .tmatch .tp.you b, .tmatch .tp.you { text-decoration: underline; text-underline-offset: 3px; }
+  .tmatch .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .tmatch .dot.r { background: #c0392b; } .tmatch .dot.b { background: #2f4160; border: 1px solid #8aa0c0; }
+  .tmatch small { font: 500 12px/1.2 var(--ui); opacity: 0.75; }
+  .tmatch .btn { align-self: flex-start; padding: 5px 12px; min-height: 0; font-size: 13px; }
+  .tchamp { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 12px 14px; border-radius: 12px; background: linear-gradient(180deg, rgba(246, 220, 148, 0.18), rgba(227, 180, 72, 0.08)); border: 1px solid rgba(232, 182, 80, 0.5); }
+  .tchamp b { font: 700 20px/1.2 var(--serif); color: var(--gold); }
   #friends h4.sub { margin: 16px 0 8px; font: 700 12px/1 var(--ui); letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
   .frhead { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 4px 0 8px; }
   .frhead h4.sub { margin-bottom: 4px !important; }
@@ -1133,6 +1152,9 @@
     <div class="frhead"><h4 class="sub">Bạn bè</h4><label>Thách đấu với<div class="seg mini" id="frTc"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div></label></div>
     <ul class="flist" id="frList"></ul>
     <div id="frOutgoing"></div>
+    <div class="frhead"><h4 class="sub">Giải đấu</h4><button class="btn gold" id="bTourNew" type="button">Mở giải</button></div>
+    <ul class="flist" id="tourList"></ul>
+    <div id="tourView" hidden></div>
     <p class="note">Kết bạn cần cả hai đồng ý. Chỉ bạn bè mới thấy nhau đang online và thách đấu nhau: nhận lời là cả hai vào một phòng riêng, người thách đấu cầm quân Đỏ.</p>
   </div>
 </div>
@@ -1165,6 +1187,8 @@
 <script src="src/achievements-ui.js"></script>
 <script src="src/emotes.js"></script>
 <script src="src/friends.js"></script>
+<script src="src/bracket.js"></script>
+<script src="src/tournament-ui.js"></script>
 <script src="src/game.js"></script>
 </body>
 </html>

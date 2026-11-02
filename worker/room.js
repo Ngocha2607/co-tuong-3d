@@ -13,12 +13,14 @@ import EMOTES from '../src/emotes.js';
 import * as C from './clock.js';
 import { rate } from './elo.js';
 import * as H from './hall.js';
+import { report as tourReport } from './tournament.js';
 
 const SIDES = [1, -1];
 
 const fresh = () => ({
   seats: { 1: null, '-1': null }, moves: [], over: null, rematch: { 1: false, '-1': false }, game: 1,
   code: '', rated: false, info: { 1: null, '-1': null },     // info: { id, name, rating? } of a signed-in player
+  tour: null, tourSent: false,                                // a tournament's match (tournament.js): { id, r, s, name }; result told
   tc: null, left: null, turnAt: 0, away: { 1: 0, '-1': 0 },  // clocks; when each ranked player lost their connection
   recorded: false, retryAt: 0,                                // ranked result written to D1 / when to try again
   drawOffer: 0, offeredAt: { 1: -99, '-1': -99 },             // side offering a draw now / ply of each side's last offer
@@ -55,12 +57,13 @@ export class Room extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  // a ranked game between two players the Lobby paired (the public router only forwards /ws, so only the Lobby gets here)
-  async setup({ code, info }) {
+  // a ranked game between two players the Lobby paired, or a tournament's match (tournament.js, with tour and its time)
+  // (the public router only forwards /ws, so only the Lobby and the Worker's API get here)
+  async setup({ code, info, tour, tc: tcKey }) {
     const st = this.st;
-    if (st.moves.length || st.seats[1] || st.seats[-1] || st.rated) return new Response('room taken', { status: 409 });
-    const tc = C.CONTROLS[C.RANKED_TC];
-    this.st = { ...fresh(), code, rated: true, phase: 'play', info, seats: { 1: 'u' + info[1].id, '-1': 'u' + info[-1].id }, tc, left: C.fullClock(tc), turnAt: Date.now() };
+    if (st.moves.length || st.seats[1] || st.seats[-1] || st.rated || st.tour) return new Response('room taken', { status: 409 });
+    const tc = C.CONTROLS[tour ? tcKey : C.RANKED_TC] || C.CONTROLS[C.RANKED_TC];
+    this.st = { ...fresh(), code, rated: !tour, tour: tour || null, phase: 'play', info, seats: { 1: 'u' + info[1].id, '-1': 'u' + info[-1].id }, tc, left: C.fullClock(tc), turnAt: Date.now() };
     await this.save(); await this.schedule();
     return new Response('ok');
   }
@@ -87,14 +90,14 @@ export class Room extends DurableObject {
   }
   stateFor(ws, extra = {}) {
     const { moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board } = this.st, jq = this.st.variant === 'jq';
-    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board, variant: jq ? 'jq' : 'xq', turns: jq ? this.replay().turns : [], players: this.presence(), watchers: this.watching(), ...H.hallInfo(this.st, SIDES), ...this.timing(), ...extra };
+    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board, variant: jq ? 'jq' : 'xq', turns: jq ? this.replay().turns : [], tour: this.st.tour, players: this.presence(), watchers: this.watching(), ...H.hallInfo(this.st, SIDES), ...this.timing(), ...extra };
   }
   // everyone gets the whole state again (the hall changes rarely, and each page needs its own `you`)
   async resync(extra) { for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, extra)); await this.announce(); }
   // tell the list of open rooms (lobby.js) how this one stands, when that changed; present: who is connected
   async announce(present = this.presence()) {
     const st = this.st;
-    if (st.rated || !st.code) return;
+    if (st.rated || st.tour || !st.code) return;
     const l = H.listing(st, SIDES, present, 'xq'), body = JSON.stringify(H.listed(st, l) ? l : { code: st.code, v: 'xq', gone: true });
     if (body === this.announced) return;
     this.announced = body;
@@ -124,7 +127,7 @@ export class Room extends DurableObject {
     const st = this.st, now = Date.now(), d = C.deadline(st);
     if (d && now >= d.at) await this.finish(this.expired(d), now);
     else if (st.retryAt && now >= st.retryAt) {
-      await this.record(); await this.save();
+      await this.record(); await this.tourDone(); await this.save();
       if (st.recorded && st.over.delta) this.broadcast({ t: 'rated', delta: st.over.delta, rating: st.over.rating });
     }
     await this.schedule();
@@ -134,7 +137,7 @@ export class Room extends DurableObject {
     const st = this.st;
     if (st.tc) st.left = C.leftNow(st, now);   // freeze the clocks where they stood
     st.over = over; st.drawOffer = 0;
-    await this.record();
+    await this.record(); await this.tourDone();
     await this.save(); await this.schedule();
     this.broadcast({ t: 'over', ...st.over, ...this.timing(now) });
     if (st.rated) await this.liveOver();
@@ -143,6 +146,15 @@ export class Room extends DurableObject {
   async liveOver() {
     const body = JSON.stringify({ code: this.st.code, v: 'xq', live: true, gone: true });
     try { await this.env.LOBBY.get(this.env.LOBBY.idFromName('lobby')).fetch('https://lobby/room', { method: 'POST', body }); } catch (e) { }
+  }
+  // a tournament's game over: the bracket is told (again in 30 seconds if that failed)
+  async tourDone() {
+    const st = this.st;
+    if (!st.tour || st.tourSent || !st.over) return;
+    let ok = false;
+    try { ok = !this.env.DB || await tourReport(this.env, st.tour, st.over.winner, st.over.reason); } catch (e) { console.error('tournament result not saved', e); }
+    st.tourSent = ok;
+    if (!ok) st.retryAt = Date.now() + 30000; else if (st.recorded || !st.rated) st.retryAt = 0;
   }
   // a finished ranked game → D1: the game row and both players' new ratings, in one transaction
   async record() {
@@ -182,7 +194,7 @@ export class Room extends DurableObject {
     if (m.t === 'hello') {
       const a = ws.deserializeAttachment() || {}, user = a.user;
       let side = 0, dirty = false;
-      if (st.rated) side = user ? (st.info[1].id === user.id ? 1 : st.info[-1].id === user.id ? -1 : 0) : 0;
+      if (st.rated || st.tour) side = user ? (st.info[1].id === user.id ? 1 : st.info[-1].id === user.id ? -1 : 0) : 0;
       else {
         const token = typeof m.token === 'string' ? m.token.slice(0, 40) : '';
         if (H.isBanned(st, token, user)) { this.send(ws, { t: 'kicked' }); try { ws.close(1000, 'kicked'); } catch (e) { } return; }
@@ -226,7 +238,7 @@ export class Room extends DurableObject {
       if (!side) return;
       if (st.phase === 'play' && !st.over) await this.finish({ winner: -side, reason: 'resign' }, now);
       ws.serializeAttachment({ ...ws.deserializeAttachment(), side: 0 });
-      if (!st.rated) { H.leave(st, SIDES, side, this.presence(ws)); st.rematch = { ...st.rematch, [side]: false }; }
+      if (!st.rated && !st.tour) { H.leave(st, SIDES, side, this.presence(ws)); st.rematch = { ...st.rematch, [side]: false }; }
       await this.save();
       for (const w of this.sockets(ws)) this.send(w, this.stateFor(w, { players: this.presence(ws) }));
       await this.announce(this.presence(ws));
@@ -282,7 +294,7 @@ export class Room extends DurableObject {
       return;
     }
     if (m.t === 'rematch') {
-      if (!side || !st.over || st.rated) return;   // ranked players look for a new opponent instead
+      if (!side || !st.over || st.rated || st.tour) return;   // ranked players look for a new opponent instead, a tournament goes on
       st.rematch[side] = true;
       if (st.rematch[1] && st.rematch[-1]) {
         // new game, the players swap colours and keep the time control
@@ -355,7 +367,7 @@ export class Room extends DurableObject {
   async webSocketError(ws) { await this.left(ws); }
   async left(ws) {
     const st = this.st, side = this.sideOf(ws);
-    if (side && st.rated && !st.over && !this.presence(ws)[side]) { st.away[side] = Date.now(); await this.save(); await this.schedule(); }
+    if (side && (st.rated || st.tour) && !st.over && !this.presence(ws)[side]) { st.away[side] = Date.now(); await this.save(); await this.schedule(); }
     if (st.phase === 'lobby') {                             // in the hall someone who left is no longer ready
       if (side && !this.presence(ws)[side] && st.ready[side]) { st.ready = { ...st.ready, [side]: false }; await this.save(); }
       if (side && H.handOver(st, SIDES, this.presence(ws))) await this.save();   // the host left: someone else runs the hall

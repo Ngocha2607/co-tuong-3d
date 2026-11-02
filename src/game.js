@@ -297,7 +297,7 @@
     G.over = Object.assign({}, st, { shown: true });
     G.over.kept = keepGame();
     VIEW.check(-1); clearSel();
-    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
+    const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'noshow', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     const finale = st.winner && onBoard ? VIEW.defeat(kingOf(-st.winner), true) : 0;
     recordFinale(finale);
     if (st.winner) VIEW.heroShadow(st.winner, true);
@@ -315,7 +315,7 @@
       : side === G.me ? you : G.mode === 'ai' ? `Máy · ${LEVELS[G.level].name}` : (lv && CAMPAIGN.chapter(lv.chapter) || {}).foeName || (HEROES.byId[G.heroes[side]] || {}).name || 'Máy';
     const kind = online ? (G.rated ? 'ranked' : 'online') : G.mode === 'campaign' ? (lv.daily ? 'daily' : 'campaign') : 'ai';
     o.ach = me ? ACH_UI.check({ fen0: G.fen0, moves: G.moves.slice(), me }) : [];   // feats of the board (achievements-ui.js)
-    const title = { ranked: 'Trận xếp hạng', online: `Phòng ${G.room}`, daily: lv && lv.name, campaign: lv && `Chiến dịch ${lv.id} · ${lv.name}`, ai: `Với máy · ${LEVELS[G.level].name}` }[kind];
+    const title = { ranked: 'Trận xếp hạng', online: G.tour ? `Giải ${G.tour.name}` : `Phòng ${G.room}`, daily: lv && lv.name, campaign: lv && `Chiến dịch ${lv.id} · ${lv.name}`, ai: `Với máy · ${LEVELS[G.level].name}` }[kind];
     try {
       return REVIEW.add({ at: Date.now(), kind, title, fen0: G.fen0, moves: G.moves.slice(), me, names: { 1: name(1), '-1': name(-1) }, winner: o.winner, reason: o.reason, heroes: { ...G.heroes }, room: online && !G.rated ? G.room : '' }).id;
     } catch (e) { return null; }
@@ -361,6 +361,7 @@
       'perpetual-check': `${SIDE[-st.winner]} chiếu dai, phạm luật`,
       'perpetual-chase': `${SIDE[-st.winner]} đuổi dai, phạm luật`,
       abandon: `${SIDE[-st.winner]} rời ván quá 60 giây`,
+      noshow: `${SIDE[-st.winner]} không vào trận sau 3 phút`,
     }[st.reason] || REASON[st.reason] || '';
     const after = `sau ${Math.ceil(G.moves.length / 2)} nước`;
     return [title, st.reason === 'agreement' ? `${why} ${after}` : `${why} · ${who} ${after}`];
@@ -411,7 +412,7 @@
   const roomLink = () => `${location.origin}${location.pathname}?${G.mode === 'sanguo' ? 'tq' : 'room'}=${G.room}`;
   const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
-  function resetOnline() { G.variant = 'xq'; G.deal = null; G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
+  function resetOnline() { G.tour = null; G.variant = 'xq'; G.deal = null; G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
   // tc: time control asked for by the player opening a friendly room ('' = untimed)
   function goOnline(room, tc = '', jq = false) {
     disconnect(); stopSeek(); resetOnline(); rvClose();
@@ -453,7 +454,7 @@
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
         G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
         G.heroes = m.heroes || { 1: '', '-1': '' }; G.skins = m.skins || {}; G.boardSkin = m.board || '';
-        G.variant = m.variant === 'jq' ? 'jq' : 'xq'; G.deal = null; G.sent = 0;
+        G.variant = m.variant === 'jq' ? 'jq' : 'xq'; G.deal = null; G.sent = 0; G.tour = m.tour || null;
         if (hallUpdate(m)) { updateStatus(); break; }
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
         rebuild(m.moves || [], m.turns || []);
@@ -1727,7 +1728,10 @@
     const again = $('#bAgain');
     again.hidden = G.mode === 'online' && !G.you;
     if (sgNet()) sgRenderEnd();
-    else if (G.mode === 'online' && G.rated) {
+    else if (G.mode === 'online' && G.tour) {                // a tournament's match: back to its bracket
+      again.textContent = 'Về giải đấu'; again.disabled = false; again.hidden = false;
+      $('#endNote').textContent = G.tour.name + (G.over && !G.over.winner ? ' · Hòa thì Đen đi tiếp' : '');
+    } else if (G.mode === 'online' && G.rated) {
       again.textContent = 'Tìm trận mới'; again.disabled = false;
       $('#endNote').textContent = ratingNote();
     } else if (G.mode === 'online') {
@@ -1824,6 +1828,7 @@
       startCampaign(next && CAMPAIGN_UI.unlocked().levels.has(next.id) ? next.id : G.lv.id);
       return;
     }
+    if (G.mode === 'online' && G.tour) { openTour(G.tour.id); return; }
     if (G.mode === 'online' && G.rated) { seek(); return; }
     if (G.mode === 'online') { send({ t: 'rematch' }); G.rematch[G.you] = true; renderEnd(); return; }
     if (sgNet()) {
@@ -1965,6 +1970,9 @@
   DAILY_UI.onChange(dailyChip); dailyChip();
   // friends and challenges (friends.js): a challenge accepted opens a new private friendly room for both; whoever
   // challenged goes in first, so they hold the room (and Red), the other a moment later
+  // tournaments (tournament-ui.js): a match's room, played or watched; from a match's end, back to its bracket
+  TOUR_UI.init({ toast, play: room => { closePages(); goOnline(room); } });
+  function openTour(id) { leaveRoom(); FRIENDS.open(); TOUR_UI.show(id); }
   FRIENDS.init({
     toast,
     busy: () => ((G.mode === 'online' && G.you && !G.over && G.moves.length) || (sgNet() && G.sg.net.you >= 0 && !G.over && sgMoves().length)
@@ -2226,6 +2234,7 @@
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
     else if (online && invited.length >= 4) goOnline(invited);
     else { showMenu(true); if (q.has('daily')) { history.replaceState(null, '', location.pathname); DAILY_UI.open(); } }   // the app's shortcut
+    if (/^[A-Z0-9]{6}$/.test(q.get('giai') || '')) { FRIENDS.open(); TOUR_UI.show(q.get('giai')); }   // a tournament's link
     registerSW();
   }
 

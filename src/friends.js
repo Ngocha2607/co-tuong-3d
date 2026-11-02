@@ -41,6 +41,7 @@ const FRIENDS = (() => {
   const send = o => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
   function onMsg(m) {
     switch (m.t) {
+      case 'tour': TOUR_UI.news(m); break;           // a tournament's news (tournament-ui.js)
       case 'friends':
         if (m.why === 'asked') hooks.toast(`${m.name} muốn kết bạn với bạn`);
         else if (m.why === 'accepted') hooks.toast(`${m.name} đã đồng ý kết bạn`);
@@ -190,10 +191,10 @@ const FRIENDS = (() => {
   $('#inFriend').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
   $('#bFriendsClose').addEventListener('click', () => close());
   function open() {
-    $('#friends').hidden = false; render(); load();
+    $('#friends').hidden = false; render(); load(); TOUR_UI.loadList();
     clearInterval(pollT); pollT = setInterval(() => { if ($('#friends').hidden) clearInterval(pollT); else load(); }, 15000);
   }
-  function close() { $('#friends').hidden = true; clearInterval(pollT); }
+  function close() { $('#friends').hidden = true; clearInterval(pollT); if (TOUR_UI.shown) TOUR_UI.back(); else $('#friends').classList.remove('touring'); }
 
   // the page knows it has the Worker behind it; signing in and out opens and closes the socket
   function init(h) { hooks = { ...hooks, ...h }; }
@@ -201,7 +202,7 @@ const FRIENDS = (() => {
   ACCOUNT.onChange(u => {
     $('#navFriends').hidden = !(u && online);
     if (u && online) { connect(); load(); }
-    else { disconnect(); data = null; incoming.clear(); out = null; renderCards(); badge(); close(); }
+    else { disconnect(); data = null; incoming.clear(); out = null; renderCards(); badge(); if (!TOUR_UI.shown) close(); }   // a tournament stays open to look at
   });
   return { init, setOnline, setStatus, open, close, act, challenge };
 })();
