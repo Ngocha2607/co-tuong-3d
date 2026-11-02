@@ -30,8 +30,8 @@ const MODELS = (() => {
   // ---------- shared materials and geometries ----------
   const mats = new Map(), geos = new Map();
   function mat(color, o = {}) {
-    const k = color + (o.metal || 0) + (o.rough || 0) + (o.emissive || '');
-    if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color, roughness: o.rough || 0.72, metalness: o.metal || 0, flatShading: true, emissive: o.emissive || '#000000' }));
+    const k = color + (o.metal || 0) + (o.rough || 0) + (o.emissive || '') + (o.smooth ? 's' : '');
+    if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color, roughness: o.rough || 0.72, metalness: o.metal || 0, flatShading: !o.smooth, emissive: o.emissive || '#000000' }));
     return mats.get(k);
   }
   function geo(k, make) { if (!geos.has(k)) geos.set(k, make()); return geos.get(k); }
@@ -44,6 +44,12 @@ const MODELS = (() => {
   const cyl = (rt, rb, h, c, p, x, y, z, seg = 8, o) => mesh(geo(`c${rt},${rb},${h},${seg}`, () => new THREE.CylinderGeometry(rt, rb, h, seg)), mat(c, o), p, x, y, z);
   const ball = (r, c, p, x, y, z, o) => mesh(geo(`s${r}`, () => new THREE.SphereGeometry(r, 8, 6)), mat(c, o), p, x, y, z);
   const group = (p, x = 0, y = 0, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); if (p) p.add(g); return g; };
+  // smooth-shaded parts for the figures' bodies (wood and weapons stay faceted): a shared geometry by key, and a
+  // lathe turned from [radius, height] points, flattened front to back by flat
+  const SMOOTH = { smooth: true }, TRIM = { metal: 0.6, rough: 0.35, smooth: true };
+  const part = (g, c, p, x, y, z, o = SMOOTH) => mesh(g, mat(c, o), p, x, y, z);
+  const lathe = (k, pts, flat = 1, seg = 14) => geo(k, () => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg).scale(1, 1, flat));
+  const sball = (r, c, p, x, y, z, o = SMOOTH) => part(geo('S' + r, () => new THREE.SphereGeometry(r, 16, 12)), c, p, x, y, z, o);
 
   // ---------- textures ----------
   function canvas(w, h, draw) {
@@ -65,17 +71,53 @@ const MODELS = (() => {
     }
   }
 
-  // board: 9 x 10 points one unit apart, one unit of margin, 100 px per unit
-  function boardTexture() {
-    return canvas(1000, 1100, (g, w, h) => {
-      woodGrain(g, w, h, '#d9b277', 220, 7);
+  // a normal map from a height field drawn in grey (white the surface, darker deeper): softened a little, then
+  // its slopes, steeper by depth. Not a colour, so it stays linear.
+  function reliefTexture(w, h, draw, depth) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); draw(g, w, h);
+    const img = g.getImageData(0, 0, w, h), d = img.data;
+    const H = new Float32Array(w * h), T = new Float32Array(w * h), s = depth / 255;
+    for (let i = 0; i < w * h; i++) H[i] = d[i * 4] * s;  // heights already scaled by depth
+    // the neighbours of each pixel, clamped at the edges
+    const L = x => (x > 0 ? -1 : 0), R = x => (x < w - 1 ? 1 : 0), U = y => (y > 0 ? -w : 0), D = y => (y < h - 1 ? w : 0);
+    for (let pass = 0; pass < 2; pass++) {                 // a 3 x 3 box blur, twice: a groove's walls slope
+      for (let y = 0, i = 0; y < h; y++) for (let x = 0; x < w; x++, i++) T[i] = (H[i + L(x)] + H[i] + H[i + R(x)]) / 3;
+      for (let y = 0, i = 0; y < h; y++) { const u = U(y), v = D(y); for (let x = 0; x < w; x++, i++) H[i] = (T[i + u] + T[i] + T[i + v]) / 3; }
+    }
+    for (let y = 0, i = 0; y < h; y++) {
+      const u = U(y), v = D(y);
+      for (let x = 0; x < w; x++, i++) {
+        // canvas rows run down, the texture's v up
+        const nx = H[i + L(x)] - H[i + R(x)], ny = H[i + v] - H[i + u], k = 127.5 / Math.sqrt(nx * nx + ny * ny + 1);
+        d[i * 4] = 127.5 + nx * k; d[i * 4 + 1] = 127.5 + ny * k; d[i * 4 + 2] = 127.5 + k;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.anisotropy = 8;
+    return t;
+  }
+
+  // board: 9 x 10 points one unit apart, one unit of margin, 100 px per unit. Drawn twice: in colour, and as the
+  // carving for its normal map, where the lines, the marks and the river's words are cut into the wood.
+  const RIVER_Z = [0.36, 0.44];            // the river's bed reaches this far from the middle, its banks rise to here
+  const RIVER_D = 0.09, WATER_Y = -0.02;   // the bed this deep, the water's surface a little below the banks' top
+  function drawBoard(g, w, h, relief) {
+    woodGrain(g, w, h, relief ? '#ffffff' : '#d9b277', 220, 7);
+    const X = c => 100 + c * 100, Y = r => 100 + r * 100, ry = (Y(4) + Y(5)) / 2;
+    if (!relief) {
       const vg = g.createRadialGradient(w / 2, h / 2, 200, w / 2, h / 2, 760);
       vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, 'rgba(70, 30, 5, 0.35)');
       g.fillStyle = vg; g.fillRect(0, 0, w, h);
-      const X = c => 100 + c * 100, Y = r => 100 + r * 100;
-      g.strokeStyle = '#3b1d0b'; g.lineCap = 'round';
-      g.lineWidth = 7; g.strokeRect(X(0) - 22, Y(0) - 22, 844, 944);
-      g.lineWidth = 3;
+      // the river's bed: wet, dark wood under the water, darker in the shade of its banks
+      const b1 = RIVER_Z[1] * 100, rv = g.createLinearGradient(0, ry - b1, 0, ry + b1);
+      for (const [at, a] of [[0, 0], [0.06, 0.5], [0.2, 0.32], [0.8, 0.32], [0.94, 0.5], [1, 0]]) rv.addColorStop(at, `rgba(40, 30, 14, ${a})`);
+      g.fillStyle = rv; g.fillRect(0, ry - b1, w, 2 * b1);
+    }
+    const grid = lw => {
+      g.lineCap = 'round';
+      g.lineWidth = lw + 4; g.strokeRect(X(0) - 22, Y(0) - 22, 844, 944);
+      g.lineWidth = lw;
       for (let r = 0; r < 10; r++) { g.beginPath(); g.moveTo(X(0), Y(r)); g.lineTo(X(8), Y(r)); g.stroke(); }
       for (let c = 0; c < 9; c++) {
         g.beginPath();
@@ -96,12 +138,28 @@ const MODELS = (() => {
       };
       for (const c of [1, 7]) { mark(2, c); mark(7, c); }
       for (const c of [0, 2, 4, 6, 8]) { mark(3, c); mark(6, c); }
-      // the river: 楚河 (Chu River) and 漢界 (Han Border)
-      g.fillStyle = 'rgba(59, 29, 11, 0.82)'; g.font = `bold 82px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      const ry = (Y(4) + Y(5)) / 2;
-      g.save(); g.translate(X(2), ry); g.fillText('楚  河', 0, 0); g.restore();
-      g.save(); g.translate(X(6), ry); g.rotate(Math.PI); g.fillText('漢  界', 0, 0); g.restore();
-    });
+    };
+    // a groove: its shaded walls, then the ink at the bottom
+    if (relief) { g.strokeStyle = '#5a5a5a'; grid(9); }
+    else { g.strokeStyle = 'rgba(70, 32, 8, 0.2)'; grid(10); g.strokeStyle = '#3b1d0b'; grid(3); }
+    // the river: 楚河 (Chu River) and 漢界 (Han Border), on its bed
+    g.fillStyle = relief ? '#8a8a8a' : 'rgba(40, 18, 6, 0.9)'; g.font = `bold 70px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.save(); g.translate(X(2), ry); g.fillText('楚  河', 0, 0); g.restore();
+    g.save(); g.translate(X(6), ry); g.rotate(Math.PI); g.fillText('漢  界', 0, 0); g.restore();
+  }
+  // the frame round the board, on the same 100 px per unit: dark wood with a line cut along it,
+  // a knot at each corner, at the middle of the ends and at either end of the river
+  const FRAME = '#4a2010';
+  function drawFrame(g, w, h, relief) {
+    woodGrain(g, w, h, relief ? '#ffffff' : FRAME, 200, 5);
+    const cut = relief ? '#6a6a6a' : 'rgba(25, 8, 2, 0.8)', m = 20;
+    g.strokeStyle = cut; g.lineWidth = relief ? 6 : 2.5; g.strokeRect(m, m, w - 2 * m, h - 2 * m);
+    const diamond = (x, y, r) => { g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y); g.closePath(); };
+    for (const [x, y] of [[m, m], [w - m, m], [m, h - m], [w - m, h - m], [w / 2, m], [w / 2, h - m], [m, h / 2], [w - m, h / 2]]) {
+      g.fillStyle = relief ? '#ffffff' : FRAME; diamond(x, y, 16); g.fill();
+      g.strokeStyle = cut; diamond(x, y, 14); g.stroke();
+      g.fillStyle = cut; diamond(x, y, 6); g.fill();
+    }
   }
   function tableTexture() {
     return canvas(512, 512, (g, w, h) => { woodGrain(g, w, h, '#3a1e10', 160, 3); });
@@ -142,36 +200,134 @@ const MODELS = (() => {
   }
   function clearTextureCache() { for (const t of faceCache.values()) t.dispose(); faceCache.clear(); for (const t of bannerCache.values()) t.dispose(); bannerCache.clear(); }
 
+  // the river's ripples, as a normal map: a few waves whose periods divide the tile, so it repeats without a seam
+  function rippleTexture() {
+    const W = 256, H = 64, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d'), img = g.createImageData(W, H), d = img.data;
+    const waves = [[2, 1, 0, 1], [3, -1, 1.3, 0.7], [5, 1, 2.1, 0.4], [7, -2, 0.7, 0.25]];   // across, along, phase, height
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+      let nx = 0, ny = 0;
+      for (const [fx, fy, p, a] of waves) { const k = a * Math.cos((fx * x) / W * 2 * Math.PI + (fy * y) / H * 2 * Math.PI + p) * 0.25; nx -= k * fx; ny += k * fy * 4; }
+      const s = 127.5 / Math.hypot(nx, ny, 1);
+      d[i] = 127.5 + nx * s; d[i + 1] = 127.5 + ny * s; d[i + 2] = 127.5 + s; d[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1); t.anisotropy = 8;
+    return t;
+  }
+
   // ---------- board and table ----------
+  // the board's top and frame: their textures take a moment to draw, so once, for every board after
+  let boardMats = null;
+  function boardMaterials() {
+    if (boardMats) return boardMats;
+    // the frame's uvs are its own x and y, laid onto the board's 10 x 11 units; its textures at half the board's
+    // 100 px per unit, the frame being a thin band
+    const half = draw => (c, w, h) => { c.scale(0.5, 0.5); draw(c, w * 2, h * 2); };
+    const fmap = canvas(500, 550, half((c, w, h) => drawFrame(c, w, h, false))), fnorm = reliefTexture(500, 550, half((c, w, h) => drawFrame(c, w, h, true)), 1.5);
+    for (const t of [fmap, fnorm]) { t.repeat.set(1 / 10, 1 / 11); t.offset.set(0.5, 0.5); }
+    boardMats = {
+      top: new THREE.MeshStandardMaterial({
+        map: canvas(1000, 1100, (c, w, h) => drawBoard(c, w, h, false)), normalMap: reliefTexture(1000, 1100, (c, w, h) => drawBoard(c, w, h, true), 3), roughness: 0.88,
+      }),
+      frame: new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }),
+      water: waterMaterial(rippleTexture()),
+    };
+    return boardMats;
+  }
+  // clear green water: the bed and the river's words show through it, the lights glint on its ripples
+  function waterMaterial(ripples) {
+    return new THREE.MeshStandardMaterial({
+      color: '#1d5c68', transparent: true, opacity: 0.62, roughness: 0.1, normalMap: ripples, normalScale: new THREE.Vector2(0.45, 0.45), depthWrite: false,
+    });
+  }
+  // the water's surface, a little below the banks' top, meets them this far from the river's middle
+  const WATER_W = RIVER_Z[1] - (RIVER_Z[1] - RIVER_Z[0]) * (-WATER_Y / RIVER_D);
+  // a water surface: its ripples drift downstream
+  function waterMesh(g, m) {
+    const water = new THREE.Mesh(g, m), ripples = m.normalMap;
+    water.position.y = WATER_Y; water.receiveShadow = true;
+    water.onBeforeRender = () => { const s = performance.now() / 1000; ripples.offset.set(s * 0.05, s * 0.02); };
+    return water;
+  }
   function board() {
     const g = new THREE.Group();
-    const top = new THREE.MeshStandardMaterial({ map: boardTexture(), roughness: 0.88 });
+    // the top: flat at y = 0 but for the river, a shallow channel running under the frame at both ends. Each face
+    // keeps its own normal (no rounding across the banks); the carving is in the normal map.
+    const xs = [-5, -4.7, -4.62, 4.62, 4.7, 5], zs = [-5.5, -RIVER_Z[1], -RIVER_Z[0], RIVER_Z[0], RIVER_Z[1], 5.5], low = [0, 0, 1, 1, 0, 0];
+    const pos = [], uv = [];
+    const vert = (i, j) => { pos.push(xs[i], -RIVER_D * low[i] * low[j], zs[j]); uv.push((xs[i] + 5) / 10, 1 - (zs[j] + 5.5) / 11); };
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) { vert(i, j); vert(i, j + 1); vert(i + 1, j); vert(i, j + 1); vert(i + 1, j + 1); vert(i + 1, j); }
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); tg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    tg.computeVertexNormals();
+    const M = boardMaterials();
+    const top = new THREE.Mesh(tg, M.top);
+    top.receiveShadow = true; g.add(top);
+    // the water, from frame to frame and from bank to bank
+    g.add(waterMesh(new THREE.PlaneGeometry(9.3, 2 * WATER_W).rotateX(-Math.PI / 2), M.water));
     const side = new THREE.MeshStandardMaterial({ map: tableTexture(), color: '#8a5a32', roughness: 0.6 });
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(10, 0.36, 11), [side, side, top, side, side, side]);
-    slab.position.y = -0.18; slab.receiveShadow = true; slab.castShadow = true; g.add(slab);
+    // the slab under it all, its top below the river's bed
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(10, 0.26, 11), side);
+    slab.position.y = -0.23; slab.receiveShadow = true; slab.castShadow = true; g.add(slab);
+    // the raised frame, bevelled, from the slab's top to 0.07 above the board's; its inner edge 0.4 in from the slab's
+    const B = 0.03, rect = (p, x, z) => { p.moveTo(-x, -z); p.lineTo(x, -z); p.lineTo(x, z); p.lineTo(-x, z); p.closePath(); return p; };
+    const shape = rect(new THREE.Shape(), 5 - B, 5.5 - B); shape.holes.push(rect(new THREE.Path(), 4.6 + B, 5.1 + B));
+    const fg = new THREE.ExtrudeGeometry(shape, { depth: 0.17 - 2 * B, bevelEnabled: true, bevelThickness: B, bevelSize: B, bevelSegments: 3 });
+    fg.rotateX(-Math.PI / 2);
+    const frame = new THREE.Mesh(fg, M.frame);
+    frame.position.y = -0.1 + B; frame.castShadow = true; frame.receiveShadow = true; g.add(frame);
     // a darker lacquered rim and four feet
     const rim = new THREE.Mesh(new THREE.BoxGeometry(10.5, 0.2, 11.5), new THREE.MeshStandardMaterial({ color: '#2a120a', roughness: 0.35, metalness: 0.1 }));
     rim.position.y = -0.42; rim.receiveShadow = true; g.add(rim);
     for (const [x, z] of [[-4.7, -5.2], [4.7, -5.2], [-4.7, 5.2], [4.7, 5.2]]) mesh(geo('foot', () => new THREE.CylinderGeometry(0.3, 0.38, 0.4, 10)), mat('#2a120a'), g, x, -0.7, z);
     return g;
   }
-  // the three-kingdom board (sanguo.js): a hexagon of three half-boards. The texture covers the square around it,
-  // SPAN units from the centre each way; world x, z map straight onto the canvas.
-  const SPAN = 9.2;
-  function sanguoTexture() {
-    const PX = 2048, sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc;
-    return canvas(PX, PX, g => {
-      woodGrain(g, PX, PX, '#d9b277', 380, 11);
+  // the three-kingdom board (sanguo.js): a hexagon of three half-boards, a river between each two kingdoms running from
+  // the centre to the middle of their shared edge. The textures cover the square around it, SPAN units from the centre
+  // each way; world x, z map straight onto the canvas. The wood reaches SG_RO from the centre (to the middle of an
+  // edge), a little wider than SG.BOARD_R so that the frame, from SG_RI, clears the pieces on the back rows.
+  const SPAN = 9.2, SG_RO = SG.BOARD_R + 0.25, SG_RI = SG.H + 0.48, S60 = Math.sin(Math.PI / 3);
+  const dirOf = a => [Math.sin(a), Math.cos(a)];
+  const hexPts = R => Array.from({ length: 6 }, (_, i) => dirOf(Math.PI / 6 + (i * Math.PI) / 3).map(v => (v * R) / S60));   // corners, apothem R
+  const RIVERS = [0, 1, 2].map(k => SG.YAW(k) + Math.PI / 3);      // the river between kingdom k and the next, outwards
+  // the rivers' outline w from their middles: three arms from the centre out to out from it, joined round the centre
+  function riverStar(w, out) {
+    const pts = [];
+    for (const a of RIVERS) {
+      const [cx, cz] = dirOf(a - Math.PI / 3), [dx, dz] = dirOf(a), [lx, lz] = dirOf(a - Math.PI / 2), r = w / S60;
+      pts.push([cx * r, cz * r], [dx * out + lx * w, dz * out + lz * w], [dx * out - lx * w, dz * out - lz * w]);
+    }
+    return pts;
+  }
+  // what is left of a convex polygon on the side of a line where x * n[0] + z * n[1] >= c
+  function clip(poly, [nx, nz], c) {
+    const out = [], f = ([x, z]) => x * nx + z * nz - c;
+    poly.forEach((p, i) => {
+      const q = poly[(i + 1) % poly.length], fp = f(p), fq = f(q);
+      if (fp >= 0) out.push(p);
+      if ((fp >= 0) !== (fq >= 0)) { const t = fp / (fp - fq); out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]); }
+    });
+    return out;
+  }
+  // drawn twice like the ordinary board: in colour, and as the carving for its normal map
+  function drawSanguo(g, PX, relief) {
+    const sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc;
+    const trace = pts => { pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.closePath(); };
+    woodGrain(g, PX, PX, relief ? '#ffffff' : '#d9b277', 380, 11);
+    if (!relief) {
       const vg = g.createRadialGradient(PX / 2, PX / 2, 300, PX / 2, PX / 2, PX * 0.62);
       vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, 'rgba(70, 30, 5, 0.38)');
       g.fillStyle = vg; g.fillRect(0, 0, PX, PX);
-      g.strokeStyle = '#3b1d0b'; g.lineCap = 'round'; g.lineJoin = 'round';
-      const line = pts => { g.beginPath(); pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.stroke(); };
-      // the frame: a hexagon a little outside the outer points
-      const rim = (SG.H + 0.22) / Math.cos(Math.PI / 6);
-      g.lineWidth = 8;
-      line(Array.from({ length: 7 }, (_, i) => { const a = Math.PI / 6 + (i * Math.PI) / 3; return [rim * Math.sin(a), rim * Math.cos(a)]; }));
-      g.lineWidth = 3.4;
+      // the rivers' beds: wet, dark wood under the water, darker on the banks
+      g.fillStyle = 'rgba(40, 30, 14, 0.32)'; g.beginPath(); trace(riverStar(RIVER_Z[0], SG_RO)); g.fill();
+      g.fillStyle = 'rgba(40, 30, 14, 0.45)'; g.beginPath(); trace(riverStar(RIVER_Z[1], SG_RO)); trace(riverStar(RIVER_Z[0], SG_RO)); g.fill('evenodd');
+    }
+    const line = pts => { g.beginPath(); pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.stroke(); };
+    const grid = lw => {
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      g.lineWidth = lw + 4.6; line(hexPts(SG.H + 0.22).concat([hexPts(SG.H + 0.22)[0]]));   // a hexagon a little outside the outer points
+      g.lineWidth = lw;
       for (let k = 0; k < 3; k++) {
         for (let r = 0; r <= 4; r++) line([SG.at(k, 0, r), SG.at(k, 4, r), SG.at(k, 8, r)]);
         for (let c = 0; c <= 8; c++) line([SG.at(k, c, 0), SG.at(k, c, 4)]);
@@ -180,37 +336,104 @@ const MODELS = (() => {
         line([SG.at(k, 8, 4), SG.at(SG.rightOf(k), 0, 4)]);
         line([SG.at(k, 4, 4), SG.at(SG.rightOf(k), 4, 4)]);
       }
-      // the three rivers, each named for the water between those two kingdoms; each kingdom's seal at its edge
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      const RIVER = ['長  江', '淮  水', '漢  水'];
-      for (let k = 0; k < 3; k++) {
-        const a = SG.YAW(k) + Math.PI / 3, dx = Math.sin(a), dz = Math.cos(a), d = 4.1, turn = Math.atan2(dz, dx);
-        g.save(); g.translate(X(dx * d), Z(dz * d)); g.rotate(Math.cos(turn) < 0 ? turn + Math.PI : turn);   // never upside down
-        g.fillStyle = 'rgba(59, 29, 11, 0.8)'; g.font = `bold 78px ${BRUSH}`; g.fillText(RIVER[k], 0, 0); g.restore();
-        const y = SG.YAW(k), e = SG.H + 0.45;
-        g.save(); g.translate(X(Math.sin(y) * e), Z(Math.cos(y) * e)); g.rotate(-y);
-        g.fillStyle = PAL[SG_PAL[k]].ink; g.globalAlpha = 0.8; g.font = `bold 46px ${BRUSH}`; g.fillText(SG_HAN[k][1], 0, 0); g.restore();
-      }
+    };
+    // a groove: its shaded walls, then the ink at the bottom
+    if (relief) { g.strokeStyle = '#5a5a5a'; grid(10); }
+    else { g.strokeStyle = 'rgba(70, 32, 8, 0.2)'; grid(11); g.strokeStyle = '#3b1d0b'; grid(3.4); }
+    // the three rivers, each named for the water between those two kingdoms, on its bed
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const RIVER = ['長  江', '淮  水', '漢  水'];
+    RIVERS.forEach((a, k) => {
+      const [dx, dz] = dirOf(a), d = 4.1, turn = Math.atan2(dz, dx);
+      g.save(); g.translate(X(dx * d), Z(dz * d)); g.rotate(Math.cos(turn) < 0 ? turn + Math.PI : turn);   // never upside down
+      g.fillStyle = relief ? '#8a8a8a' : 'rgba(40, 18, 6, 0.9)'; g.font = `bold 72px ${BRUSH}`; g.fillText(RIVER[k], 0, 0); g.restore();
     });
   }
+  // the hexagonal frame, on the same canvas: a line cut along it, a knot at each corner and at each river's mouth, and
+  // each kingdom's seal inlaid at the middle of its own edge
+  function drawHexFrame(g, PX, relief) {
+    const sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc, mid = (SG_RI + SG_RO) / 2;
+    woodGrain(g, PX, PX, relief ? '#ffffff' : FRAME, 300, 5);
+    const cut = relief ? '#6a6a6a' : 'rgba(25, 8, 2, 0.8)';
+    g.strokeStyle = cut; g.lineWidth = relief ? 6 : 2.5; g.lineJoin = 'round';
+    g.beginPath(); hexPts(mid).forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.closePath(); g.stroke();
+    const diamond = (x, y, r) => { g.beginPath(); g.moveTo(x, y - r); g.lineTo(x + r, y); g.lineTo(x, y + r); g.lineTo(x - r, y); g.closePath(); };
+    for (const [x, z] of hexPts(mid).concat(RIVERS.map(a => dirOf(a).map(v => v * mid)))) {
+      g.fillStyle = relief ? '#ffffff' : FRAME; diamond(X(x), Z(z), 18); g.fill();
+      g.strokeStyle = cut; diamond(X(x), Z(z), 16); g.stroke();
+      g.fillStyle = cut; diamond(X(x), Z(z), 7); g.fill();
+    }
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let k = 0; k < 3; k++) {
+      const y = SG.YAW(k), [x, z] = dirOf(y).map(v => v * mid), r = 0.2 * sc;
+      g.save(); g.translate(X(x), Z(z)); g.rotate(-y);
+      g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2);
+      if (relief) { g.strokeStyle = cut; g.lineWidth = 6; g.stroke(); }
+      else { g.fillStyle = '#ead6a6'; g.fill(); g.strokeStyle = PAL[SG_PAL[k]].trim; g.lineWidth = 3; g.stroke(); g.fillStyle = PAL[SG_PAL[k]].ink; g.font = `bold ${Math.round(0.28 * sc)}px ${BRUSH}`; g.fillText(SG_HAN[k][1], 0, 2); }
+      g.restore();
+    }
+  }
+  let sanguoMats = null;
+  function sanguoMaterials() {
+    if (sanguoMats) return sanguoMats;
+    // the carving and the frame at half the colour's resolution; drawn at full size into a canvas scaled down
+    const half = draw => c => { c.scale(0.5, 0.5); draw(c, 2048); };
+    const fmap = canvas(1024, 1024, half((c, PX) => drawHexFrame(c, PX, false))), fnorm = reliefTexture(1024, 1024, half((c, PX) => drawHexFrame(c, PX, true)), 1.5);
+    for (const t of [fmap, fnorm]) { t.repeat.set(1 / (2 * SPAN), 1 / (2 * SPAN)); t.offset.set(0.5, 0.5); }
+    const ripples = rippleTexture(); ripples.repeat.set(0.35, 1.4);      // its uvs are world units: tiles as on the other board
+    sanguoMats = {
+      top: new THREE.MeshStandardMaterial({
+        map: canvas(2048, 2048, (c, w) => drawSanguo(c, w, false)), normalMap: reliefTexture(1024, 1024, half((c, PX) => drawSanguo(c, PX, true)), 1.8), roughness: 0.88,
+      }),
+      frame: new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }),
+      water: waterMaterial(ripples),
+    };
+    return sanguoMats;
+  }
   function sanguoBoard() {
-    const g = new THREE.Group(), rc = SG.BOARD_R / Math.cos(Math.PI / 6);
-    const corners = Array.from({ length: 6 }, (_, i) => { const a = Math.PI / 6 + (i * Math.PI) / 3; return [rc * Math.sin(a), rc * Math.cos(a)]; });
-    // the top: a hexagon fan with the texture laid flat on it
-    const pos = [0, 0, 0], uv = [0.5, 0.5], idx = [];
-    corners.forEach(([x, z], i) => { pos.push(x, 0, z); uv.push((x + SPAN) / (2 * SPAN), 1 - (z + SPAN) / (2 * SPAN)); idx.push(0, i + 1, ((i + 1) % 6) + 1); });
+    const g = new THREE.Group(), M = sanguoMaterials(), [W0, W1] = RIVER_Z, D = RIVER_D;
+    // the top: three pieces of wood at y = 0 between the rivers, banks sloping down to the bed, and the bed itself, a
+    // hexagon RIVER_D below. Every triangle is turned to face up and keeps its own normal; the carving is in the normal map.
+    const pos = [], uv = [];
+    const tri = (a, b, c) => {
+      if ((b[2] - a[2]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[2] - a[2]) < 0) [b, c] = [c, b];
+      for (const [x, y, z] of [a, b, c]) { pos.push(x, y, z); uv.push((x + SPAN) / (2 * SPAN), 1 - (z + SPAN) / (2 * SPAN)); }
+    };
+    const at = ([x, z], y) => [x, y, z], add = ([x, z], [u, v], s) => [x + u * s, z + v * s];
+    for (let k = 0; k < 3; k++) {                        // kingdom k's land: inside the hexagon, clear of both its rivers' banks
+      const land = clip(clip(hexPts(SG_RO), dirOf(RIVERS[k] - Math.PI / 2), W1), dirOf(RIVERS[(k + 2) % 3] + Math.PI / 2), W1);
+      for (let i = 1; i < land.length - 1; i++) tri(at(land[0], 0), at(land[i], 0), at(land[i + 1], 0));
+    }
+    for (const a of RIVERS) for (const s of [-1, 1]) {   // each river's two banks, from the centre out to the edge
+      const lat = dirOf(a + (s * Math.PI) / 2), bis = dirOf(a + (s * Math.PI) / 3), mouth = dirOf(a).map(v => v * SG_RO);
+      const c1 = at(bis.map(v => (v * W1) / S60), 0), c0 = at(bis.map(v => (v * W0) / S60), -D);
+      const o1 = at(add(mouth, lat, W1), 0), o0 = at(add(mouth, lat, W0), -D);
+      tri(c1, o1, o0); tri(c1, o0, c0);
+    }
+    const bed = hexPts(SG_RO);
+    bed.forEach((p, i) => tri([0, -D, 0], at(p, -D), at(bed[(i + 1) % 6], -D)));
     const tg = new THREE.BufferGeometry();
     tg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); tg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    tg.setIndex(idx); tg.computeVertexNormals();
-    const top = new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: sanguoTexture(), roughness: 0.88 }));
+    tg.computeVertexNormals();
+    const top = new THREE.Mesh(tg, M.top);
     top.receiveShadow = true; g.add(top);
-    const side = new THREE.MeshStandardMaterial({ map: tableTexture(), color: '#8a5a32', roughness: 0.6 });
-    const slab = new THREE.Mesh(new THREE.CylinderGeometry(rc, rc, 0.36, 6), side);
-    // the slab's own top stays a little below the textured one: seen from afar the two would flicker into each other
-    slab.rotation.y = Math.PI / 6; slab.position.y = -0.2; slab.receiveShadow = true; slab.castShadow = true; g.add(slab);
+    // the water, a three-armed star from bank to bank, running under the frame at each river's mouth
+    const star = new THREE.Shape(riverStar(WATER_W, SG_RO).map(([x, z]) => new THREE.Vector2(x, -z)));
+    g.add(waterMesh(new THREE.ShapeGeometry(star).rotateX(-Math.PI / 2), M.water));
+    const rc = SG_RO / S60, side = new THREE.MeshStandardMaterial({ map: tableTexture(), color: '#8a5a32', roughness: 0.6 });
+    // the slab under it all, its top below the rivers' bed
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(rc, rc, 0.26, 6), side);
+    slab.rotation.y = Math.PI / 6; slab.position.y = -0.23; slab.receiveShadow = true; slab.castShadow = true; g.add(slab);
+    // the raised frame, bevelled, from the slab's top to 0.07 above the board's
+    const B = 0.03, hex = (p, R) => { hexPts(R).forEach(([x, z], i) => (i ? p.lineTo(x, -z) : p.moveTo(x, -z))); p.closePath(); return p; };
+    const shape = hex(new THREE.Shape(), SG_RO - B); shape.holes.push(hex(new THREE.Path(), SG_RI + B));
+    const fg = new THREE.ExtrudeGeometry(shape, { depth: 0.17 - 2 * B, bevelEnabled: true, bevelThickness: B, bevelSize: B, bevelSegments: 3 });
+    fg.rotateX(-Math.PI / 2);
+    const frame = new THREE.Mesh(fg, M.frame);
+    frame.position.y = -0.1 + B; frame.castShadow = true; frame.receiveShadow = true; g.add(frame);
     const rim = new THREE.Mesh(new THREE.CylinderGeometry(rc + 0.3, rc + 0.3, 0.2, 6), new THREE.MeshStandardMaterial({ color: '#2a120a', roughness: 0.35, metalness: 0.1 }));
     rim.rotation.y = Math.PI / 6; rim.position.y = -0.42; rim.receiveShadow = true; g.add(rim);
-    for (const [x, z] of corners) mesh(geo('foot', () => new THREE.CylinderGeometry(0.3, 0.38, 0.4, 10)), mat('#2a120a'), g, x * 0.93, -0.7, z * 0.93);
+    for (const [x, z] of hexPts(SG_RO)) mesh(geo('foot', () => new THREE.CylinderGeometry(0.3, 0.38, 0.4, 10)), mat('#2a120a'), g, x * 0.93, -0.7, z * 0.93);
     return g;
   }
   function table() {
@@ -248,30 +471,58 @@ const MODELS = (() => {
   }
 
   // ---------- warriors ----------
-  // humanoid with named joints: legs, armL, armR (pivot at the shoulder), head
+  // humanoid with named joints: legs, armL, armR (pivot at the shoulder), head. Rounded and smooth: tapered legs in
+  // boots, a chest that narrows to a belted waist, round shoulder plates, bracers, a face with brows and a nose
   function humanoid(pal, o = {}) {
     const g = group(), j = {};
-    const armour = o.armour || pal.main;
+    const armour = o.armour || pal.main, cloth = o.robe || armour, skin = o.skin || SKIN, hair = o.hair || '#1a1010';
     if (!o.noLegs) {
       j.legL = group(g, -0.05, 0.22, 0); j.legR = group(g, 0.05, 0.22, 0);
-      for (const L of [j.legL, j.legR]) { box(0.065, 0.2, 0.075, pal.dark, L, 0, -0.1, 0); box(0.075, 0.05, 0.1, '#2a1a10', L, 0, -0.2, 0.01); }
+      for (const L of [j.legL, j.legR]) {
+        part(geo('shin', () => new THREE.CylinderGeometry(0.036, 0.029, 0.18, 10)), pal.dark, L, 0, -0.09, 0);
+        part(geo('boot', () => new THREE.SphereGeometry(0.04, 10, 8).scale(0.85, 0.7, 1.4)), '#2a1a10', L, 0, -0.19, 0.012);
+      }
     }
-    if (o.robe) cyl(0.1, 0.17, 0.3, o.robe, g, 0, 0.16, 0, 8);
-    else cyl(0.1, 0.13, 0.1, armour, g, 0, 0.21, 0, 8);           // armoured skirt
-    box(0.2, 0.17, 0.12, o.robe || armour, g, 0, 0.33, 0);
-    box(0.14, 0.07, 0.012, pal.trim, g, 0, 0.35, 0.065, { metal: 0.6, rough: 0.35 });
-    box(0.21, 0.03, 0.13, pal.trim, g, 0, 0.255, 0, { metal: 0.6, rough: 0.35 });
-    if (!o.robe) for (const sx of [-1, 1]) box(0.08, 0.05, 0.13, pal.trim, g, sx * 0.135, 0.405, 0, { metal: 0.5, rough: 0.4 });
+    if (o.robe) {                                                        // a long robe flaring to a trimmed hem
+      part(lathe('robe', [[0.17, 0.01], [0.15, 0.06], [0.125, 0.16], [0.1, 0.31]]), cloth, g, 0, 0, 0);
+      part(geo('hem', () => new THREE.CylinderGeometry(0.172, 0.172, 0.02, 16, 1, true)), pal.trim, g, 0, 0.02, 0, TRIM);
+    } else {                                                             // an armoured skirt
+      part(lathe('skirt', [[0.135, -0.11], [0.112, -0.05], [0.098, 0]]), armour, g, 0, 0.27, 0);
+      part(geo('skirtHem', () => new THREE.CylinderGeometry(0.137, 0.137, 0.015, 14, 1, true)), pal.trim, g, 0, 0.165, 0, TRIM);
+    }
+    part(lathe('chest', [[0, 0], [0.078, 0.005], [0.1, 0.09], [0.1, 0.13], [0.085, 0.165], [0.035, 0.185], [0, 0.185]], 0.62), cloth, g, 0, 0.24, 0);
+    if (o.robe) part(geo('sash', () => new THREE.TorusGeometry(0.1, 0.012, 6, 18).rotateX(Math.PI / 2).scale(1, 1, 0.66)), pal.trim, g, 0, 0.3, 0, TRIM);
+    else {
+      part(geo('belt', () => new THREE.TorusGeometry(0.08, 0.012, 6, 18).rotateX(Math.PI / 2).scale(1, 1, 0.66)), pal.trim, g, 0, 0.255, 0, TRIM);
+      part(geo('mirror', () => new THREE.CylinderGeometry(0.03, 0.03, 0.01, 16).rotateX(Math.PI / 2)), pal.trim, g, 0, 0.35, 0.062, TRIM);   // the breast mirror
+      for (const sx of [-1, 1]) {
+        const pad = part(geo('pauldron', () => new THREE.SphereGeometry(0.052, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1.05, 0.75, 1)), pal.trim, g, sx * 0.118, 0.395, 0, TRIM);
+        pad.rotation.z = -sx * 0.45;
+      }
+    }
     j.armL = group(g, -0.13, 0.4, 0); j.armR = group(g, 0.13, 0.4, 0);
-    const skin = o.skin || SKIN, hair = o.hair || '#1a1010';
-    for (const A of [j.armL, j.armR]) { box(0.055, 0.17, 0.065, o.robe || armour, A, 0, -0.085, 0); ball(0.032, skin, A, 0, -0.18, 0.01); }
+    for (const A of [j.armL, j.armR]) {
+      if (o.robe) part(geo('sleeve', () => new THREE.CylinderGeometry(0.032, 0.058, 0.16, 10)), cloth, A, 0, -0.085, 0);
+      else {
+        part(geo('upperArm', () => new THREE.CapsuleGeometry(0.026, 0.08, 4, 8)), cloth, A, 0, -0.055, 0);
+        part(geo('bracer', () => new THREE.CylinderGeometry(0.029, 0.033, 0.065, 10)), pal.trim, A, 0, -0.13, 0, TRIM);
+      }
+      part(geo('hand', () => new THREE.SphereGeometry(0.028, 10, 8)), skin, A, 0, -0.18, 0.01);
+    }
+    part(geo('neck', () => new THREE.CylinderGeometry(0.026, 0.03, 0.05, 10)), skin, g, 0, 0.425, 0);
     j.head = group(g, 0, 0.43, 0);
-    box(0.1, 0.1, 0.1, skin, j.head, 0, 0.06, 0);
-    for (const sx of [-1, 1]) box(0.018, 0.012, 0.005, '#1a1010', j.head, sx * 0.025, 0.07, 0.051);
+    part(geo('head', () => new THREE.SphereGeometry(0.056, 16, 12).scale(0.94, 1.08, 1)), skin, j.head, 0, 0.065, 0);
+    part(geo('hair', () => new THREE.SphereGeometry(0.06, 14, 10, Math.PI, Math.PI, 0, Math.PI * 0.62).scale(0.94, 1.08, 1)), hair, j.head, 0, 0.065, -0.004);
+    for (const sx of [-1, 1]) {
+      part(geo('eye', () => new THREE.SphereGeometry(0.0085, 6, 5)), '#141010', j.head, sx * 0.021, 0.07, 0.05);
+      box(0.026, 0.007, 0.008, hair, j.head, sx * 0.022, 0.085, 0.05).rotation.z = sx * 0.25;   // brows, frowning
+    }
+    part(geo('nose', () => new THREE.ConeGeometry(0.011, 0.026, 6).rotateX(Math.PI / 2.4)), skin, j.head, 0, 0.058, 0.056);
     // beard: true = short; 'long' falls to the chest; 'bushy' covers the jaw
-    if (o.beard === 'long') { box(0.06, 0.05, 0.02, hair, j.head, 0, 0.015, 0.055); box(0.05, 0.16, 0.018, hair, j.head, 0, -0.07, 0.06); }
-    else if (o.beard === 'bushy') { box(0.11, 0.07, 0.03, hair, j.head, 0, 0.02, 0.05); for (const sx of [-1, 1]) box(0.03, 0.04, 0.02, hair, j.head, sx * 0.05, -0.025, 0.05); }
-    else if (o.beard) box(0.06, 0.05, 0.02, hair, j.head, 0, 0.015, 0.055);
+    if (o.beard) part(geo('stache', () => new THREE.CapsuleGeometry(0.007, 0.04, 3, 6).rotateZ(Math.PI / 2)), hair, j.head, 0, 0.044, 0.054);
+    if (o.beard === 'long') part(geo('beardLong', () => new THREE.ConeGeometry(0.034, 0.2, 8).rotateX(Math.PI).scale(1, 1, 0.6)), hair, j.head, 0, -0.045, 0.062).rotation.x = -0.25;
+    else if (o.beard === 'bushy') part(geo('beardBushy', () => new THREE.SphereGeometry(0.05, 10, 8).scale(1.15, 0.8, 0.7)), hair, j.head, 0, 0.022, 0.035);
+    else if (o.beard) part(geo('beardShort', () => new THREE.ConeGeometry(0.022, 0.05, 8).rotateX(Math.PI).scale(1, 1, 0.7)), hair, j.head, 0, 0.012, 0.05);
     g.userData.j = j;
     return g;
   }
@@ -296,6 +547,12 @@ const MODELS = (() => {
     return w;
   }
 
+  // a round helmet over the head, with a brim and a neck guard behind
+  function helmet(head, color, o) {
+    part(geo('helm', () => new THREE.SphereGeometry(0.066, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.5).scale(0.96, 1, 1)), color, head, 0, 0.085, 0, o);
+    part(geo('helmBrim', () => new THREE.TorusGeometry(0.064, 0.008, 6, 20).rotateX(Math.PI / 2)), color, head, 0, 0.088, 0, o);
+    part(geo('neckGuard', () => new THREE.CylinderGeometry(0.068, 0.078, 0.05, 14, 1, true, Math.PI * 0.6, Math.PI * 0.8)), color, head, 0, 0.065, 0, o);
+  }
   // two long pheasant feathers on a helmet, the mark of a famous general
   function plumes(head, color, len = 1) {
     for (const sx of [-1, 1]) {
@@ -323,8 +580,8 @@ const MODELS = (() => {
 
   function buildGeneral(pal, side) {
     const h = humanoid(pal, { armour: ARMOUR[side], beard: true }), j = h.userData.j;
-    cyl(0.062, 0.068, 0.07, pal.trim, j.head, 0, 0.12, 0, 8, { metal: 0.7, rough: 0.3 });
-    cyl(0.02, 0.03, 0.05, pal.trim, j.head, 0, 0.18, 0, 6, { metal: 0.7, rough: 0.3 });
+    helmet(j.head, pal.trim, { metal: 0.7, rough: 0.3, smooth: true });
+    cyl(0.018, 0.028, 0.05, pal.trim, j.head, 0, 0.17, 0, 10, { metal: 0.7, rough: 0.3, smooth: true });
     plumes(j.head, pal.plume);
     cape(h, side);
     sword(j.armR, pal);
@@ -341,40 +598,49 @@ const MODELS = (() => {
   }
   function buildSoldier(pal) {
     const h = humanoid(pal), j = h.userData.j;
-    cyl(0.005, 0.075, 0.08, pal.dark, j.head, 0, 0.14, 0, 8);           // conical helmet
-    cyl(0.004, 0.004, 0.06, pal.plume, j.head, 0, 0.2, 0, 3);
+    helmet(j.head, pal.dark, { metal: 0.4, rough: 0.5, smooth: true });
+    cyl(0.003, 0.012, 0.05, pal.trim, j.head, 0, 0.165, 0, 6, { metal: 0.6, rough: 0.35, smooth: true });   // the spike...
+    cyl(0.018, 0.006, 0.04, pal.plume, j.head, 0, 0.2, 0, 8, SMOOTH);                                       // ...and its tassel
     spear(j.armR, pal);
     const shield = group(j.armL, -0.04, -0.12, 0.03);
-    const s = cyl(0.1, 0.1, 0.025, pal.main, shield, 0, 0, 0, 10); s.rotation.z = Math.PI / 2;
-    const boss = cyl(0.03, 0.03, 0.03, pal.trim, shield, -0.015, 0, 0, 8, { metal: 0.7, rough: 0.3 }); boss.rotation.z = Math.PI / 2;
+    const s = cyl(0.1, 0.1, 0.025, pal.main, shield, 0, 0, 0, 18, SMOOTH); s.rotation.z = Math.PI / 2;
+    part(geo('shieldRim', () => new THREE.TorusGeometry(0.1, 0.01, 6, 24).rotateY(Math.PI / 2)), pal.trim, shield, 0, 0, 0, TRIM);
+    const boss = sball(0.032, pal.trim, shield, -0.015, 0, 0, TRIM); boss.scale.set(0.6, 1, 1);
     h.scale.setScalar(0.92);
     return h;
   }
   function buildHorse(pal, side) {
     const g = group(), j = {};
-    const coat = pal.horse;
+    const coat = pal.horse, dark = '#1a0f08';
     const body = group(g, 0, 0.32, 0); j.body = body;
-    box(0.15, 0.15, 0.36, coat, body, 0, 0, 0);
-    box(0.17, 0.05, 0.22, pal.main, body, 0, 0.08, -0.01);                   // saddle cloth
+    part(geo('horseBody', () => new THREE.CapsuleGeometry(0.078, 0.22, 6, 14).rotateX(Math.PI / 2).scale(0.95, 1, 1)), coat, body, 0, 0, 0);
+    part(geo('saddleCloth', () => new THREE.CylinderGeometry(0.088, 0.088, 0.22, 14, 1, true, Math.PI * 0.4, Math.PI * 1.2).rotateX(Math.PI / 2)), pal.main, body, 0, 0.012, -0.01);
+    part(geo('saddle', () => new THREE.SphereGeometry(0.06, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.5, 1.3)), '#3a2210', body, 0, 0.075, -0.01);
     const neck = group(body, 0, 0.05, 0.16); neck.rotation.x = -0.6;
-    box(0.09, 0.2, 0.1, coat, neck, 0, 0.09, 0);
-    box(0.02, 0.18, 0.05, '#1a0f08', neck, 0, 0.1, -0.05);                  // mane
+    part(geo('horseNeck', () => new THREE.CylinderGeometry(0.042, 0.062, 0.21, 12).scale(0.85, 1, 1)), coat, neck, 0, 0.09, 0);
+    box(0.018, 0.2, 0.05, dark, neck, 0, 0.1, -0.045);                       // mane
     const head = group(neck, 0, 0.19, 0.02); head.rotation.x = 1.0;
-    box(0.08, 0.08, 0.17, coat, head, 0, 0, 0.06);
-    for (const sx of [-1, 1]) box(0.02, 0.05, 0.02, coat, head, sx * 0.03, 0.06, 0);
-    const tail = group(body, 0, 0.03, -0.18); tail.rotation.x = 0.5;
-    box(0.03, 0.16, 0.03, '#1a0f08', tail, 0, -0.08, 0);
+    part(geo('horseHead', () => new THREE.CylinderGeometry(0.03, 0.045, 0.17, 12).rotateX(Math.PI / 2).scale(0.85, 1, 1)), coat, head, 0, 0, 0.06);
+    part(geo('muzzle', () => new THREE.SphereGeometry(0.033, 10, 8).scale(0.85, 0.9, 1)), coat, head, 0, -0.004, 0.145);
+    for (const sx of [-1, 1]) {
+      part(geo('horseEar', () => new THREE.ConeGeometry(0.013, 0.05, 6)), coat, head, sx * 0.025, 0.045, 0.0).rotation.z = -sx * 0.25;
+      part(geo('eye', () => new THREE.SphereGeometry(0.0085, 6, 5)), '#141010', head, sx * 0.035, 0.018, 0.05);
+    }
+    const tail = group(body, 0, 0.03, -0.19); tail.rotation.x = 0.5;
+    part(geo('horseTail', () => new THREE.ConeGeometry(0.035, 0.2, 8).rotateX(Math.PI)), dark, tail, 0, -0.09, 0);
     j.legs = [];
     for (const [x, z] of [[-0.05, 0.13], [0.05, 0.13], [-0.05, -0.13], [0.05, -0.13]]) {
-      const L = group(body, x, -0.07, z); box(0.04, 0.22, 0.045, coat, L, 0, -0.11, 0); box(0.045, 0.03, 0.05, '#1a0f08', L, 0, -0.22, 0);
+      const L = group(body, x, -0.07, z);
+      part(geo('horseLeg', () => new THREE.CylinderGeometry(0.026, 0.017, 0.2, 8)), coat, L, 0, -0.1, 0);
+      part(geo('hoof', () => new THREE.CylinderGeometry(0.02, 0.024, 0.035, 8)), dark, L, 0, -0.215, 0);
       j.legs.push(L);
     }
     // the rider sits on the saddle, lance in hand
     const rider = humanoid(pal, { noLegs: true });
     rider.position.set(0, 0.21, -0.01); rider.scale.setScalar(0.82); body.add(rider);
     const rj = rider.userData.j;
-    cyl(0.055, 0.065, 0.06, pal.trim, rj.head, 0, 0.12, 0, 8, { metal: 0.6, rough: 0.35 });
-    cyl(0.004, 0.004, 0.08, pal.plume, rj.head, 0, 0.19, 0, 3);
+    helmet(rj.head, pal.trim, TRIM);
+    cyl(0.016, 0.005, 0.07, pal.plume, rj.head, 0, 0.18, 0, 8, SMOOTH);
     halberd(rj.armR, pal);
     j.armR = rj.armR; j.armL = rj.armL; j.head = rj.head;
     g.userData.j = j;
@@ -389,7 +655,7 @@ const MODELS = (() => {
     j.wheels = [];
     for (const sx of [-1, 1]) {
       const w = group(g, sx * 0.19, 0.15, -0.02);
-      const rim = cyl(0.15, 0.15, 0.03, '#4a2a14', w, 0, 0, 0, 12); rim.rotation.z = Math.PI / 2;
+      const rim = cyl(0.15, 0.15, 0.03, '#4a2a14', w, 0, 0, 0, 20, SMOOTH); rim.rotation.z = Math.PI / 2;
       for (let k = 0; k < 4; k++) { const sp = box(0.012, 0.27, 0.02, '#2a160a', w, 0, 0, 0); sp.rotation.x = (k * Math.PI) / 4; }
       j.wheels.push(w);
     }
@@ -398,7 +664,7 @@ const MODELS = (() => {
     cyl(0.005, 0.2, 0.08, pal.main, g, 0.09, 0.73, -0.08, 8);
     const driver = humanoid(pal, { noLegs: true }); driver.position.set(-0.03, 0.12, 0); driver.scale.setScalar(0.85); g.add(driver);
     const dj = driver.userData.j;
-    cyl(0.055, 0.065, 0.06, pal.trim, dj.head, 0, 0.12, 0, 8, { metal: 0.6, rough: 0.35 });
+    helmet(dj.head, pal.trim, TRIM);
     halberd(dj.armR, pal);
     j.armR = dj.armR; j.armL = dj.armL; j.head = dj.head;
     g.userData.j = j;
@@ -407,17 +673,20 @@ const MODELS = (() => {
   function buildElephant(pal, side) {
     const g = group(), j = {}, grey = '#8d8f96';
     const body = group(g, 0, 0.34, 0); j.body = body;
-    const b = ball(0.2, grey, body); b.scale.set(0.85, 0.8, 1.15);
+    const b = sball(0.2, grey, body); b.scale.set(0.85, 0.8, 1.15);
     const head = group(body, 0, 0.06, 0.21);
-    const hd = ball(0.12, grey, head); hd.scale.set(1, 1.05, 0.95);
-    for (const sx of [-1, 1]) { const ear = box(0.02, 0.15, 0.13, '#7c7e86', head, sx * 0.12, 0.01, -0.03); ear.rotation.y = sx * 0.4; }
+    const hd = sball(0.12, grey, head); hd.scale.set(1, 1.05, 0.95);
+    for (const sx of [-1, 1]) {
+      const ear = part(geo('elephantEar', () => new THREE.SphereGeometry(0.09, 12, 8).scale(0.2, 1, 0.85)), '#7c7e86', head, sx * 0.12, 0.01, -0.03); ear.rotation.y = sx * 0.4;
+      part(geo('eye', () => new THREE.SphereGeometry(0.0085, 6, 5)), '#141010', head, sx * 0.07, 0.04, 0.09);
+    }
     // trunk in three segments, curling down
     let t = group(head, 0, -0.04, 0.1); t.rotation.x = 0.5; j.trunk = t;
-    for (let k = 0; k < 3; k++) { cyl(0.04 - k * 0.008, 0.045 - k * 0.008, 0.11, grey, t, 0, -0.05, 0, 6); const n = group(t, 0, -0.1, 0); n.rotation.x = 0.35; t = n; }
-    for (const sx of [-1, 1]) { const tusk = cyl(0.004, 0.02, 0.14, '#f3ecd8', head, sx * 0.06, -0.07, 0.08, 5); tusk.rotation.x = -1.1; }
+    for (let k = 0; k < 3; k++) { cyl(0.04 - k * 0.008, 0.045 - k * 0.008, 0.11, grey, t, 0, -0.05, 0, 12, SMOOTH); const n = group(t, 0, -0.1, 0); n.rotation.x = 0.35; t = n; }
+    for (const sx of [-1, 1]) { const tusk = cyl(0.004, 0.02, 0.14, '#f3ecd8', head, sx * 0.06, -0.07, 0.08, 8, SMOOTH); tusk.rotation.x = -1.1; }
     j.legs = [];
     for (const [x, z] of [[-0.09, 0.12], [0.09, 0.12], [-0.09, -0.12], [0.09, -0.12]]) {
-      const L = group(body, x, -0.12, z); cyl(0.05, 0.055, 0.22, grey, L, 0, -0.1, 0, 7); j.legs.push(L);
+      const L = group(body, x, -0.12, z); cyl(0.05, 0.055, 0.22, grey, L, 0, -0.1, 0, 12, SMOOTH); j.legs.push(L);
     }
     // howdah with the side's cloth and a little canopy
     box(0.26, 0.04, 0.3, pal.main, body, 0, 0.14, 0);
@@ -630,13 +899,33 @@ const MODELS = (() => {
   };
 
   const BUILD = { 1: buildGeneral, 2: buildAdvisor, 3: buildElephant, 4: buildHorse, 5: buildChariot, 6: buildCatapult, 7: buildSoldier };
+
+  // figures from model files (a glTF scene, loaded by whoever has one) in place of the built ones: by hero id, or by
+  // piece type and palette ('7:1' a Red soldier, '7' a soldier of any side). Built facing +z, standing on y = 0,
+  // about as tall as the built figure. Nodes named like the joints (legL, legR, armL, armR, head, body, trunk, arm,
+  // stone, leg0..3, wheel0..1) move as the built ones do; a joint the model lacks is an empty group, so nothing breaks.
+  const FIGURES = new Map();
+  function setFigure(key, scene) { if (scene) FIGURES.set(String(key), scene); else FIGURES.delete(String(key)); }
+  const JOINTS = ['legL', 'legR', 'armL', 'armR', 'head', 'body', 'trunk', 'arm', 'stone'];
+  function fromModel(src) {
+    const fig = src.clone(true), j = {};
+    fig.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    for (const name of JOINTS) j[name] = fig.getObjectByName(name) || group(fig);
+    const list = pre => [0, 1, 2, 3].map(i => fig.getObjectByName(pre + i)).filter(Boolean);
+    if (list('leg').length) j.legs = list('leg');
+    if (list('wheel').length) j.wheels = list('wheel');
+    fig.userData.j = j;
+    return fig;
+  }
+
   // a warrior for a piece, facing the enemy; with a banner pole for the army view.
   // hero: id from heroes.js for a general led by that hero (its banner then bears the hero's character)
   function warrior(piece, hero) {
     const side = palKey(piece), type = typeOf(piece), pal = PAL[side];
     const led = type === XQ.K && HEROES.valid(hero) ? hero : '';
     const root = new THREE.Group();
-    const fig = led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
+    const model = (led && FIGURES.get(led)) || FIGURES.get(type + ':' + side) || FIGURES.get(String(type));
+    const fig = model ? fromModel(model) : led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
     root.add(fig);
     root.rotation.y = side === 1 ? Math.PI : 0;              // Red sits at +z and faces -z
     // banner on a pole, shown in the army view so the character stays readable
@@ -651,5 +940,5 @@ const MODELS = (() => {
     return root;
   }
 
-  return { board, sanguoBoard, table, lantern, disc, warrior, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, table, lantern, disc, warrior, setFigure, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();
