@@ -84,5 +84,5 @@ const ACH_UI = (() => {
 
   function init(opts) { toast = opts.toast || toast; render(); }
   ACCOUNT.onChange(u => { if (!u) { server = null; } render(); });
-  return { init, check, sync, render, get count() { return earned().size; } };
+  return { init, check, sync, render, get count() { return earned().size; }, get earned() { return earned(); } };
 })();

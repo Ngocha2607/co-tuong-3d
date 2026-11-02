@@ -376,6 +376,16 @@ const I18N = (() => {
     'Năm 219, trên đỉnh núi đối diện Định Quân Sơn: cờ đỏ phất lên là Hoàng Trung đổ xuống.': 'The year 219, on the peak facing Mount Dingjun: when the red flag waves, Huang Zhong charges down.',
     'Năm 225, rừng rậm phương Nam bên sông Lô: khí độc trên mặt nước, voi chiến và cột vật tổ.': 'The year 225, the southern jungle by the Lu River: poison mist on the water, war elephants and totem poles.',
     'Năm 228, cổng thành mở toang, Khổng Minh gảy đàn trên lầu trước mười lăm vạn quân Tư Mã Ý.': 'The year 228: the gates wide open, Kongming plays his zither on the tower before Sima Yi’s hundred and fifty thousand.',
+    // looks (skins.js)
+    'Trang phục': 'Looks', 'Bàn cờ': 'Board', 'Quân cờ': 'Pieces', 'Chiến binh': 'Warriors',
+    'Gỗ': 'Wood', 'Sơn mài': 'Lacquer', 'Ngọc bích': 'Jade', 'Đồng': 'Bronze', 'Ngà': 'Ivory', 'Ngọc': 'Jade', 'Gỗ mun': 'Ebony',
+    'Tô màu': 'Painted', 'Tượng đồng': 'Bronze statues', 'Tượng vàng': 'Gold statues',
+    'Đạt {0} thành tựu': 'Earn {0} achievements', 'Lọt vào top 10 một mùa giải xếp hạng': 'Finish in the top 10 of a ranked season',
+    'Thành tựu Thất tinh: phá Chân Long Kỳ Trận 7 ngày liên tiếp': 'The Seven Stars achievement: break the True Dragon Formation 7 days in a row',
+    'Thành tựu Thân kinh bách chiến: đánh 50 ván xếp hạng cờ tướng': 'The Veteran of a Hundred Battles achievement: play 50 ranked xiangqi games',
+    'Trang phục này chưa mở khóa': 'This look is not unlocked yet',
+    'Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.':
+      'Unlocked with Campaign stars, achievements and ranked seasons. Online, your opponents see your pieces and warriors; the board is the host’s.',
   };
 
   // ---------- translating ----------

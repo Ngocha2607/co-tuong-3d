@@ -111,12 +111,34 @@ const MODELS = (() => {
   // carving for its normal map, where the lines, the marks and the river's words are cut into the wood.
   const RIVER_Z = [0.36, 0.44];            // the river's bed reaches this far from the middle, its banks rise to here
   const RIVER_D = 0.09, WATER_Y = -0.02;   // the bed this deep, the water's surface a little below the banks' top
-  function drawBoard(g, w, h, relief) {
-    woodGrain(g, w, h, relief ? '#ffffff' : '#d9b277', 220, 7);
+  // the boards' looks (skins.js): the top's colour, its lines and the rivers' words, how it takes the light, the frame.
+  // The carving is the same on every one.
+  const BOARD_LOOK = {
+    go: { base: '#d9b277', edge: 'rgba(70, 30, 5, 0.35)', halo: 'rgba(70, 32, 8, 0.2)', ink: '#3b1d0b', words: 'rgba(40, 18, 6, 0.9)', rough: 0.88, frame: '#4a2010', frameRough: 0.5 },
+    'son-mai': { base: '#1d110c', edge: 'rgba(0, 0, 0, 0.45)', halo: 'rgba(230, 190, 90, 0.14)', ink: '#d9b04c', words: 'rgba(225, 185, 85, 0.9)', rough: 0.32, shine: 0.7, frame: '#3a0d0a', frameRough: 0.32 },
+    ngoc: { base: '#1b5440', veins: 'rgba(190, 235, 210, 0.08)', edge: 'rgba(3, 25, 15, 0.45)', halo: 'rgba(255, 255, 255, 0.12)', ink: '#e8f5ec', words: 'rgba(232, 246, 236, 0.9)', rough: 0.3, shine: 0.5, frame: '#0f2a1f', frameRough: 0.3 },
+    // old bronze, a little green where it has weathered
+    dong: { base: '#4a3219', veins: 'rgba(80, 140, 110, 0.12)', edge: 'rgba(20, 10, 0, 0.45)', halo: 'rgba(20, 10, 0, 0.3)', ink: '#1c0f05', words: 'rgba(24, 12, 4, 0.9)', rough: 0.42, metal: 0.8, shine: 1, frame: '#2c1c0e', frameRough: 0.42, frameMetal: 0.6 },
+  };
+  const boardLook = id => BOARD_LOOK[id] || BOARD_LOOK.go;
+  // soft light veins through a stone
+  function veins(g, w, h, color, seedN) {
+    const r = rng(seedN);
+    g.strokeStyle = color; g.lineCap = 'round';
+    for (let i = 0; i < 26; i++) {
+      g.lineWidth = 2 + r() * 10;
+      g.beginPath(); g.moveTo(r() * w, r() * h);
+      g.bezierCurveTo(r() * w, r() * h, r() * w, r() * h, r() * w, r() * h); g.stroke();
+    }
+  }
+  // the top and its frame, in colour (look) or as the carving for the normal map (relief)
+  function drawBoard(g, w, h, relief, look = BOARD_LOOK.go) {
+    woodGrain(g, w, h, relief ? '#ffffff' : look.base, 220, 7);
     const X = c => 100 + c * 100, Y = r => 100 + r * 100, ry = (Y(4) + Y(5)) / 2;
     if (!relief) {
+      if (look.veins) veins(g, w, h, look.veins, 7);
       const vg = g.createRadialGradient(w / 2, h / 2, 200, w / 2, h / 2, 760);
-      vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, 'rgba(70, 30, 5, 0.35)');
+      vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, look.edge);
       g.fillStyle = vg; g.fillRect(0, 0, w, h);
       // the river's bed: wet, dark wood under the water, darker in the shade of its banks
       const b1 = RIVER_Z[1] * 100, rv = g.createLinearGradient(0, ry - b1, 0, ry + b1);
@@ -150,16 +172,16 @@ const MODELS = (() => {
     };
     // a groove: its shaded walls, then the ink at the bottom
     if (relief) { g.strokeStyle = '#5a5a5a'; grid(9); }
-    else { g.strokeStyle = 'rgba(70, 32, 8, 0.2)'; grid(10); g.strokeStyle = '#3b1d0b'; grid(3); }
+    else { g.strokeStyle = look.halo; grid(10); g.strokeStyle = look.ink; grid(3); }
     // the river: 楚河 (Chu River) and 漢界 (Han Border), on its bed
-    g.fillStyle = relief ? '#8a8a8a' : 'rgba(40, 18, 6, 0.9)'; g.font = `bold 70px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = relief ? '#8a8a8a' : look.words; g.font = `bold 70px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.save(); g.translate(X(2), ry); g.fillText('楚  河', 0, 0); g.restore();
     g.save(); g.translate(X(6), ry); g.rotate(Math.PI); g.fillText('漢  界', 0, 0); g.restore();
   }
   // the frame round the board, on the same 100 px per unit: dark wood with a line cut along it,
   // a knot at each corner, at the middle of the ends and at either end of the river
-  const FRAME = '#4a2010';
-  function drawFrame(g, w, h, relief) {
+  function drawFrame(g, w, h, relief, look = BOARD_LOOK.go) {
+    const FRAME = look.frame;
     woodGrain(g, w, h, relief ? '#ffffff' : FRAME, 200, 5);
     const cut = relief ? '#6a6a6a' : 'rgba(25, 8, 2, 0.8)', m = 20;
     g.strokeStyle = cut; g.lineWidth = relief ? 6 : 2.5; g.strokeRect(m, m, w - 2 * m, h - 2 * m);
@@ -176,19 +198,29 @@ const MODELS = (() => {
 
   // the top of a piece: the character inside a ring, in the side's ink
   const faceCache = new Map();
-  function faceTexture(piece) {
-    if (faceCache.has(piece)) return faceCache.get(piece);
-    const ink = PAL[palKey(piece)].ink, ch = han(piece);
+  // the pieces' looks (skins.js): the body, the face, and each side's ink where the side's own would not show
+  const PIECE_LOOK = {
+    nga: { body: '#e7cf9f', rough: 0.55, face: ['#f6e6c4', '#e2c792'] },
+    ngoc: { body: '#5d9c7f', rough: 0.22, shine: 0.9, face: ['#d4ebdc', '#9fcbb3'] },
+    dong: { body: '#9a6a35', rough: 0.36, metal: 0.8, shine: 1, face: ['#cf9f60', '#9a6a35'], ink: { 1: '#6e120c', '-1': '#1b1209' } },
+    mun: { body: '#2a1912', rough: 0.35, shine: 0.6, face: ['#3a2418', '#22140d'], ink: { 1: '#ff6a4a', '-1': '#efe4cc', 2: '#7be0a0' } },
+  };
+  const pieceLook = id => PIECE_LOOK[id] || PIECE_LOOK.nga;
+  const inkOf = (piece, look) => (look.ink && look.ink[palKey(piece)]) || PAL[palKey(piece)].ink;
+  function faceTexture(piece, skin) {
+    const key = piece + (PIECE_LOOK[skin] ? skin : 'nga');
+    if (faceCache.has(key)) return faceCache.get(key);
+    const look = pieceLook(skin), ink = inkOf(piece, look), ch = han(piece);
     const t = canvas(256, 256, (g, w) => {
       const gr = g.createRadialGradient(w / 2, w / 2, 20, w / 2, w / 2, w / 2);
-      gr.addColorStop(0, '#f6e6c4'); gr.addColorStop(1, '#e2c792');
+      gr.addColorStop(0, look.face[0]); gr.addColorStop(1, look.face[1]);
       g.fillStyle = gr; g.fillRect(0, 0, w, w);
       g.strokeStyle = ink; g.lineWidth = 7; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 22, 0, Math.PI * 2); g.stroke();
       g.lineWidth = 2; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 34, 0, Math.PI * 2); g.stroke();
       g.fillStyle = ink; g.font = `bold 150px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(ch, w / 2, w / 2 + 8);
     });
-    faceCache.set(piece, t);
+    faceCache.set(key, t);
     return t;
   }
   // the same rings and character cut into the face, for its normal map
@@ -243,23 +275,27 @@ const MODELS = (() => {
   }
 
   // ---------- board and table ----------
-  // the board's top and frame: their textures take a moment to draw, so once, for every board after
-  let boardMats = null;
-  function boardMaterials() {
-    if (boardMats) return boardMats;
+  // a look's top and frame, from the colour drawn for it and the carving every look shares
+  function lookMaterials(look, top, frame, carvedTop, carvedFrame) {
+    const t = new THREE.MeshStandardMaterial({ map: top, normalMap: carvedTop, roughness: look.rough, metalness: look.metal || 0 });
+    const f = new THREE.MeshStandardMaterial({ map: frame, normalMap: carvedFrame, roughness: look.frameRough, metalness: look.frameMetal || 0 });
+    return { top: look.shine ? shine(t, look.shine) : t, frame: shine(f, 0.6) };
+  }
+  // the board's top and frame by look: their textures take a moment to draw, so once each, for every board after
+  const boardMats = {}, boardCarving = {};
+  function boardMaterials(id) {
+    if (boardMats[id]) return boardMats[id];
     // the frame's uvs are its own x and y, laid onto the board's 10 x 11 units; its textures at half the board's
     // 100 px per unit, the frame being a thin band
-    const half = draw => (c, w, h) => { c.scale(0.5, 0.5); draw(c, w * 2, h * 2); };
-    const fmap = canvas(500, 550, half((c, w, h) => drawFrame(c, w, h, false))), fnorm = reliefTexture(500, 550, half((c, w, h) => drawFrame(c, w, h, true)), 1.5);
-    for (const t of [fmap, fnorm]) { t.repeat.set(1 / 10, 1 / 11); t.offset.set(0.5, 0.5); }
-    boardMats = {
-      top: new THREE.MeshStandardMaterial({
-        map: canvas(1000, 1100, (c, w, h) => drawBoard(c, w, h, false)), normalMap: reliefTexture(1000, 1100, (c, w, h) => drawBoard(c, w, h, true), 3), roughness: 0.88,
-      }),
-      frame: shine(new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }), 0.6),
-      water: waterMaterial(rippleTexture()),
-    };
-    return boardMats;
+    const look = BOARD_LOOK[id], half = draw => (c, w, h) => { c.scale(0.5, 0.5); draw(c, w * 2, h * 2); };
+    const onBoard = t => { t.repeat.set(1 / 10, 1 / 11); t.offset.set(0.5, 0.5); return t; };
+    if (!boardCarving.top) {
+      boardCarving.top = reliefTexture(1000, 1100, (c, w, h) => drawBoard(c, w, h, true), 3);
+      boardCarving.frame = onBoard(reliefTexture(500, 550, half((c, w, h) => drawFrame(c, w, h, true)), 1.5));
+      boardCarving.water = waterMaterial(rippleTexture());
+    }
+    const top = canvas(1000, 1100, (c, w, h) => drawBoard(c, w, h, false, look)), frame = onBoard(canvas(500, 550, half((c, w, h) => drawFrame(c, w, h, false, look))));
+    return (boardMats[id] = { ...lookMaterials(look, top, frame, boardCarving.top, boardCarving.frame), water: boardCarving.water });
   }
   // clear green water: the bed and the river's words show through it, the lights glint on its ripples
   function waterMaterial(ripples) {
@@ -276,8 +312,9 @@ const MODELS = (() => {
     water.onBeforeRender = () => { const s = performance.now() / 1000; ripples.offset.set(s * 0.05, s * 0.02); };
     return water;
   }
-  function board() {
-    const g = new THREE.Group();
+  // skin: the board's look (skins.js), the plain wood if unknown
+  function board(skin) {
+    const g = new THREE.Group(), M = boardMaterials(BOARD_LOOK[skin] ? skin : 'go');
     // the top: flat at y = 0 but for the river, a shallow channel running under the frame at both ends. Each face
     // keeps its own normal (no rounding across the banks); the carving is in the normal map.
     const xs = [-5, -4.7, -4.62, 4.62, 4.7, 5], zs = [-5.5, -RIVER_Z[1], -RIVER_Z[0], RIVER_Z[0], RIVER_Z[1], 5.5], low = [0, 0, 1, 1, 0, 0];
@@ -287,7 +324,6 @@ const MODELS = (() => {
     const tg = new THREE.BufferGeometry();
     tg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); tg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
     tg.computeVertexNormals();
-    const M = boardMaterials();
     const top = new THREE.Mesh(tg, M.top);
     top.receiveShadow = true; g.add(top);
     // the water, from frame to frame and from bank to bank
@@ -337,13 +373,14 @@ const MODELS = (() => {
     return out;
   }
   // drawn twice like the ordinary board: in colour, and as the carving for its normal map
-  function drawSanguo(g, PX, relief) {
+  function drawSanguo(g, PX, relief, look = BOARD_LOOK.go) {
     const sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc;
     const trace = pts => { pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Z(z)) : g.moveTo(X(x), Z(z)))); g.closePath(); };
-    woodGrain(g, PX, PX, relief ? '#ffffff' : '#d9b277', 380, 11);
+    woodGrain(g, PX, PX, relief ? '#ffffff' : look.base, 380, 11);
     if (!relief) {
+      if (look.veins) veins(g, PX, PX, look.veins, 11);
       const vg = g.createRadialGradient(PX / 2, PX / 2, 300, PX / 2, PX / 2, PX * 0.62);
-      vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, 'rgba(70, 30, 5, 0.38)');
+      vg.addColorStop(0, 'rgba(255, 230, 180, 0.12)'); vg.addColorStop(1, look.edge);
       g.fillStyle = vg; g.fillRect(0, 0, PX, PX);
       // the rivers' beds: wet, dark wood under the water, darker on the banks
       g.fillStyle = 'rgba(40, 30, 14, 0.32)'; g.beginPath(); trace(riverStar(RIVER_Z[0], SG_RO)); g.fill();
@@ -365,20 +402,20 @@ const MODELS = (() => {
     };
     // a groove: its shaded walls, then the ink at the bottom
     if (relief) { g.strokeStyle = '#5a5a5a'; grid(10); }
-    else { g.strokeStyle = 'rgba(70, 32, 8, 0.2)'; grid(11); g.strokeStyle = '#3b1d0b'; grid(3.4); }
+    else { g.strokeStyle = look.halo; grid(11); g.strokeStyle = look.ink; grid(3.4); }
     // the three rivers, each named for the water between those two kingdoms, on its bed
     g.textAlign = 'center'; g.textBaseline = 'middle';
     const RIVER = ['長  江', '淮  水', '漢  水'];
     RIVERS.forEach((a, k) => {
       const [dx, dz] = dirOf(a), d = 4.1, turn = Math.atan2(dz, dx);
       g.save(); g.translate(X(dx * d), Z(dz * d)); g.rotate(Math.cos(turn) < 0 ? turn + Math.PI : turn);   // never upside down
-      g.fillStyle = relief ? '#8a8a8a' : 'rgba(40, 18, 6, 0.9)'; g.font = `bold 72px ${BRUSH}`; g.fillText(RIVER[k], 0, 0); g.restore();
+      g.fillStyle = relief ? '#8a8a8a' : look.words; g.font = `bold 72px ${BRUSH}`; g.fillText(RIVER[k], 0, 0); g.restore();
     });
   }
   // the hexagonal frame, on the same canvas: a line cut along it, a knot at each corner and at each river's mouth, and
   // each kingdom's seal inlaid at the middle of its own edge
-  function drawHexFrame(g, PX, relief) {
-    const sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc, mid = (SG_RI + SG_RO) / 2;
+  function drawHexFrame(g, PX, relief, look = BOARD_LOOK.go) {
+    const sc = PX / (2 * SPAN), X = x => (x + SPAN) * sc, Z = z => (z + SPAN) * sc, mid = (SG_RI + SG_RO) / 2, FRAME = look.frame;
     woodGrain(g, PX, PX, relief ? '#ffffff' : FRAME, 300, 5);
     const cut = relief ? '#6a6a6a' : 'rgba(25, 8, 2, 0.8)';
     g.strokeStyle = cut; g.lineWidth = relief ? 6 : 2.5; g.lineJoin = 'round';
@@ -399,25 +436,23 @@ const MODELS = (() => {
       g.restore();
     }
   }
-  let sanguoMats = null;
-  function sanguoMaterials() {
-    if (sanguoMats) return sanguoMats;
+  const sanguoMats = {}, sanguoCarving = {};
+  function sanguoMaterials(id) {
+    if (sanguoMats[id]) return sanguoMats[id];
     // the carving and the frame at half the colour's resolution; drawn at full size into a canvas scaled down
-    const half = draw => c => { c.scale(0.5, 0.5); draw(c, 2048); };
-    const fmap = canvas(1024, 1024, half((c, PX) => drawHexFrame(c, PX, false))), fnorm = reliefTexture(1024, 1024, half((c, PX) => drawHexFrame(c, PX, true)), 1.5);
-    for (const t of [fmap, fnorm]) { t.repeat.set(1 / (2 * SPAN), 1 / (2 * SPAN)); t.offset.set(0.5, 0.5); }
-    const ripples = rippleTexture(); ripples.repeat.set(0.35, 1.4);      // its uvs are world units: tiles as on the other board
-    sanguoMats = {
-      top: new THREE.MeshStandardMaterial({
-        map: canvas(2048, 2048, (c, w) => drawSanguo(c, w, false)), normalMap: reliefTexture(1024, 1024, half((c, PX) => drawSanguo(c, PX, true)), 1.8), roughness: 0.88,
-      }),
-      frame: shine(new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }), 0.6),
-      water: waterMaterial(ripples),
-    };
-    return sanguoMats;
+    const look = BOARD_LOOK[id], half = draw => c => { c.scale(0.5, 0.5); draw(c, 2048); };
+    const onBoard = t => { t.repeat.set(1 / (2 * SPAN), 1 / (2 * SPAN)); t.offset.set(0.5, 0.5); return t; };
+    if (!sanguoCarving.top) {
+      sanguoCarving.top = reliefTexture(1024, 1024, half((c, PX) => drawSanguo(c, PX, true)), 1.8);
+      sanguoCarving.frame = onBoard(reliefTexture(1024, 1024, half((c, PX) => drawHexFrame(c, PX, true)), 1.5));
+      const ripples = rippleTexture(); ripples.repeat.set(0.35, 1.4);    // its uvs are world units: tiles as on the other board
+      sanguoCarving.water = waterMaterial(ripples);
+    }
+    const top = canvas(2048, 2048, (c, w) => drawSanguo(c, w, false, look)), frame = onBoard(canvas(1024, 1024, half((c, PX) => drawHexFrame(c, PX, false, look))));
+    return (sanguoMats[id] = { ...lookMaterials(look, top, frame, sanguoCarving.top, sanguoCarving.frame), water: sanguoCarving.water });
   }
-  function sanguoBoard() {
-    const g = new THREE.Group(), M = sanguoMaterials(), [W0, W1] = RIVER_Z, D = RIVER_D;
+  function sanguoBoard(skin) {
+    const g = new THREE.Group(), M = sanguoMaterials(BOARD_LOOK[skin] ? skin : 'go'), [W0, W1] = RIVER_Z, D = RIVER_D;
     // the top: three pieces of wood at y = 0 between the rivers, banks sloping down to the bed, and the bed itself, a
     // hexagon RIVER_D below. Every triangle is turned to face up and keeps its own normal; the carving is in the normal map.
     const pos = [], uv = [];
@@ -494,13 +529,23 @@ const MODELS = (() => {
       [R - 0.022, H - 0.006], [R - 0.05, H], [R - 0.062, H], [R - LIP, H - SINK], [0, H - SINK]];
     return new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 48);
   });
-  function disc(piece, small) {
-    const g = new THREE.Group(), side = palKey(piece);
-    const body = mesh(discGeo(), new THREE.MeshStandardMaterial({ color: '#e7cf9f', roughness: 0.55 }), g);
+  // skin: the pieces' look (skins.js), ivory if unknown
+  const discBodies = {};                    // one material for the bodies of a look (shiny ones are kept by shine)
+  function discBody(id) {
+    if (!discBodies[id]) {
+      const look = PIECE_LOOK[id], m = new THREE.MeshStandardMaterial({ color: look.body, roughness: look.rough, metalness: look.metal || 0 });
+      discBodies[id] = look.shine ? shine(m, look.shine) : m;
+    }
+    return discBodies[id];
+  }
+  function disc(piece, small, skin) {
+    const g = new THREE.Group(), look = pieceLook(skin);
+    const body = mesh(discGeo(), discBody(PIECE_LOOK[skin] ? skin : 'nga'), g);
     // a thin coloured band around the side tells the sides apart from any angle
-    mesh(geo('band', () => new THREE.CylinderGeometry(DISC_R + 0.008, DISC_R + 0.008, 0.05, 48, 1, true)), mat(PAL[side].ink), g, 0, DISC_H / 2, 0);
+    mesh(geo('band', () => new THREE.CylinderGeometry(DISC_R + 0.008, DISC_R + 0.008, 0.05, 48, 1, true)), mat(inkOf(piece, look)), g, 0, DISC_H / 2, 0);
     // the face, with its rings and character cut into it
-    const face = new THREE.Mesh(geo('face', () => new THREE.CircleGeometry(DISC_R - LIP, 48)), new THREE.MeshStandardMaterial({ map: faceTexture(piece), normalMap: faceRelief(piece), roughness: 0.7 }));
+    const face = new THREE.Mesh(geo('face', () => new THREE.CircleGeometry(DISC_R - LIP, 48)),
+      new THREE.MeshStandardMaterial({ map: faceTexture(piece, skin), normalMap: faceRelief(piece), roughness: Math.min(0.7, look.rough + 0.15), metalness: (look.metal || 0) * 0.6 }));
     face.rotation.x = -Math.PI / 2; face.position.y = DISC_H - SINK + 0.001; face.receiveShadow = true; g.add(face);
     g.userData = { body, face };
     if (small) g.scale.setScalar(0.62);
@@ -955,14 +1000,20 @@ const MODELS = (() => {
     return fig;
   }
 
+  // the warriors' looks besides the painted one (skins.js): the whole figure cast in one metal; the banner keeps the
+  // side's colours, so the sides still tell apart
+  const STATUE = { 'tuong-dong': ['#8a5a2c', { metal: 0.85, rough: 0.36, smooth: true }], 'tuong-vang': ['#d6a93c', { metal: 0.95, rough: 0.26, smooth: true }] };
+
   // a warrior for a piece, facing the enemy; with a banner pole for the army view.
-  // hero: id from heroes.js for a general led by that hero (its banner then bears the hero's character)
-  function warrior(piece, hero) {
+  // hero: id from heroes.js for a general led by that hero (its banner then bears the hero's character); skin: the
+  // warriors' look (skins.js), painted if unknown
+  function warrior(piece, hero, skin) {
     const side = palKey(piece), type = typeOf(piece), pal = PAL[side];
     const led = type === XQ.K && HEROES.valid(hero) ? hero : '';
     const root = new THREE.Group();
     const model = (led && FIGURES.get(led)) || FIGURES.get(type + ':' + side) || FIGURES.get(String(type));
     const fig = model ? fromModel(model) : led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
+    if (STATUE[skin]) { const m = mat(...STATUE[skin]); fig.traverse(o => { if (o.isMesh) o.material = m; }); }
     root.add(fig);
     root.rotation.y = side === 1 ? Math.PI : 0;              // Red sits at +z and faces -z
     // banner on a pole, shown in the army view so the character stays readable

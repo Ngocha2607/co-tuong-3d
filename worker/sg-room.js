@@ -8,6 +8,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import SG from '../src/sanguo.js';
 import HEROES from '../src/heroes.js';
+import SKINS from '../src/skins.js';
 import EMOTES from '../src/emotes.js';
 import * as C from './clock.js';
 import * as R from './sg-game.js';
@@ -66,8 +67,8 @@ export class SgRoom extends DurableObject {
     };
   }
   stateFor(ws, extra = {}) {
-    const { hist, over, rematch, rated, info, tc, heroes } = this.st;
-    return { t: 'state', you: this.sideOf(ws), hist, over, rematch, rated, info, tc, heroes, players: this.presence(), ...H.hallInfo(this.st, KINGDOMS), ...this.timing(), ...extra };
+    const { hist, over, rematch, rated, info, tc, heroes, skins, board } = this.st;
+    return { t: 'state', you: this.sideOf(ws), hist, over, rematch, rated, info, tc, heroes, skins, board, players: this.presence(), ...H.hallInfo(this.st, KINGDOMS), ...this.timing(), ...extra };
   }
   // everyone gets the whole state again (the hall changes rarely, and each page needs its own `you`)
   async resync(extra) { for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, extra)); await this.announce(); }
@@ -182,16 +183,20 @@ export class SgRoom extends DurableObject {
         if (side >= 0 && side === H.hostSide(st, KINGDOMS) && st.phase === 'lobby' && st.game === 1) {
           if (!st.tc && C.CONTROLS[m.tc]) { st.tc = C.CONTROLS[m.tc]; st.left = R.fullClock(st.tc); dirty = true; }
           if (!st.stage && H.validStage(m.stage)) { st.stage = m.stage; dirty = true; }
+          if (!st.board) { st.board = SKINS.unpack(m.skin).board; dirty = true; }
         }
       }
       if (side >= 0 && st.away[side]) { st.away[side] = 0; dirty = true; }
       const hero = HEROES.valid(m.hero) ? m.hero : '';
       if (side >= 0 && st.heroes[side] !== hero && (st.phase === 'lobby' || !st.heroes[side])) { st.heroes[side] = hero; dirty = true; }
+      // and their looks, the same way
+      const skin = SKINS.pack(SKINS.unpack(m.skin));
+      if (side >= 0 && st.skins[side] !== skin && (st.phase === 'lobby' || !st.skins[side])) { st.skins[side] = skin; dirty = true; }
       ws.serializeAttachment({ ...a, side });
       if (dirty) { await this.save(); await this.schedule(); }
       if (st.phase === 'lobby') { await this.resync(); return; }   // the hall shows everyone who came in
       this.send(ws, this.stateFor(ws));
-      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, ...this.timing() }, ws);
+      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, skins: st.skins, board: st.board, ...this.timing() }, ws);
       await this.announce();
       return;
     }
@@ -210,7 +215,7 @@ export class SgRoom extends DurableObject {
       await this.announce(this.presence(ws));
       return;
     }
-    if (['hero', 'stage', 'tc', 'ready', 'start', 'kick', 'public'].includes(m.t)) { if (side >= 0) await this.hall(side, m, now); return; }
+    if (['hero', 'skin', 'stage', 'tc', 'ready', 'start', 'kick', 'public'].includes(m.t)) { if (side >= 0) await this.hall(side, m, now); return; }
     if (st.phase !== 'play') { this.send(ws, this.stateFor(ws)); return; }   // nothing is played in the hall
 
     if (m.t === 'move') {
@@ -243,7 +248,7 @@ export class SgRoom extends DurableObject {
       if (st.rematch.every(Boolean)) {
         // new game: everyone moves one seat round the table (so each in turn gets to go first) and back to the hall
         const turn = a => KINGDOMS.map(k => a[(k + 2) % 3]);
-        this.st = { ...R.fresh(), seats: turn(st.seats), info: turn(st.info), heroes: turn(st.heroes), game: st.game + 1, tc: st.tc, left: R.fullClock(st.tc), turnAt: now, host: st.host, stage: st.stage, banned: st.banned, bannedIds: st.bannedIds };
+        this.st = { ...R.fresh(), seats: turn(st.seats), info: turn(st.info), heroes: turn(st.heroes), skins: turn(st.skins), game: st.game + 1, tc: st.tc, left: R.fullClock(st.tc), turnAt: now, host: st.host, stage: st.stage, board: st.board, banned: st.banned, bannedIds: st.bannedIds };
         for (const w of this.ctx.getWebSockets()) { const a = w.deserializeAttachment(); if (a && a.side >= 0) w.serializeAttachment({ ...a, side: (a.side + 1) % 3 }); }
         await this.save(); await this.schedule();
         await this.resync({ fresh: true });
@@ -268,6 +273,7 @@ export class SgRoom extends DurableObject {
     const st = this.st, host = H.hostSide(st, KINGDOMS);
     if (st.phase !== 'lobby' || st.rated) return;
     if (m.t === 'hero') { if (m.hero !== '' && !HEROES.valid(m.hero)) return; st.heroes[side] = m.hero; }
+    else if (m.t === 'skin') { const s = SKINS.pack(SKINS.unpack(m.skin)); st.skins[side] = s; if (side === host) st.board = SKINS.unpack(s).board; }
     else if (m.t === 'ready') { if (side === host) return; st.ready[side] = !!m.on; }
     else if (side !== host) return;
     else if (m.t === 'stage') { if (!H.validStage(m.stage)) return; st.stage = m.stage; }

@@ -10,6 +10,7 @@ const VIEW = (() => {
   const { N, R, B } = XQ;
   let renderer, scene, camera, W = 1, H = 1, inset = 0, lift = 0;   // inset: px covered by the side panel on the right (negative: a column on the left); lift: px covered at the bottom
   const units = new Map();                 // square -> unit { piece, root, disc, war, sq }
+  let skins = { board: 'go', pieces: {}, army: {} };   // the looks (skins.js): the board's, and each side's pieces and warriors
 
   // ---------- layouts ----------
   // Where each point lies, how to read a move and a piece, and where each side sits: yaw is the direction of a side's
@@ -31,7 +32,7 @@ const VIEW = (() => {
       const c = Math.round(x + 4), r = Math.round(z + 4.5);
       return c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(x + 4 - c, z + 4.5 - r) > 0.5 ? -1 : r * 9 + c;
     },
-    board: () => MODELS.board(), wet: MODELS.wet.classic,
+    board: () => MODELS.board(skins.board), wet: MODELS.wet.classic,
     fit: [6.4, 5.5, 6.0], edge: 5.1, shadow: 9, far: 32,   // camera framing, the hero shadow's edge (the frame's inner edge), light, zoom out
   };
   // the three kingdoms; pieces are drawn as 20 + 10 * kingdom + type (models.js)
@@ -50,7 +51,7 @@ const VIEW = (() => {
       for (let s = 0; s < SG.SQ; s++) { const e = Math.hypot(x - SG.XZ[s * 2], z - SG.XZ[s * 2 + 1]); if (e < d) { d = e; best = s; } }
       return best;
     },
-    board: () => MODELS.sanguoBoard(), wet: MODELS.wet.sanguo,
+    board: () => MODELS.sanguoBoard(skins.board), wet: MODELS.wet.sanguo,
     fit: [9.0, 9.4, 9.6], edge: SG.BOARD_R - 0.3, shadow: 11.5, far: 42,
   };
   let L = CLASSIC, layoutName = 'classic', boardMesh = null;
@@ -219,7 +220,7 @@ const VIEW = (() => {
 
   // ---------- units ----------
   function makeUnit(piece, s) {
-    const root = new THREE.Group(), disc = MODELS.disc(piece), war = MODELS.warrior(piece, heroes[L.sideOf(piece)]);
+    const side = L.sideOf(piece), root = new THREE.Group(), disc = MODELS.disc(piece, false, skins.pieces[side]), war = MODELS.warrior(piece, heroes[side], skins.army[side]);
     root.add(disc); war.rotation.y = rest(piece); root.add(war);
     disc.rotation.y = L.yaw(viewer);
     war.visible = armyOn; war.scale.setScalar(REST());
@@ -238,7 +239,8 @@ const VIEW = (() => {
     clearMarks();
   }
   function addToTray(piece, animFrom, by = L.taker(piece)) {
-    const d = MODELS.disc(piece, true), list = trays[by];
+    const d = MODELS.disc(piece, true, skins.pieces[L.sideOf(piece)]), list = trays[by];
+    d.userData.piece = piece;
     d.rotation.y = L.yaw(viewer);
     const p = L.tray(by, list.length); list.push(d); d.visible = !hall; scene.add(d);
     if (!animFrom) { d.position.copy(p); return Promise.resolve(); }
@@ -248,6 +250,21 @@ const VIEW = (() => {
       .then(() => { d.rotation.x = 0; SFX.place(); });
   }
 
+  // the looks (skins.js): { board, pieces: { [side]: id }, army: { [side]: id } }; what changed is built again
+  function setSkins(s) {
+    const was = skins;
+    skins = { board: s.board || 'go', pieces: { ...s.pieces }, army: { ...s.army } };
+    if (!scene) return;                                  // before init(): the board is built with them then
+    if (skins.board !== was.board && boardMesh) { scene.remove(boardMesh); boardMesh = L.board(); boardMesh.visible = !hall; scene.add(boardMesh); }
+    const same = k => (skins.pieces[k] || '') === (was.pieces[k] || '') && (skins.army[k] || '') === (was.army[k] || '');
+    if (L.sides.every(same)) return;
+    for (const [s, u] of units) { const fresh = makeUnit(u.piece, s); disposeUnit(u); units.set(s, fresh); }
+    for (const side of Object.keys(trays)) trays[side] = trays[side].map(d => {
+      const p = d.userData.piece, n = MODELS.disc(p, true, skins.pieces[L.sideOf(p)]);
+      n.userData.piece = p; n.position.copy(d.position); n.rotation.copy(d.rotation); n.visible = d.visible;
+      scene.remove(d); scene.add(n); return n;
+    });
+  }
   function setViewer(side, instant) {
     viewer = side;
     showing++; homeTheta = null; cam.tZoom = 1;          // a game starts: a hero preview still running must not move the camera
@@ -716,7 +733,7 @@ const VIEW = (() => {
         if (u.piece !== L.king(side)) continue;
         const shown = u.war.visible, scale = u.war.scale.x;
         u.root.remove(u.war);
-        u.war = MODELS.warrior(u.piece, heroes[side]);
+        u.war = MODELS.warrior(u.piece, heroes[side], skins.army[side]);
         u.war.rotation.y = rest(u.piece); u.war.visible = shown; u.war.scale.setScalar(scale);
         u.root.add(u.war);
       }
@@ -948,7 +965,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, cheer,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },

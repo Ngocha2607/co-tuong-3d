@@ -22,6 +22,7 @@
     room: '', ws: null, you: 0, players: { 1: false, '-1': false }, rematch: { 1: false, '-1': false }, online: false,
     rated: false, info: { 1: null, '-1': null }, tc: null, clock: null, deadline: null, wantTc: '',
     heroes: { 1: '', '-1': '' },              // hero leading each side (heroes.js), '' = the plain general
+    skins: {}, boardSkin: '',                 // online: each side's looks (skins.js, packed) and the room's board
     fen0: XQ.START,                           // where this game started (a campaign battle has its own position)
     lv: null, help: false,                    // campaign: the battle, and whether undo or a hint was used
   };
@@ -31,9 +32,13 @@
   const stageAllowed = id => STAGES.valid(id) && (!STAGES.byId[id].campaign || CAMPAIGN_UI.unlocked().stages.has(id));
   const myHero = () => heroAllowed(pref.hero) ? pref.hero : '';
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
+  // looks (skins.js) open with the campaign's stars, achievements and a top ten season finish
+  const skinRecord = () => ({ stars: CAMPAIGN_UI.unlocked().total, ach: ACH_UI.earned, season: !!(ACCOUNT.user && (ACCOUNT.user.titles || []).some(t => String(t).startsWith('s:'))) });
+  const skinAllowed = (kind, id) => SKINS.valid(kind, id) && SKINS.earned(kind, id, skinRecord());
+  function mySkins() { const s = SKINS.unpack(pref.skin); for (const k of SKINS.NAMES) if (!skinAllowed(k, s[k])) s[k] = SKINS.DEFAULT[k]; return s; }
   // a signed-in player's hero and stage follow them: each pick is saved to the account
   const savePick = fields => { if (ACCOUNT.user) ACCOUNT.save(fields).catch(e => toast(e.status === 403 ? e.message : 'Chưa lưu được lựa chọn lên tài khoản')); };
-  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq', muteEmotes: false };
+  let pref = { side: 1, level: 1, army: false, tc: 0, hero: '', stage: 'room', skin: '', panelMin: false, sgSeats: [0, 1, 1], sgLevel: 1, sgTc: 0, game: 'xq', muteEmotes: false };
   try { pref = Object.assign(pref, JSON.parse(localStorage.getItem('cotuong_pref')) || {}); } catch (e) { }
   if (!Array.isArray(pref.sgSeats) || pref.sgSeats.length !== 3 || pref.sgSeats.some(v => v !== 0 && v !== 1)) pref.sgSeats = [0, 1, 1];
   if (!HEROES.valid(pref.hero)) pref.hero = '';
@@ -369,7 +374,7 @@
     clearTimeout(retryT);
     const sg = G.mode === 'sanguo', ws = new WebSocket(`${wsBase()}/ws${sg ? '/sg' : ''}?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero(), stage: myStage() })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero(), stage: myStage(), skin: SKINS.pack(mySkins()) })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (sg) sgNetMsg(m); else onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -385,7 +390,7 @@
         const firstSeat = !G.you && m.you;
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
         G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
-        G.heroes = m.heroes || { 1: '', '-1': '' };
+        G.heroes = m.heroes || { 1: '', '-1': '' }; G.skins = m.skins || {}; G.boardSkin = m.board || '';
         if (hallUpdate(m)) { updateStatus(); break; }
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
         rebuild(m.moves || []);
@@ -411,6 +416,7 @@
       case 'presence':
         G.players = m.players; if (m.info) G.info = m.info;
         if (m.heroes) { G.heroes = m.heroes; VIEW.setHeroes(m.heroes); }
+        if (m.skins) { G.skins = m.skins; G.boardSkin = m.board || ''; }
         setTiming(m); updateStatus(); break;
       case 'over': setTiming(m); enqueue(async () => { endGame(m); rated(m); }); break;
       case 'rated': rated(m); break;
@@ -731,7 +737,7 @@
         G.sg = sgFresh([0, 0, 0], net); net.n = 0;
         for (const h of m.hist) typeof h === 'number' ? sgRecord(h) : sgRecordOut(h.out, h.why);
         G.sg.viewer = m.you >= 0 ? m.you : 0;
-        sgHeroesNet(m.heroes); net.heroesRaw = m.heroes;
+        sgHeroesNet(m.heroes); net.heroesRaw = m.heroes; net.skins = m.skins || []; net.board = m.board || '';
         if (hallUpdate(m)) { updateStatus(); break; }
         VIEW.setViewer(G.sg.viewer, false);
         G.over = null;
@@ -755,6 +761,7 @@
       case 'presence':
         net.players = m.players; if (m.info) net.info = m.info;
         if (m.heroes) sgHeroesNet(m.heroes);
+        if (m.skins) { net.skins = m.skins; net.board = m.board || ''; }
         sgTiming(m); updateStatus(); break;
       case 'over': sgTiming(m); enqueue(async () => { sgEnd(m); sgRated(m); }); break;
       case 'rated': sgRated(m); break;
@@ -1376,7 +1383,20 @@
     ol.scrollTop = ol.scrollHeight;
     $('#moveCount').textContent = G.log.length ? `${Math.ceil(G.log.length / 2)} nước` : '';
   }
+  // the looks on the board: in a room each player's side wears their own and the board is the host's; elsewhere the
+  // player's own side wears theirs (both sides on the menu), the computer's the plain ones
+  function applySkins() {
+    const mine = mySkins(), s = { board: mine.board, pieces: {}, army: {} };
+    const wear = (k, o) => { s.pieces[k] = o.pieces; s.army[k] = o.army; };
+    const net = G.mode === 'sanguo' && G.sg && G.sg.net;
+    if (G.mode === 'online') { for (const k of [1, -1]) wear(k, SKINS.unpack(G.skins[k])); if (G.boardSkin) s.board = G.boardSkin; }
+    else if (net) { [0, 1, 2].forEach(k => wear(k, SKINS.unpack((net.skins || [])[k]))); if (net.board) s.board = net.board; }
+    else if (G.mode === 'sanguo') for (const k of sgPeople()) wear(k, mine);
+    else for (const k of G.mode === 'menu' ? [1, -1] : [G.me]) wear(k, mine);
+    VIEW.setSkins(s);
+  }
   function updateStatus() {
+    applySkins();
     $('#bEmote').hidden = emoteSide() === null;              // emotes: the seated players of an online room
     if (emoteSide() === null) $('#emotePop').hidden = true;
     if (inHall()) { renderHall(); return; }
@@ -1754,7 +1774,24 @@
     const cur = myStage();
     $('#segStage').innerHTML = stagePicks(cur);
     $('#stageNote').textContent = STAGES.byId[cur].note;
+    renderSkins();
   }
+  // looks: the board's, the pieces' and the warriors'; a locked one says what opens it
+  function renderSkins() {
+    const cur = mySkins();
+    for (const kind of SKINS.NAMES) $(`[data-skins="${kind}"]`).innerHTML = SKINS.KINDS[kind].map(s => {
+      const ok = skinAllowed(kind, s.id);
+      return `<button type="button" data-id="${s.id}" class="${s.id === cur[kind] ? 'on' : ''}${ok ? '' : ' locked'}" aria-pressed="${s.id === cur[kind]}"${ok ? '' : ` title="${SKINS.requirement(kind, s.id)}"`}><span class="hz">${ok ? s.han : '鎖'}</span><span>${s.name}</span></button>`;
+    }).join('');
+  }
+  document.querySelectorAll('[data-skins]').forEach(el => el.addEventListener('click', e => {
+    const b = e.target.closest('button'), kind = el.dataset.skins; if (!b) return;
+    SFX.init();
+    if (!skinAllowed(kind, b.dataset.id)) { SFX.error(); toast(`${SKINS.byId[kind][b.dataset.id].name}: ${SKINS.requirement(kind, b.dataset.id)}`); return; }
+    pref.skin = SKINS.pack({ ...mySkins(), [kind]: b.dataset.id }); savePref(); renderSkins(); savePick({ skin: pref.skin });
+    if (inHall()) send({ t: 'skin', skin: pref.skin });
+    SFX.pick(); applySkins();
+  }));
   $('#segStage').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.dataset.id === myStage()) return;
     SFX.init();
@@ -1803,9 +1840,11 @@
     const send = {};
     if (u.hero == null) send.hero = myHero(); else if (heroAllowed(u.hero)) pref.hero = u.hero;
     if (u.stage == null) send.stage = myStage(); else if (stageAllowed(u.stage)) pref.stage = u.stage;
+    if (u.skin == null) send.skin = SKINS.pack(mySkins()); else pref.skin = u.skin;
     savePref(); renderHeroes(); renderStages();
     if (G.mode === 'menu' || G.mode === 'ai') { const side = G.mode === 'ai' ? G.me : 1; G.heroes[side] = myHero(); VIEW.setHeroes({ [side]: myHero() }); updateStatus(); }
     if (G.mode !== 'campaign') VIEW.setStage(myStage());   // a battle keeps its own battlefield
+    applySkins();
     if (Object.keys(send).length) savePick(send);
   }
   ACCOUNT.onChange(u => {
