@@ -225,7 +225,7 @@ const VIEW = (() => {
     war.visible = armyOn; war.scale.setScalar(REST());
     root.position.copy(pos(s)); root.userData.sq = s; root.visible = !hall;
     scene.add(root);
-    return { piece, root, disc, war, sq: s };
+    return { piece, root, disc, war, sq: s, phase: Math.random() * 100 };
   }
   function disposeUnit(u) { scene.remove(u.root); }
   // captured: the pieces already taken, each a piece or [piece, side that took it]
@@ -360,6 +360,16 @@ const VIEW = (() => {
     if (j.body) j.body.rotation.x = 0;
     if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
     u.war.position.y = 0;
+  }
+  // standing at ease while no move is played: a look round now and then, arms easing with the breath, the banner
+  // stirring, a horse tossing its head, an elephant swinging its trunk. Each unit keeps its own time (u.phase).
+  function atEase(u, s) {
+    const j = u.war.userData.j, p = s + u.phase, cloth = u.war.userData.cloth, breath = 0.05 + Math.sin(p * 1.6) * 0.03;
+    if (j.head) j.head.rotation.y = Math.sin(p * 0.45) * 0.3 * Math.max(0, Math.sin(p * 0.17));
+    if (j.armL) { j.armL.rotation.z = -breath; j.armR.rotation.z = breath; }
+    if (j.neck) j.neck.rotation.x = j.neckRest + Math.sin(p * 1.3) * 0.08;
+    if (j.trunk) j.trunk.rotation.x = 0.5 + Math.sin(p * 0.9) * 0.2;
+    if (cloth) cloth.rotation.y = Math.sin(p * 2.1) * 0.22 + Math.sin(p * 3.7) * 0.07;
   }
   // the length of a route: from where the unit stands through the points given
   const routeLen = (u, pts) => pts.reduce((s, p, i) => s + p.distanceTo(i ? pts[i - 1] : u.root.position.clone().setY(0)), 0);
@@ -520,8 +530,27 @@ const VIEW = (() => {
     rimLight.color.set(L.rim[0]); rimLight.intensity = L.rim[1];
     scene.background = new THREE.Color(stage.background || stage.fog);
     scene.fog.color.set(stage.fog);
+    makeEnvironment(L);
     SFX.music(stageId);
     if (!menu && !hall) showcase();
+  }
+  // what the metal, the water and the lacquer reflect (models.js): a dim sphere in the stage's sky and ground colours
+  // with a bright window where the key light is, blurred into an environment map
+  let pmrem = null, envTarget = null;
+  function makeEnvironment(light) {
+    if (!pmrem) pmrem = new THREE.PMREMGenerator(renderer);
+    const room = new THREE.Scene(), sky = new THREE.Color(light.hemi[0]), ground = new THREE.Color(light.hemi[1]);
+    const ball = new THREE.SphereGeometry(10, 24, 12), p = ball.attributes.position, col = [];
+    for (let i = 0; i < p.count; i++) { const k = (p.getY(i) / 10 + 1) / 2, c = ground.clone().lerp(sky, k).multiplyScalar(0.2 + 0.6 * k); col.push(c.r, c.g, c.b); }
+    ball.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    room.add(new THREE.Mesh(ball, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+    const win = new THREE.Mesh(new THREE.PlaneGeometry(7, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(light.key[0]).multiplyScalar(light.key[1] * 2), side: THREE.DoubleSide }));
+    win.position.copy(keyLight.position).setLength(8); win.lookAt(0, 0, 0); room.add(win);
+    const target = pmrem.fromScene(room, 0.02);
+    MODELS.setEnvMap(target.texture);
+    if (envTarget) envTarget.dispose();
+    envTarget = target;
+    ball.dispose(); win.geometry.dispose();
   }
   // a new stage during a game: the camera drops low and sweeps round for a look, then comes back to the board
   let showcaseRun = 0;
@@ -732,6 +761,7 @@ const VIEW = (() => {
     for (const u of units.values()) { const y = (u.lift || 0) * 0.22; if (!busy || u.lift) u.root.position.y += (y - u.root.position.y) * Math.min(1, dt * 12); }
     // a warrior stands on the board itself: once it has grown out of its piece the piece is put away (still tappable)
     for (const u of units.values()) u.disc.visible = !(u.war.visible && u.war.scale.x > 0.3);
+    if (!busy) for (const u of units.values()) if (u.war.visible && !u.cheering) atEase(u, t / 1000);
     if (stage) stage.update(t, dt, camera);
     // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
     for (const o of occluders) {

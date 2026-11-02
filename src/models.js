@@ -25,13 +25,22 @@ const MODELS = (() => {
   const typeOf = p => (p >= 20 ? p % 10 : Math.abs(p));
   const han = p => (p >= 20 ? SG_HAN[((p / 10) | 0) - 2][p % 10] : XQ.HAN[p]);
   const SKIN = '#e5b88c', WOOD = '#6b4423', IRON = '#9aa3ad';
-  const DISC_R = 0.43, DISC_H = 0.2;
+  const DISC_R = 0.43, DISC_H = 0.23;
 
   // ---------- shared materials and geometries ----------
+  // what shiny things reflect: metal, the rivers' water, the lacquered frames. scene.js makes it from the stage's light
+  // (setEnvMap); everything else is lit by the lights alone, so the stages keep their look.
+  let ENV = null;
+  const shiny = new Set();
+  function shine(m, k = 1) { m.envMapIntensity = k; shiny.add(m); if (ENV) m.envMap = ENV; return m; }
+  function setEnvMap(t) { ENV = t; for (const m of shiny) { m.envMap = t; m.needsUpdate = true; } }
   const mats = new Map(), geos = new Map();
   function mat(color, o = {}) {
     const k = color + (o.metal || 0) + (o.rough || 0) + (o.emissive || '') + (o.smooth ? 's' : '');
-    if (!mats.has(k)) mats.set(k, new THREE.MeshStandardMaterial({ color, roughness: o.rough || 0.72, metalness: o.metal || 0, flatShading: !o.smooth, emissive: o.emissive || '#000000' }));
+    if (!mats.has(k)) {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: o.rough || 0.72, metalness: o.metal || 0, flatShading: !o.smooth, emissive: o.emissive || '#000000' });
+      mats.set(k, o.metal ? shine(m) : m);
+    }
     return mats.get(k);
   }
   function geo(k, make) { if (!geos.has(k)) geos.set(k, make()); return geos.get(k); }
@@ -182,6 +191,21 @@ const MODELS = (() => {
     faceCache.set(piece, t);
     return t;
   }
+  // the same rings and character cut into the face, for its normal map
+  const reliefCache = new Map();
+  function faceRelief(piece) {
+    if (reliefCache.has(piece)) return reliefCache.get(piece);
+    const ch = han(piece);
+    const t = reliefTexture(256, 256, (g, w) => {
+      g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, w);
+      g.strokeStyle = '#555555'; g.lineWidth = 10; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 22, 0, Math.PI * 2); g.stroke();
+      g.lineWidth = 4; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 34, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#606060'; g.font = `bold 150px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(ch, w / 2, w / 2 + 8);
+    }, 2.5);
+    reliefCache.set(piece, t);
+    return t;
+  }
   // banner cloth for army view: the character in gold on the side's colour
   const bannerCache = new Map();
   function bannerTexture(piece, ch = han(piece)) {
@@ -198,7 +222,9 @@ const MODELS = (() => {
     bannerCache.set(key, t);
     return t;
   }
-  function clearTextureCache() { for (const t of faceCache.values()) t.dispose(); faceCache.clear(); for (const t of bannerCache.values()) t.dispose(); bannerCache.clear(); }
+  function clearTextureCache() {
+    for (const cache of [faceCache, reliefCache, bannerCache]) { for (const t of cache.values()) t.dispose(); cache.clear(); }
+  }
 
   // the river's ripples, as a normal map: a few waves whose periods divide the tile, so it repeats without a seam
   function rippleTexture() {
@@ -230,16 +256,16 @@ const MODELS = (() => {
       top: new THREE.MeshStandardMaterial({
         map: canvas(1000, 1100, (c, w, h) => drawBoard(c, w, h, false)), normalMap: reliefTexture(1000, 1100, (c, w, h) => drawBoard(c, w, h, true), 3), roughness: 0.88,
       }),
-      frame: new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }),
+      frame: shine(new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }), 0.6),
       water: waterMaterial(rippleTexture()),
     };
     return boardMats;
   }
   // clear green water: the bed and the river's words show through it, the lights glint on its ripples
   function waterMaterial(ripples) {
-    return new THREE.MeshStandardMaterial({
+    return shine(new THREE.MeshStandardMaterial({
       color: '#1d5c68', transparent: true, opacity: 0.62, roughness: 0.1, normalMap: ripples, normalScale: new THREE.Vector2(0.45, 0.45), depthWrite: false,
-    });
+    }));
   }
   // the water's surface, a little below the banks' top, meets them this far from the river's middle
   const WATER_W = RIVER_Z[1] - (RIVER_Z[1] - RIVER_Z[0]) * (-WATER_Y / RIVER_D);
@@ -385,7 +411,7 @@ const MODELS = (() => {
       top: new THREE.MeshStandardMaterial({
         map: canvas(2048, 2048, (c, w) => drawSanguo(c, w, false)), normalMap: reliefTexture(1024, 1024, half((c, PX) => drawSanguo(c, PX, true)), 1.8), roughness: 0.88,
       }),
-      frame: new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }),
+      frame: shine(new THREE.MeshStandardMaterial({ map: fmap, normalMap: fnorm, roughness: 0.5 }), 0.6),
       water: waterMaterial(ripples),
     };
     return sanguoMats;
@@ -454,17 +480,22 @@ const MODELS = (() => {
   }
 
   // ---------- pieces ----------
+  // a turned piece: rounded top and bottom edges, the side swelling a little, a raised lip round a sunken face
+  const LIP = 0.07, SINK = 0.012;
   const discGeo = () => geo('disc', () => {
-    const pts = [[0, 0], [DISC_R - 0.03, 0], [DISC_R, 0.03], [DISC_R, DISC_H - 0.03], [DISC_R - 0.03, DISC_H], [0, DISC_H]].map(([x, y]) => new THREE.Vector2(x, y));
-    return new THREE.LatheGeometry(pts, 40);
+    const R = DISC_R, H = DISC_H;
+    const pts = [[0, 0], [R - 0.05, 0], [R - 0.022, 0.006], [R - 0.006, 0.024], [R, 0.05], [R + 0.004, H / 2], [R, H - 0.05], [R - 0.006, H - 0.024],
+      [R - 0.022, H - 0.006], [R - 0.05, H], [R - 0.062, H], [R - LIP, H - SINK], [0, H - SINK]];
+    return new THREE.LatheGeometry(pts.map(([x, y]) => new THREE.Vector2(x, y)), 48);
   });
   function disc(piece, small) {
     const g = new THREE.Group(), side = palKey(piece);
-    const body = mesh(discGeo(), new THREE.MeshStandardMaterial({ color: '#e7cf9f', roughness: 0.62 }), g);
-    // a thin coloured band around the rim tells the sides apart from any angle
-    mesh(geo('band', () => new THREE.CylinderGeometry(DISC_R + 0.004, DISC_R + 0.004, 0.05, 40, 1, true)), mat(PAL[side].ink), g, 0, DISC_H / 2, 0);
-    const face = new THREE.Mesh(geo('face', () => new THREE.CircleGeometry(DISC_R - 0.035, 40)), new THREE.MeshStandardMaterial({ map: faceTexture(piece), roughness: 0.75 }));
-    face.rotation.x = -Math.PI / 2; face.position.y = DISC_H + 0.002; face.receiveShadow = true; g.add(face);
+    const body = mesh(discGeo(), new THREE.MeshStandardMaterial({ color: '#e7cf9f', roughness: 0.55 }), g);
+    // a thin coloured band around the side tells the sides apart from any angle
+    mesh(geo('band', () => new THREE.CylinderGeometry(DISC_R + 0.008, DISC_R + 0.008, 0.05, 48, 1, true)), mat(PAL[side].ink), g, 0, DISC_H / 2, 0);
+    // the face, with its rings and character cut into it
+    const face = new THREE.Mesh(geo('face', () => new THREE.CircleGeometry(DISC_R - LIP, 48)), new THREE.MeshStandardMaterial({ map: faceTexture(piece), normalMap: faceRelief(piece), roughness: 0.7 }));
+    face.rotation.x = -Math.PI / 2; face.position.y = DISC_H - SINK + 0.001; face.receiveShadow = true; g.add(face);
     g.userData = { body, face };
     if (small) g.scale.setScalar(0.62);
     return g;
@@ -616,7 +647,7 @@ const MODELS = (() => {
     part(geo('horseBody', () => new THREE.CapsuleGeometry(0.078, 0.22, 6, 14).rotateX(Math.PI / 2).scale(0.95, 1, 1)), coat, body, 0, 0, 0);
     part(geo('saddleCloth', () => new THREE.CylinderGeometry(0.088, 0.088, 0.22, 14, 1, true, Math.PI * 0.4, Math.PI * 1.2).rotateX(Math.PI / 2)), pal.main, body, 0, 0.012, -0.01);
     part(geo('saddle', () => new THREE.SphereGeometry(0.06, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.5, 1.3)), '#3a2210', body, 0, 0.075, -0.01);
-    const neck = group(body, 0, 0.05, 0.16); neck.rotation.x = -0.6;
+    const neck = group(body, 0, 0.05, 0.16); neck.rotation.x = j.neckRest = -0.6; j.neck = neck;
     part(geo('horseNeck', () => new THREE.CylinderGeometry(0.042, 0.062, 0.21, 12).scale(0.85, 1, 1)), coat, neck, 0, 0.09, 0);
     box(0.018, 0.2, 0.05, dark, neck, 0, 0.1, -0.045);                       // mane
     const head = group(neck, 0, 0.19, 0.02); head.rotation.x = 1.0;
@@ -940,5 +971,5 @@ const MODELS = (() => {
     return root;
   }
 
-  return { board, sanguoBoard, table, lantern, disc, warrior, setFigure, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, table, lantern, disc, warrior, setFigure, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();
