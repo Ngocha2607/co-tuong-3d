@@ -31,7 +31,7 @@ const VIEW = (() => {
       const c = Math.round(x + 4), r = Math.round(z + 4.5);
       return c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(x + 4 - c, z + 4.5 - r) > 0.5 ? -1 : r * 9 + c;
     },
-    board: () => MODELS.board(),
+    board: () => MODELS.board(), wet: MODELS.wet.classic,
     fit: [6.4, 5.5, 6.0], edge: 5.1, shadow: 9, far: 32,   // camera framing, the hero shadow's edge (the frame's inner edge), light, zoom out
   };
   // the three kingdoms; pieces are drawn as 20 + 10 * kingdom + type (models.js)
@@ -50,7 +50,7 @@ const VIEW = (() => {
       for (let s = 0; s < SG.SQ; s++) { const e = Math.hypot(x - SG.XZ[s * 2], z - SG.XZ[s * 2 + 1]); if (e < d) { d = e; best = s; } }
       return best;
     },
-    board: () => MODELS.sanguoBoard(),
+    board: () => MODELS.sanguoBoard(), wet: MODELS.wet.sanguo,
     fit: [9.0, 9.4, 9.6], edge: SG.BOARD_R - 0.3, shadow: 11.5, far: 42,
   };
   let L = CLASSIC, layoutName = 'classic', boardMesh = null;
@@ -317,6 +317,21 @@ const VIEW = (() => {
     const r = ringMesh(0.2, 0.32, '#e8d2a8', 0.6); r.position.copy(at).setY(0.02); scene.add(r);
     tween(420, k => { r.scale.setScalar(1 + k * 2.4); r.material.opacity = 0.6 * (1 - k); }).then(() => scene.remove(r));
   }
+  // water thrown up where a warrior wades, and a ring spreading on the surface
+  const dropGeo = new THREE.SphereGeometry(0.032, 6, 4);
+  function splash(at, n = 5, spray) {
+    const y = MODELS.WATER_Y;
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(dropGeo, new THREE.MeshStandardMaterial({ color: '#effcfb', roughness: 0.1, transparent: true }));
+      m.position.set(at.x, y + 0.02, at.z); scene.add(m);
+      const a = Math.random() * Math.PI * 2, v = 0.4 + Math.random() * 0.9;
+      parts.push({ m, vx: Math.cos(a) * v, vy: 1.2 + Math.random() * 1.6, vz: Math.sin(a) * v, life: 0.8, max: 0.8, drop: y });
+    }
+    if (spray) smoke(new THREE.Vector3(at.x, y, at.z), 5, '#e6f6f4', 0.55);   // a puff of spray where they hit the water
+    const r = ringMesh(0.07, 0.11, '#e2f6f4', 0.75); r.position.set(at.x, y + 0.004, at.z); scene.add(r);
+    tween(800, k => { r.scale.setScalar(1 + k * 4.5); r.material.opacity = 0.75 * (1 - k); })
+      .then(() => { scene.remove(r); r.geometry.dispose(); r.material.dispose(); });
+  }
   let shake = 0;
   function flash(at, color, power = 4) {
     const l = new THREE.PointLight(color, power, 6, 2); l.position.copy(at).setY(0.8); scene.add(l);
@@ -378,14 +393,21 @@ const VIEW = (() => {
     const pts = [u.root.position.clone().setY(0), ...(Array.isArray(to) ? to : [to])], type = L.typeOf(u.piece);
     const lens = pts.slice(1).map((p, i) => p.distanceTo(pts[i])), d = lens.reduce((s, x) => s + x, 0);
     if (type === N) SFX.gallop(); else if (type === R) SFX.roll(); else SFX.step();
-    let leg = -1;
+    let leg = -1, wading = false, splashed = 0;
     await tween(ms, k => {
       const e = ease(k);
       let x = e * d, i = 0;
       while (i < lens.length - 1 && x > lens[i]) x -= lens[i++];
       const a = pts[i], b = pts[i + 1], f = lens[i] ? Math.min(1, x / lens[i]) : 1;
       if (i !== leg && lens.length > 1) { leg = i; u.war.rotation.y = Math.atan2(b.x - a.x, b.z - a.z); }
-      u.root.position.set(lerp(a.x, b.x, f), Math.sin(k * Math.PI) * (type === N ? 0.25 : 0.06), lerp(a.z, b.z, f));
+      // across a river a warrior wades in to the shins (a horse leaps it); the water splashes where they meet it
+      const px = lerp(a.x, b.x, f), pz = lerp(a.z, b.z, f), w = L.wet(px, pz), hop = Math.sin(k * Math.PI) * (type === N ? 0.25 : 0.06);
+      const y = type === N ? hop : hop * (1 - w) - w * 0.07;
+      u.root.position.set(px, y, pz);
+      if (w > 0.3 && y < 0.04) {
+        if (!wading) { wading = true; splash(u.root.position, type === N ? 22 : 14, true); SFX.splash(); }
+        else if (clock - splashed > 110) { splashed = clock; splash(u.root.position, 5); }
+      } else if (w < 0.1) wading = false;
       marchPose(u, e, d);
     });
     u.root.position.y = 0; restPose(u);
@@ -752,6 +774,7 @@ const VIEW = (() => {
       p.m.position.x += p.vx * dt; p.m.position.y += p.vy * dt; p.m.position.z += p.vz * dt;
       if (p.solid) { p.vy -= 9 * dt; if (p.m.position.y < 0.03) { p.m.position.y = 0.03; p.vy *= -0.3; p.vx *= 0.6; p.vz *= 0.6; } p.m.rotation.x += p.spin * dt; p.m.rotation.z += p.spin * dt; }
       if (p.glow) p.vy -= 4 * dt;
+      if (p.drop !== undefined) { p.vy -= 9 * dt; if (p.vy < 0 && p.m.position.y < p.drop) p.life = 0; }   // a drop falls back into the water
       if (p.grow) p.m.scale.setScalar(p.grow * (0.4 + (1 - p.life / p.max) * 0.9));
       const k = Math.max(0, p.life / p.max);
       if (p.m.material) p.m.material.opacity = p.fade ? 0.5 * k : p.solid ? Math.min(1, k * 3) : k;

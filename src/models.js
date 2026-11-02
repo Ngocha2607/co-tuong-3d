@@ -462,6 +462,12 @@ const MODELS = (() => {
     for (const [x, z] of hexPts(SG_RO)) mesh(geo('foot', () => new THREE.CylinderGeometry(0.3, 0.38, 0.4, 10)), mat('#2a120a'), g, x * 0.93, -0.7, z * 0.93);
     return g;
   }
+  // how deep in a river a point of the table is: 1 over the bed, 0 on dry land, in between on a bank
+  const ramp = d => Math.max(0, Math.min(1, (RIVER_Z[1] - d) / (RIVER_Z[1] - RIVER_Z[0])));
+  const wet = {
+    classic: (x, z) => (Math.abs(x) < 4.6 ? ramp(Math.abs(z)) : 0),
+    sanguo: (x, z) => Math.max(...RIVERS.map(a => { const [dx, dz] = dirOf(a); return x * dx + z * dz > -0.3 ? ramp(Math.abs(x * dz - z * dx)) : 0; })),
+  };
   function table() {
     const t = tableTexture(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(6, 6);
     const m = new THREE.Mesh(new THREE.CircleGeometry(26, 64), new THREE.MeshStandardMaterial({ map: t, color: '#7a4a2a', roughness: 0.5 }));
@@ -971,5 +977,5 @@ const MODELS = (() => {
     return root;
   }
 
-  return { board, sanguoBoard, table, lantern, disc, warrior, setFigure, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, wet, WATER_Y, table, lantern, disc, warrior, setFigure, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();
