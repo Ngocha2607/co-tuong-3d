@@ -1237,7 +1237,12 @@
     if (rv.moving) return;
     if (animate && i === rv.shown + 1) {
       rv.moving = true; VIEW.hint(-1, -1); VIEW.check(-1);
-      await VIEW.play(rv.g.moves[i - 1], { closeUp: false });
+      // the moments worth a close look: a fine move, a blunder, and the mate that ended the game
+      const v = rv.vs[i - 1], mate = i === rv.n && rv.g.reason === 'checkmate' && rv.g.winner;
+      const cinema = !pref.cinema ? '' : mate ? 'mate' : v && (v.mark === 'good' || v.mark === 'blunder') ? v.mark : '';
+      if (cinema) banner({ good: 'Nước hay!', blunder: 'Nước hớ!', mate: 'Chiếu bí!' }[cinema], cinema === 'blunder' ? 'check' : 'open');
+      await VIEW.play(rv.g.moves[i - 1], { closeUp: false, cinema });
+      if (cinema === 'mate' && G.rv === rv) { SFX.drum(); VIEW.defeat(rv.boards[i].indexOf(XQ.K * -rv.g.winner), true); }
       rv.moving = false;
       if (G.rv !== rv) return;
       rv.shown = i;
@@ -1384,6 +1389,11 @@
   $('#rvPlay').addEventListener('click', () => { SFX.init(); rvAuto(!G.rv.timer); });
   $('#rvNext').addEventListener('click', () => { SFX.init(); rvStep(1); });
   $('#rvLast').addEventListener('click', () => { rvAuto(false); rvGo(G.rv.n); });
+  // the review's camera moments (rvGo), on unless turned off
+  const cinemaBtn = () => { $('#rvCinema').classList.toggle('on', !!pref.cinema); $('#rvCinema').setAttribute('aria-pressed', !!pref.cinema); };
+  if (pref.cinema === undefined) pref.cinema = true;
+  cinemaBtn();
+  $('#rvCinema').addEventListener('click', () => { SFX.init(); SFX.pick(); pref.cinema = !pref.cinema; savePref(); cinemaBtn(); toast(pref.cinema ? 'Bật camera điện ảnh: nước hay, nước hớ và chiếu bí được quay cận cảnh' : 'Tắt camera điện ảnh'); });
   $('#rvFlip').addEventListener('click', () => { const v = -(G.rv.viewer || G.rv.g.me || 1); G.rv.viewer = v; VIEW.setViewer(v); rvShow(G.rv.shown); });
   $('#bAnalyse').addEventListener('click', () => rvAnalyse());
   $('#rvChart').addEventListener('click', e => {

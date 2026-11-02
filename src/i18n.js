@@ -448,6 +448,11 @@ const I18N = (() => {
     'Ngày và đêm': 'Day and night', 'Theo giờ thật': 'By the clock', 'Ban ngày': 'Day', 'Ban đêm': 'Night',
     'Bối cảnh ban ngày đổi theo giờ trên máy: chạng vạng ánh vàng, đêm có trăng sao. Quân trướng, Xích Bích, Ngũ Trượng Nguyên vốn là cảnh đêm.': 'Daytime battlefields follow your device’s clock: golden light at dusk, moon and stars at night. Command Tent, Red Cliffs and Wuzhang Plains are night scenes already.',
 
+    // the review's camera
+    'Nước hớ!': 'Blunder!', 'Camera điện ảnh': 'Cinematic camera', 'Tắt camera điện ảnh': 'Cinematic camera off',
+    'Camera điện ảnh: quay cận cảnh nước hay, nước hớ và chiếu bí': 'Cinematic camera: close-ups of fine moves, blunders and the mate',
+    'Bật camera điện ảnh: nước hay, nước hớ và chiếu bí được quay cận cảnh': 'Cinematic camera on: fine moves, blunders and the mate in close-up',
+
     // cờ úp (jieqi.js)
     'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
     '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',

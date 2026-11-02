@@ -64,7 +64,7 @@ const VIEW = (() => {
   let trays = { 1: [], '-1': [] };         // pieces captured by each side (meshes)
   let armyOn = false, viewer = 1, menu = false, busy = false;
   let heroes = { 1: '', '-1': '' };        // hero leading each side (heroes.js id, '' = the plain general)
-  let clock = performance.now(), last = clock;
+  let clock = performance.now(), last = clock, slowmo = 1;   // slowmo: the review's cinematic moments run slower
   const tweens = [], parts = [];
   const pos = s => L.pos(s);
   const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -596,11 +596,18 @@ const VIEW = (() => {
     await tween(230, k => { const e = out(k); u.disc.rotation.x = -Math.PI / 2 * (1 - e); u.disc.position.y = 0.3 * (1 - e); u.war.scale.setScalar(Math.max(0.001, s0 * backOut(k))); });
     SFX.place();
   }
-  // opts.reveal: the piece the move turns up (cờ úp); opts.taken: the face-down piece it takes, as it really is
+  // opts.reveal: the piece the move turns up (cờ úp); opts.taken: the face-down piece it takes, as it really is;
+  // opts.cinema: a moment of the review ('good', 'blunder', 'mate'): the camera drops low beside the move and the
+  // field slows down, then it all comes back
   async function play(m, opts = {}) {
     const f = L.from(m), t = L.to(m), u = units.get(f);
     if (!u) return;
     busy = true; clearMarks(); hint(-1, -1);
+    if (opts.cinema && !opts.fast) {
+      dragged = false; showing++;
+      tFocus.copy(pos(f)).lerp(pos(t), 0.6).setY(0.4); cam.tZoom = 0.4; cam.tPhi = 0.6; cam.tTheta = cam.theta + (Math.random() < 0.5 ? -0.5 : 0.5);
+      await wait(350); slowmo = 0.6;
+    }
     const target = units.get(t), fast = opts.fast;
     await Promise.all([target && opts.taken ? turnUp(target, opts.taken, fast) : null, opts.reveal ? turnUp(u, opts.reveal, fast) : null]);
     const dest = pos(t), type = L.typeOf(u.piece), by = L.sideOf(u.piece);
@@ -644,7 +651,13 @@ const VIEW = (() => {
     dustRing(dest); SFX.place();
     units.delete(f); units.set(t, u); u.sq = t; u.lift = 0;
     lastMove(f, t);
-    tFocus.copy(HOME); cam.tZoom = 1;
+    if (opts.cinema) {                                     // the moment lands: gold for a fine move, ash for a blunder
+      const at = dest.clone().setY(0.6);
+      if (opts.cinema === 'blunder') smoke(at, 14, '#3a3030', 1.1); else { sparks(at, '#ffd27a', 36, 0.26); flash(at, '#ffcf6a', 5); }
+      await wait(300); slowmo = 1;
+      if (opts.cinema !== 'mate') await wait(450);
+    }
+    if (opts.cinema !== 'mate') { tFocus.copy(HOME); cam.tZoom = 1; if (opts.cinema) resetCamera(); }
     await dismiss(u);
     busy = false;
   }
@@ -1009,7 +1022,7 @@ const VIEW = (() => {
   }
   function loop(t) {
     requestAnimationFrame(loop);
-    const gap = (t - last) / 1000, dt = Math.min(0.05, gap); last = t; clock = t;
+    const gap = (t - last) / 1000, dt = Math.min(0.05, gap); clock += (t - last) * slowmo; last = t;
     watchPace(t, gap);
     for (let i = tweens.length - 1; i >= 0; i--) {
       const w = tweens[i], k = Math.min(1, (clock - w.t0) / w.ms);
