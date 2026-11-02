@@ -38,6 +38,45 @@ const STAGES = (() => {
     g.setAttribute('position', new THREE.BufferAttribute(a, 3));
     return new THREE.Points(g, new THREE.PointsMaterial({ size, map: ctx.glowTex, color, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending }));
   }
+  // weather over the table: rain falling in streaks, each splashing a ring where it hits the board (on the water of its
+  // rivers, or the wood), or snow drifting down. ctx.inside and ctx.wet (scene.js) say where the board is and where
+  // its water. → update(t, dt)
+  function weather(ctx, group, snow) {
+    const n = ctx.low ? (snow ? 450 : 500) : (snow ? 1000 : 1300), S = snow ? 10 : 14, TOP = snow ? 11 : 14, k = snow ? 3 : 6;
+    const g = new THREE.BufferGeometry(), a = new Float32Array(n * k), v = new Float32Array(n);
+    const put = (i, x, y, z) => { const o = i * k; a[o] = x; a[o + 1] = y; a[o + 2] = z; if (!snow) { a[o + 3] = x + 0.07; a[o + 4] = y + 0.4; a[o + 5] = z; } };
+    for (let i = 0; i < n; i++) { put(i, rnd(-S, S), rnd(-1, TOP), rnd(-S, S)); v[i] = snow ? rnd(0.5, 0.9) : rnd(11, 15); }
+    g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const fall = snow
+      ? new THREE.Points(g, new THREE.PointsMaterial({ size: 0.26, map: ctx.glowTex, color: '#ffffff', transparent: true, opacity: 0.95, depthWrite: false }))
+      : new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#cfe0ea', transparent: true, opacity: 0.35, depthWrite: false }));
+    fall.frustumCulled = false; group.add(fall);
+    const rings = [], ringGeo = new THREE.RingGeometry(0.03, 0.05, 16).rotateX(-Math.PI / 2);
+    for (let i = 0; i < (snow ? 0 : 24); i++) {
+      const r = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: '#e8f4f6', transparent: true, opacity: 0, depthWrite: false }));
+      r.visible = false; group.add(r); rings.push({ r, t: 1 });
+    }
+    let next = 0;
+    return (t, dt) => {
+      for (let i = 0; i < n; i++) {
+        const o = i * k, on = ctx.inside(a[o], a[o + 2]);
+        let x = a[o] + (snow ? Math.sin(t / 900 + i) * dt * 0.3 : -dt * 1.2), y = a[o + 1] - v[i] * dt, z = a[o + 2];   // rain leans in the wind
+        if (y < (on ? 0 : -1.5)) {
+          if (rings.length && on && i % 2) {
+            const R = rings[next]; next = (next + 1) % rings.length;
+            R.t = 0; R.r.visible = true; R.r.position.set(x, ctx.wet(x, z) > 0.5 ? MODELS.WATER_Y + 0.004 : 0.006, z);
+          }
+          x = rnd(-S, S); y = TOP; z = rnd(-S, S);
+        }
+        put(i, x, y, z);
+      }
+      g.attributes.position.needsUpdate = true;
+      for (const R of rings) if (R.t < 1) {
+        R.t = Math.min(1, R.t + dt * 2.2); R.r.scale.setScalar(1 + R.t * 5); R.r.material.opacity = 0.7 * (1 - R.t);
+        if (R.t >= 1) R.r.visible = false;
+      }
+    };
+  }
   function woodTexture(base, planks) {
     const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
     g.fillStyle = base; g.fillRect(0, 0, 512, 512);
@@ -66,7 +105,12 @@ const STAGES = (() => {
       group, sky: null, background: '#140d0a', fog: '#140d0a', fogSpan: 26,
       light: { hemi: ['#ffe2c0', '#2a1408', 0.8], key: ['#ffe9cc', 1.9], rim: ['#7fa4ff', 0.45] },
       update(t, dt) {
-        for (const L of lanterns) { L.l.rotation.z = Math.sin(t / 1300 + L.ph) * 0.06; L.pl.intensity = 1.55 + Math.sin(t / 170 + L.ph) * 0.08 + Math.sin(t / 53 + L.ph) * 0.05; }
+        // the flames breathe, and now and then a draught makes one gutter
+        for (const L of lanterns) {
+          const gust = Math.max(0, Math.sin(t / 2300 + L.ph * 3)) ** 12;
+          L.l.rotation.z = Math.sin(t / 1300 + L.ph) * 0.06 + gust * Math.sin(t / 90) * 0.05;
+          L.pl.intensity = 1.5 + Math.sin(t / 170 + L.ph) * 0.14 + Math.sin(t / 53 + L.ph) * 0.08 - gust * (0.5 + 0.3 * Math.sin(t / 37));
+        }
         motes.rotation.y += dt * 0.01; motes.position.y = Math.sin(t / 4000) * 0.3;
       },
     };
@@ -562,11 +606,12 @@ const STAGES = (() => {
     const high = drifts(ctx, group, ctx.low ? 4 : 8, '#fff4e4', 0.3, [30, 50], [4, 7], 90, [22, 30], [-80, -20]);
     const sun = glow(ctx, '#ffd9a0', 30, 0.8); sun.material.fog = false; sun.position.set(60, 16, -55); group.add(sun);
     const birds = [bird(group), bird(group)];
+    const snow = weather(ctx, group, true);                                 // the first month of 219: snow on the peaks
     return {
       group, sky: skyDome('#5d86c0', '#f3d9a8', '#8a9aa6'), fog: '#c4ccd2', fogSpan: 80,
       light: { hemi: ['#e8f0ff', '#3a4a2a', 0.95], key: ['#fff0d8', 1.6], rim: ['#ffc890', 0.45] },
       update(t, dt, camera) {
-        drift(clouds, dt, 90); drift(high, dt * 0.5, 90);
+        drift(clouds, dt, 90); drift(high, dt * 0.5, 90); snow(t, dt);
         sig.f.rotation.y = Math.sin(t / 380) * 0.5;
         for (const F of weiFlags) F.f.rotation.y = Math.sin(t / 520 + F.ph) * 0.35;
         birds.forEach((B, i) => {
@@ -643,11 +688,12 @@ const STAGES = (() => {
     }
     const flies = specks(ctx, ctx.low ? 40 : 90, '#e8ff9a', 0.2, [24, -1, 4], 0.85); group.add(flies);
     const fp = flies.geometry.attributes.position, home = Float32Array.from(fp.array);
+    const rain = weather(ctx, group, false);                                // the rains of the south, rings on the board's rivers
     return {
       group, sky: skyDome('#5e7e66', '#d8d2a0', '#2e4424'), fog: '#71825a', fogSpan: 55,
       light: { hemi: ['#e0f0c8', '#2a3a1a', 0.9], key: ['#fff0c8', 1.45], rim: ['#c8ff9a', 0.35] },
       update(t, dt, camera) {
-        drift(mist, dt * 0.6, 70);
+        drift(mist, dt * 0.6, 70); rain(t, dt);
         for (const M of mist) M.m.material.opacity = M.o * (0.75 + 0.25 * Math.sin(t / 1400 + M.ph));
         for (const H of herd) {
           H.e.position.x -= dt * 1.4; if (H.e.position.x < -60) H.e.position.x += 120;

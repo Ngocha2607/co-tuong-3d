@@ -33,6 +33,7 @@ const VIEW = (() => {
       return c < 0 || c > 8 || r < 0 || r > 9 || Math.hypot(x + 4 - c, z + 4.5 - r) > 0.5 ? -1 : r * 9 + c;
     },
     board: () => MODELS.board(skins.board), wet: MODELS.wet.classic,
+    inside: (x, z) => Math.abs(x) < 4.55 && Math.abs(z) < 5.05,          // within the frame
     fit: [6.4, 5.5, 6.0], edge: 5.1, shadow: 9, far: 32,   // camera framing, the hero shadow's edge (the frame's inner edge), light, zoom out
   };
   // the three kingdoms; pieces are drawn as 20 + 10 * kingdom + type (models.js)
@@ -52,6 +53,7 @@ const VIEW = (() => {
       return best;
     },
     board: () => MODELS.sanguoBoard(skins.board), wet: MODELS.wet.sanguo,
+    inside: (x, z) => [0, 1, 2, 3, 4, 5].every(i => x * Math.sin((i * Math.PI) / 3) + z * Math.cos((i * Math.PI) / 3) < SG.H + 0.45),
     fit: [9.0, 9.4, 9.6], edge: SG.BOARD_R - 0.3, shadow: 11.5, far: 42,
   };
   let L = CLASSIC, layoutName = 'classic', boardMesh = null;
@@ -685,12 +687,14 @@ const VIEW = (() => {
   // ---------- stage ----------
   // replace everything around the table, with its light, sky and haze; the board and pieces stay as they are
   let wantStage = 'room';
+  // where the board is and where its water, for the weather (asked of whichever board is out when it falls)
+  const onBoard = { inside: (x, z) => L.inside(x, z), wet: (x, z) => L.wet(x, z) };
   function setStage(id) {
     wantStage = STAGES.valid(id) ? id : 'room';
     if (!scene || wantStage === stageId) return;          // before init() the wish is kept for it
     if (stage) scene.remove(stage.group);
     const low = Math.min(innerWidth, innerHeight) < 600 || (navigator.hardwareConcurrency || 8) <= 4;
-    stage = STAGES.build(wantStage, { glowTex, low }); stageId = wantStage;
+    stage = STAGES.build(wantStage, { glowTex, low, ...onBoard }); stageId = wantStage;
     if (stage.sky) stage.group.add(stage.sky);
     scene.add(stage.group);
     occluders = []; stage.group.traverse(o => { if (o.userData.clear) occluders.push(o); });
