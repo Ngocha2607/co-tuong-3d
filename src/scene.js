@@ -412,21 +412,81 @@ const VIEW = (() => {
     });
     u.root.position.y = 0; restPose(u);
   }
+  // the blow, by kind of warrior: the elephant rears and stamps, the horse rears and tramples, the chariot backs up and
+  // rams, the soldier lowers the spear and thrusts, the advisor sweeps a gust from the fan, the general cuts down.
+  // A general led by a hero strikes in their own way (HERO_STRIKE).
   async function strike(u) {
-    const j = u.war.userData.j, type = L.typeOf(u.piece);
-    if (type === B) {           // the elephant rears and stamps
+    const j = u.war.userData.j, type = L.typeOf(u.piece), yaw = u.war.rotation.y, ahead = u.root.position.clone().add(new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(0.6));
+    const lunge = d => { u.war.position.x = Math.sin(yaw) * d; u.war.position.z = Math.cos(yaw) * d; };
+    const arm = (a, b, ms) => tween(ms, k => { if (j.armR) j.armR.rotation.x = lerp(a, b, out(k)); });
+    const cut = async () => { await arm(j.restArm || 0, -2.4, 240); SFX.whoosh(); await tween(120, k => { if (j.armR) j.armR.rotation.x = lerp(-2.4, 0.9, k); lunge(0.18 * k); }); };
+    const thrust = async (ms = 110) => { await arm(j.armR ? j.armR.rotation.x : 0, -0.3, 160); SFX.whoosh(); await tween(ms, k => { if (j.armR) j.armR.rotation.x = lerp(-0.3, 1.0, k); lunge(0.22 * k); }); await tween(120, k => lunge(0.22 * (1 - k))); };
+    const hero = HERO_STRIKE[u.war.userData.hero];
+    if (hero) await hero(u, j, { cut, thrust, lunge, arm, ahead });
+    else if (type === B) {
       await tween(260, k => { j.body.rotation.x = -0.45 * out(k); if (j.trunk) j.trunk.rotation.x = 0.5 - 1.4 * k; });
       await tween(140, k => { j.body.rotation.x = -0.45 * (1 - k) + 0.12 * k; });
-      return;
-    }
-    if (type === N && j.body) await tween(200, k => { j.body.rotation.x = -0.35 * out(k); });
-    if (j.armR) {
-      await tween(240, k => { j.armR.rotation.x = -2.4 * out(k); });
+      dustRing(ahead); shake = Math.max(shake, 0.12);
+    } else if (type === N) {
+      const front = (j.legs || []).slice(0, 2);
+      await tween(260, k => { j.body.rotation.x = -0.6 * out(k); for (const l of front) l.rotation.x = -1.1 * Math.sin(k * Math.PI * 2); if (j.armR) j.armR.rotation.x = -2.2 * out(k); });
       SFX.whoosh();
-      await tween(120, k => { j.armR.rotation.x = lerp(-2.4, 0.9, k); });
-    }
-    if (type === N && j.body) j.body.rotation.x = 0;
+      await tween(140, k => { j.body.rotation.x = lerp(-0.6, 0.08, k); lunge(0.25 * k); if (j.armR) j.armR.rotation.x = lerp(-2.2, 0.9, k); });
+      SFX.gallop(); dustRing(ahead); shake = Math.max(shake, 0.1);
+      j.body.rotation.x = 0; for (const l of front) l.rotation.x = 0;
+    } else if (type === R) {
+      SFX.roll();
+      await tween(220, k => { lunge(-0.15 * out(k)); for (const w of j.wheels || []) w.rotation.x -= 0.15; });
+      await tween(130, k => { lunge(lerp(-0.15, 0.4, k)); for (const w of j.wheels || []) w.rotation.x += 0.4; });
+      SFX.thud(); dustRing(ahead); shake = Math.max(shake, 0.16);
+    } else if (type === XQ.P) await thrust();
+    else if (type === XQ.A) await gust(u, j, ahead);
+    else await cut();
+    const d0 = u.war.position.x * Math.sin(yaw) + u.war.position.z * Math.cos(yaw);   // back to where they stood
+    await tween(120, k => lunge(d0 * (1 - k)));
+    u.war.position.x = 0; u.war.position.z = 0; u.war.rotation.y = yaw;
   }
+  // the fan swept forward, a gust of wind flying from it at the enemy
+  async function gust(u, j, ahead) {
+    await tween(220, k => { j.armR.rotation.x = lerp(j.restArm || 0, -1.9, out(k)); });
+    SFX.whoosh();
+    const from = u.root.position.clone().setY(0.5), dir = ahead.clone().setY(0.5).sub(from).normalize();
+    for (let i = 0; i < 14; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: '#eef6ff', transparent: true, opacity: 0.6, depthWrite: false }));
+      s.position.copy(from).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2)); s.scale.setScalar(0.25);
+      scene.add(s);
+      const v = 2.5 + Math.random() * 1.5;
+      parts.push({ m: s, vx: dir.x * v, vy: (Math.random() - 0.3) * 0.4, vz: dir.z * v, life: 0.45, max: 0.45, grow: 0.5, fade: true });
+    }
+    await tween(160, k => { j.armR.rotation.x = lerp(-1.9, 0.6, k); });
+  }
+  // the heroes' own blows (heroes.js ids); the rest cut down like any general
+  const HERO_STRIKE = {
+    // Guan Yu sweeps the Green Dragon blade round in a full circle, then brings it down
+    'quan-vu': async (u, j, s) => {
+      SFX.whoosh(); const y = u.war.rotation.y;
+      await tween(420, k => { u.war.rotation.y = y + out(k) * Math.PI * 2; j.armR.rotation.x = -1.6 * Math.sin(k * Math.PI); });
+      u.war.rotation.y = y; await s.cut();
+    },
+    // Zhang Fei roars first, the ground shaking, then drives the serpent spear in
+    'truong-phi': async (u, j, s) => {
+      SFX.drum(); shake = Math.max(shake, 0.18);
+      await tween(380, k => { j.head.rotation.x = -0.5 * Math.sin(k * Math.PI); u.war.scale.setScalar(BIG() * (1 + 0.12 * Math.sin(k * Math.PI))); });
+      await s.thrust(90);
+    },
+    // Zhao Yun and Ma Chao: three thrusts, quick as lightning
+    'trieu-van': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
+    'ma-sieu': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
+    // Lü Bu leaps high and brings the halberd down, the board shaking under him
+    'lu-bo': async (u, j, s) => {
+      await tween(300, k => { u.war.position.y = Math.sin(k * Math.PI * 0.5) * 0.45; j.armR.rotation.x = -2.6 * out(k); s.lunge(0.15 * k); });
+      SFX.whoosh();
+      await tween(140, k => { u.war.position.y = 0.45 * (1 - k); j.armR.rotation.x = lerp(-2.6, 1.0, k); s.lunge(lerp(0.15, 0.3, k)); });
+      SFX.thud(); dustRing(s.ahead); smoke(s.ahead.clone().setY(0.1), 5, '#8a7a6a', 0.8); shake = Math.max(shake, 0.28);
+    },
+    // Zhuge Liang's feather fan raises a gale
+    'gia-cat-luong': (u, j, s) => gust(u, j, s.ahead),
+  };
   async function fall(u, from, by) {
     // knocked back, topples, bursts into pieces; the disc flies to the tray of the side that took it
     const p = u.root.position, away = new THREE.Vector3(p.x - from.x, 0, p.z - from.z).normalize();
