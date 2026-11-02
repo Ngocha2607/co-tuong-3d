@@ -1,4 +1,4 @@
-// daily.js — the daily puzzle, Bát Trận Đồ (八陣圖, Gia Cát Lượng's battle formations: one to break each day): one position a day for everyone, the same all over Vietnam's day
+// daily.js — the daily puzzle, Chân Long Kỳ Trận (真龍棋陣, the true dragon's chess formation: one to break each day): one position a day for everyone, the same all over Vietnam's day
 // (UTC+7). Red to move and checkmate within n moves against the computer's best defence. The puzzles were found by
 // test/gen-daily.js and are proven by test/daily.test.js like the campaign's: checkmate in exactly n against every
 // defence, no win in fewer, one first move that works. After the last one the list starts again.
@@ -176,7 +176,7 @@ const DAILY = (() => {
   // the puzzle of a day as a campaign battle, so CAMPAIGN.judge decides it and the page plays it like one
   function level(day) {
     const [fen, n, tier] = at(day);
-    return { id: 'daily', daily: true, day, no: day - EPOCH + 1, name: `Bát Trận Đồ · Trận ${day - EPOCH + 1}`, type: 'mate', n, tier, side: 1, ai: 'hard', fen };   // the longest think short of the side stories: a long mate needs a stubborn defence
+    return { id: 'daily', daily: true, day, no: day - EPOCH + 1, name: `Chân Long Kỳ Trận · Trận ${day - EPOCH + 1}`, type: 'mate', n, tier, side: 1, ai: 'hard', fen };   // the longest think short of the side stories: a long mate needs a stubborn defence
   }
   // how hard a formation is: every one is for strong players, the masters' ones more so
   const rank = tier => (tier >= 2 ? 'Bậc Đại sư' : 'Bậc Cao thủ');

@@ -1,4 +1,4 @@
-// gen-daily.js — content tool (never shipped): finds the battle formations of Bát Trận Đồ, the daily puzzle
+// gen-daily.js — content tool (never shipped): finds the battle formations of Chân Long Kỳ Trận, the daily puzzle
 // (src/daily.js), hard enough that only a strong player breaks them.
 //   node test/gen-daily.js [how many] [minutes at most] [seed] [keep file]  → prints the PUZZLES list of src/daily.js
 // Each formation found is also added to the keep file (JSON lines) at once; a later run with the same file starts

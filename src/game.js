@@ -159,7 +159,7 @@
     reset(); clearSel();
     VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
-    SFX.init(); SFX.gong(); banner(lv.daily ? 'Bát Trận Đồ' : lv.name, 'open');
+    SFX.init(); SFX.gong(); banner(lv.daily ? 'Chân Long Kỳ Trận' : lv.name, 'open');
     toast(CAMPAIGN.goal(lv));
     updateStatus();
     if (G.pos.turn !== G.me) setTimeout(() => { if (G.mode === 'campaign' && G.lv === lv && !G.moves.length) aiMove(); }, 900);
@@ -281,7 +281,7 @@
         repetition: 'Lặp lại thế cờ ba lần', quiet: '60 nước liền không ăn quân',
         'perpetual-check': r.win ? 'Đối phương chiếu dai, phạm luật' : 'Bạn chiếu dai, phạm luật', 'perpetual-chase': r.win ? 'Đối phương đuổi dai, phạm luật' : 'Bạn đuổi dai, phạm luật',
       }[r.reason] || '';
-      if (lv.daily) return [r.win ? 'Phá trận!' : 'Chưa phá được trận', `Bát Trận Đồ · Trận ${lv.no} · ${why}`];
+      if (lv.daily) return [r.win ? 'Phá trận!' : 'Chưa phá được trận', `Chân Long Kỳ Trận · Trận ${lv.no} · ${why}`];
       return [r.win ? 'Đại thắng!' : 'Thất bại', `${lv.name} · ${why}`];
     }
     if (st.reason === 'aborted') return ['Ván bị hủy', 'Một bên không đi nước đầu trong 30 giây'];
@@ -1244,7 +1244,7 @@
   function renderHistory() {
     const list = REVIEW.list(), box = $('#hiList');
     $('#hiSum').textContent = list.length ? `${list.length} ván gần nhất trên máy này` : 'Chưa có ván nào';
-    if (!list.length) { box.innerHTML = '<li class="empty"><p class="note">Đánh xong một ván cờ tướng (với máy, chiến dịch, Bát Trận Đồ hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.</p></li>'; return; }
+    if (!list.length) { box.innerHTML = '<li class="empty"><p class="note">Đánh xong một ván cờ tướng (với máy, chiến dịch, Chân Long Kỳ Trận hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.</p></li>'; return; }
     box.innerHTML = list.map(g => {
       const me = g.me, won = g.reason === 'held' || (me && g.winner === me) ? 1 : me && g.winner === -me ? -1 : 0;
       const res = !me ? ['draw', '觀'] : won > 0 ? ['win', '勝'] : won < 0 ? ['lose', '敗'] : ['draw', '和'];
@@ -1447,7 +1447,7 @@
     box.hidden = G.mode !== 'campaign';
     if (G.mode !== 'campaign') return;
     const lv = G.lv, r = CAMPAIGN.judge(lv, G.moves);
-    $('#goalName').textContent = lv.daily ? `Bát Trận Đồ · Trận ${lv.no}` : `${lv.id} · ${lv.name}`;
+    $('#goalName').textContent = lv.daily ? `Chân Long Kỳ Trận · Trận ${lv.no}` : `${lv.id} · ${lv.name}`;
     $('#goalText').textContent = CAMPAIGN.goal(lv);
     $('#goalCount').textContent = lv.type === 'mate' ? `Nước của bạn: ${r.mine}/${lv.n} (tối đa ${lv.n + 2})`
       : lv.type === 'survive' ? `Đã cầm cự: ${Math.min(r.theirs, lv.n)}/${lv.n} nước · còn ${r.pieces} quân`
@@ -1643,7 +1643,7 @@
     $('#end .han').textContent = camp.win ? '陣' : '敗';
     const again = $('#bAgain');
     again.hidden = false; again.disabled = false; again.textContent = camp.win ? 'Phá lại để luyện tay' : 'Thử lại';
-    $('#bEndMap').hidden = false; $('#bEndMap').textContent = 'Bảng Bát Trận Đồ';
+    $('#bEndMap').hidden = false; $('#bEndMap').textContent = 'Bảng Chân Long Kỳ Trận';
     $('#bEndUndo').hidden = camp.win;
     $('#endNote').textContent = !camp.win ? `Trận chưa vỡ: phải chiếu bí trong ${o.lv.n} nước. Đồng hồ vẫn chạy, thử đường khác nhé.`
       : !s ? 'Đang ghi kết quả…'
@@ -2029,7 +2029,7 @@
     FRIENDS.setOnline(online);
     $('#onlineBox').classList.toggle('off', !online);
     loadRooms();   // a page opened before this was known
-    $('#onlineNote').textContent = online ? '' : !navigator.onLine ? 'Đang offline: vẫn đánh với máy, chiến dịch, Bát Trận Đồ và xem lại ván cũ được.'
+    $('#onlineNote').textContent = online ? '' : !navigator.onLine ? 'Đang offline: vẫn đánh với máy, chiến dịch, Chân Long Kỳ Trận và xem lại ván cũ được.'
       : 'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).';
     const q = new URLSearchParams(location.search), invited = cleanRoom(q.get('room')), invitedSg = cleanRoom(q.get('tq'));
     if (online && invitedSg.length >= 4) sgOnline(invitedSg);
