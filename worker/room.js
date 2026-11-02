@@ -75,6 +75,8 @@ export class Room extends DurableObject {
     for (const w of this.sockets(except)) { const s = this.sideOf(w); if (s) p[s] = true; }
     return p;
   }
+  // how many are here only to watch
+  watching(except) { return this.sockets(except).filter(w => !this.sideOf(w)).length; }
   // clocks as of now, and a pending abort / abandon countdown (the clocks themselves show a coming loss on time)
   timing(now = Date.now()) {
     const d = C.deadline(this.st);
@@ -85,7 +87,7 @@ export class Room extends DurableObject {
   }
   stateFor(ws, extra = {}) {
     const { moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board } = this.st, jq = this.st.variant === 'jq';
-    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board, variant: jq ? 'jq' : 'xq', turns: jq ? this.replay().turns : [], players: this.presence(), ...H.hallInfo(this.st, SIDES), ...this.timing(), ...extra };
+    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board, variant: jq ? 'jq' : 'xq', turns: jq ? this.replay().turns : [], players: this.presence(), watchers: this.watching(), ...H.hallInfo(this.st, SIDES), ...this.timing(), ...extra };
   }
   // everyone gets the whole state again (the hall changes rarely, and each page needs its own `you`)
   async resync(extra) { for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, extra)); await this.announce(); }
@@ -211,13 +213,14 @@ export class Room extends DurableObject {
       if (dirty) { await this.save(); await this.schedule(); }
       if (st.phase === 'lobby') { await this.resync(); return; }   // the hall shows everyone who came in
       this.send(ws, this.stateFor(ws));
-      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, skins: st.skins, board: st.board, ...this.timing() }, ws);
+      this.broadcast({ t: 'presence', players: this.presence(), watchers: this.watching(), info: st.info, heroes: st.heroes, skins: st.skins, board: st.board, ...this.timing() }, ws);
       await this.announce();
       return;
     }
     const side = this.sideOf(ws);
     if (m.t === 'sync') { this.send(ws, this.stateFor(ws)); return; }
     if (m.t === 'emote') { if (side) this.emote(ws, side, m.id, now); return; }
+    if (m.t === 'cheer') { if (!side) this.cheer(ws, m, now); return; }
     // a player walks out: a game under way is given up; in a friendly room the seat is freed for someone else
     if (m.t === 'leave') {
       if (!side) return;
@@ -304,6 +307,14 @@ export class Room extends DurableObject {
     this.broadcast({ t: 'emote', side, id, hero: this.st.heroes[side] || '' });
   }
 
+  // someone watching cheers (emotes.js CHEERS): to everyone here, as often as the players may speak
+  cheer(ws, m, now) {
+    const a = ws.deserializeAttachment() || {};
+    if (!EMOTES.cheerValid(m.id) || now - (a.emoteAt || 0) < EMOTES.GAP_MS || (m.id === 'len' && !SIDES.includes(m.for))) return;
+    ws.serializeAttachment({ ...a, emoteAt: now });
+    this.broadcast({ t: 'cheer', id: m.id, ...(m.id === 'len' ? { for: m.for } : {}), watchers: this.watching() });
+  }
+
   // the hall: a general for oneself; the battlefield and the time (host only); ready (the others); asking a player to
   // leave and starting the game (host only)
   async hall(side, m, now) {
@@ -352,7 +363,7 @@ export class Room extends DurableObject {
       await this.announce(this.presence(ws));
       return;
     }
-    this.broadcast({ t: 'presence', players: this.presence(ws), info: st.info, ...this.timing() }, ws);
+    this.broadcast({ t: 'presence', players: this.presence(ws), watchers: this.watching(ws), info: st.info, ...this.timing() }, ws);
     await this.announce(this.presence(ws));
   }
 }

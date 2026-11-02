@@ -10,7 +10,7 @@ const FRIENDS = (() => {
   const TC = ['', '10+5', '5+3'], TC_LABEL = { '': 'không giờ', '10+5': '10′ + 5s', '5+3': '5′ + 3s' };
   const STATUS = { online: ['on', 'Đang online'], playing: ['play', 'Đang chơi'], offline: ['', 'Offline'] };
   const tab = Math.random().toString(36).slice(2, 10);    // which of the player's pages this is
-  let hooks = { toast() { }, onGo() { }, busy: () => '' }, online = false, ws = null, retryT = 0, tries = 0, status = 'online';
+  let hooks = { toast() { }, onGo() { }, watch() { }, busy: () => '' }, online = false, ws = null, retryT = 0, tries = 0, status = 'online', room = '';
   let data = null, pollT = 0, out = null;                  // out: my challenge waiting { id, to, name, until }
   const incoming = new Map();                             // challenges to me: id → { from, tc, until, armed }
   let tcPick = 0;
@@ -29,7 +29,7 @@ const FRIENDS = (() => {
     if (!online || !ACCOUNT.user || ws) return;
     const s = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/lobby`);
     ws = s;
-    s.onopen = () => { tries = 0; send({ t: 'hi', tab, status }); };
+    s.onopen = () => { tries = 0; send({ t: 'hi', tab, status, room }); };
     s.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } onMsg(m); };
     s.onclose = () => {
       if (ws !== s) return;
@@ -68,8 +68,9 @@ const FRIENDS = (() => {
         break;
     }
   }
-  // the page's player is in a game, or free (game.js tells, whenever that changes)
-  function setStatus(s) { if (s === status) return; status = s; send({ t: 'status', status }); }
+  // the page's player is in a game, or free (game.js tells, whenever that changes); r: the online room they play in
+  // ('xq:ABCD'), which their friends can come and watch
+  function setStatus(s, r = '') { if (s === status && r === room) return; status = s; room = r; send({ t: 'status', status, room }); }
 
   // ---------- challenges ----------
   function challenge(id, name) {
@@ -144,8 +145,9 @@ const FRIENDS = (() => {
       `<button class="btn gold" type="button" data-act="accept" data-id="${u.id}">Đồng ý</button><button class="btn" type="button" data-act="decline" data-id="${u.id}">Từ chối</button>`, rating(u))).join('')}</ul>` : '';
     $('#frList').innerHTML = list.length ? list.map(f => {
       const [cls, word] = STATUS[f.status] || STATUS.offline;
-      return row(f, `${f.status === 'offline' ? '' : `<button class="btn primary" type="button" data-challenge="${f.id}" data-name="${esc(f.name)}">Thách đấu</button>`}`
-        + `<button class="btn" type="button" data-profile="${f.id}">Hồ sơ</button>`, `<i class="fdot ${cls}"></i>${word} · ${rating(f)}`);
+      const watch = f.room ? `<button class="btn gold" type="button" data-watch="${esc(f.room)}">Xem</button>` : '';
+      return row(f, watch + `${f.status === 'offline' ? '' : `<button class="btn primary" type="button" data-challenge="${f.id}" data-name="${esc(f.name)}">Thách đấu</button>`}`
+        + `<button class="btn" type="button" data-profile="${f.id}">Hồ sơ</button>`, `<i class="fdot ${cls}"></i>${f.room ? 'Đang đánh online' : word} · ${rating(f)}`);
     }).join('') : '<li class="empty"><p class="note">Tìm kỳ thủ theo tên ở trên, hoặc mở hồ sơ của ai đó trên bảng xếp hạng để kết bạn. Bạn bè thấy nhau đang online và thách đấu nhau được ngay.</p></li>';
     $('#frOutgoing').innerHTML = data.outgoing.length ? `<h4 class="sub">Đã gửi lời mời</h4><ul class="flist">${data.outgoing.map(u => row(u,
       `<button class="btn" type="button" data-act="remove" data-id="${u.id}">Hủy lời mời</button>`, 'Đang chờ đồng ý')).join('')}</ul>` : '';
@@ -175,10 +177,11 @@ const FRIENDS = (() => {
     } catch (e) { hooks.toast(e.status === 403 ? e.message : 'Chưa làm được, thử lại sau'); return null; }
   }
   $('#friends').addEventListener('click', e => {
-    const a = e.target.closest('[data-act]'), c = e.target.closest('[data-challenge]'), p = e.target.closest('[data-profile]'), t = e.target.closest('#frTc button');
-    if (!a && !c && !p && !t) return;
+    const a = e.target.closest('[data-act]'), c = e.target.closest('[data-challenge]'), p = e.target.closest('[data-profile]'), t = e.target.closest('#frTc button'), w = e.target.closest('[data-watch]');
+    if (!a && !c && !p && !t && !w) return;
     SFX.init(); SFX.pick();
-    if (a) act(+a.dataset.id, a.dataset.act);
+    if (w) { close(); hooks.watch(w.dataset.watch); }
+    else if (a) act(+a.dataset.id, a.dataset.act);
     else if (c) challenge(+c.dataset.challenge, c.dataset.name);
     else if (p) { close(); ACCOUNT.openProfile(+p.dataset.profile); }
     else { tcPick = +t.dataset.v; try { localStorage.setItem('cotuong_chtc', TC[tcPick]); } catch (x) { } render(); }

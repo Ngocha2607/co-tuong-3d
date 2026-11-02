@@ -445,7 +445,9 @@
   function disconnect() { clearTimeout(retryT); if (G.ws) { const w = G.ws; G.ws = null; try { w.close(); } catch (e) { } } }
   const send = o => { if (G.ws && G.ws.readyState === 1) G.ws.send(JSON.stringify(o)); };
   function onNet(m) {
+    if ('watchers' in m) G.watchers = m.watchers | 0;
     switch (m.t) {
+      case 'cheer': onCheer(m); updateStatus(); break;
       case 'state': {
         const firstSeat = !G.you && m.you;
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
@@ -789,7 +791,9 @@
   function sgNetMsg(m) {
     const sg = G.sg, net = sg && sg.net;
     if (!net) return;
+    if ('watchers' in m) G.watchers = m.watchers | 0;
     switch (m.t) {
+      case 'cheer': onCheer(m); break;
       case 'state': {
         const first = net.you < 0 && m.you >= 0;
         Object.assign(net, { you: m.you, players: m.players, info: m.info, rated: !!m.rated, tc: m.tc || null, rematch: m.rematch });
@@ -874,7 +878,7 @@
     else if (net && net.you < 0) text = `Đang xem · Lượt ${KNAME[turn]}`;
     else if (net && !pos.alive[net.you]) text = `Bạn đã mất nước · Lượt ${KNAME[turn]}`;
     else text = solo === turn ? `Lượt bạn · ${KNAME[turn]}` : `Lượt ${KNAME[turn]}`;
-    const st = $('#status'); st.textContent = text; st.classList.toggle('mine', sgCanAct());
+    const st = $('#status'); st.textContent = text + watchText(); st.classList.toggle('mine', sgCanAct());
     // the three kingdoms in the panel: Shu in the red slot, Wu in the green one, Wei in the black one
     PL.forEach((id, k) => {
       const el = $(id), hero = HEROES.byId[G.heroes[k]], who = el.querySelector('.who');
@@ -1061,25 +1065,54 @@
   let emoteAt = 0;
   function emotePop(open, anchor) {
     const pop = $('#emotePop'), side = emoteSide();
-    if (!open || side === null) { pop.hidden = true; return; }
+    if (!open || (side === null && !watching())) { pop.hidden = true; return; }
+    if (side === null) {                                    // watching: cheers, and Cố lên … for each side
+      const sides = G.mode === 'sanguo' ? [0, 1, 2] : [1, -1];
+      pop.innerHTML = sides.map(k => `<button type="button" class="cry" data-cheer="len" data-for="${k}">${EMOTES.cheerText('len', sideName(k))}</button>`).join('')
+        + EMOTES.CHEERS.map(l => `<button type="button" data-cheer="${l.id}">${l.text}</button>`).join('')
+        + `<label class="mute"><input type="checkbox" id="emoteMute"${pref.muteEmotes ? ' checked' : ''}> Ẩn biểu cảm của người khác</label>`;
+      return placePop(pop, anchor);
+    }
     const id = cryHero(side, G.mode === 'sanguo' ? (G.sg.net.heroesRaw || [])[side] : G.heroes[side]), hero = HEROES.byId[id];
     pop.innerHTML = `<button type="button" class="cry" data-emote="cry"><span class="hz">${hero ? hero.han : '帥'}</span><span>${ACCOUNT.esc(EMOTES.text('cry', id))}</span></button>`
       + EMOTES.LINES.map(l => `<button type="button" data-emote="${l.id}">${l.text}</button>`).join('')
       + `<label class="mute"><input type="checkbox" id="emoteMute"${pref.muteEmotes ? ' checked' : ''}> Ẩn biểu cảm của người khác</label>`;
+    placePop(pop, anchor);
+  }
+  // over the button that opened it, kept on the screen
+  function placePop(pop, anchor) {
     pop.hidden = false;
-    // over the button that opened it, kept on the screen
     const r = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
     pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
     pop.style.top = (r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8) + 'px';
   }
   $('#emotePop').addEventListener('click', e => {
-    const b = e.target.closest('[data-emote]'); if (!b) return;
+    const b = e.target.closest('[data-emote], [data-cheer]'); if (!b) return;
     SFX.init();
     if (Date.now() - emoteAt < EMOTES.GAP_MS) { toast('Chờ một chút rồi nói tiếp'); return; }
-    emoteAt = Date.now(); send({ t: 'emote', id: b.dataset.emote }); emotePop(false);
+    emoteAt = Date.now(); emotePop(false);
+    send(b.dataset.cheer ? { t: 'cheer', id: b.dataset.cheer, for: +b.dataset.for } : { t: 'emote', id: b.dataset.emote });
   });
   $('#emotePop').addEventListener('change', e => { if (e.target.id === 'emoteMute') { pref.muteEmotes = e.target.checked; savePref(); } });
   for (const id of ['#bEmote', '#bHallEmote']) $(id).addEventListener('click', e => { SFX.init(); SFX.pick(); emotePop($('#emotePop').hidden, e.currentTarget); });
+  // watching an online game (a room's page without a seat)
+  const watching = () => (G.mode === 'online' && !G.you && !!G.ws) || (sgNet() && G.sg.net.you < 0);
+  const sideName = k => (G.mode === 'sanguo' ? KNAME[k] : SIDE[k]);
+  const watchText = () => (G.watchers > 0 && (G.mode === 'online' || sgNet()) ? ` · ${G.watchers} người xem` : '');
+  // a cheer from someone watching: it rises over the board, and the side cheered on raises its arms
+  function onCheer(m) {
+    if (pref.muteEmotes && !watching()) return;
+    const sides = G.mode === 'sanguo' ? [0, 1, 2] : [1, -1];
+    if (m.id === 'len' && !sides.includes(m.for)) return;
+    const text = EMOTES.cheerText(m.id, sideName(m.for)); if (!text) return;
+    const el = document.createElement('div');
+    el.className = 'cheer'; el.textContent = text;
+    el.style.left = (18 + Math.random() * 64) + '%';
+    $('#bubbles').appendChild(el);
+    setTimeout(() => el.remove(), 3200);
+    if (m.id === 'len') VIEW.cheer(m.for, -1);
+    SFX.pick();
+  }
   function onEmote(m) {
     if (pref.muteEmotes && m.side !== emoteSide()) return;
     const text = EMOTES.text(m.id, cryHero(m.side, m.hero));
@@ -1463,8 +1496,9 @@
   }
   function updateStatus() {
     applySkins();
-    $('#bEmote').hidden = emoteSide() === null;              // emotes: the seated players of an online room
-    if (emoteSide() === null) $('#emotePop').hidden = true;
+    $('#bEmote').hidden = emoteSide() === null && !watching();   // emotes: the seated players of an online room; cheers: those watching
+    $('#bEmote').textContent = emoteSide() === null ? 'Cổ vũ' : 'Biểu cảm';
+    if (emoteSide() === null && !watching()) $('#emotePop').hidden = true;
     if (inHall()) { renderHall(); return; }
     if (G.mode === 'sanguo') { sgStatus(); return; }
     if (G.mode === 'review') { rvStatus(); return; }
@@ -1485,6 +1519,7 @@
       else text = turn === G.you ? `Lượt bạn · ${SIDE[G.you]}` : 'Lượt đối thủ';
     }
     if (text && G.pos.dark && !G.over && G.mode !== 'menu') text = 'Cờ úp · ' + text;
+    if (text && G.mode === 'online') text += watchText();
     st.textContent = text;
     st.classList.toggle('mine', !G.over && !G.animating && myTurn());
     for (const side of [1, -1]) {
@@ -1560,7 +1595,8 @@
   }
   function layoutMode() {
     document.body.dataset.mode = G.mode;
-    FRIENDS.setStatus(G.mode === 'menu' || G.mode === 'review' ? 'online' : 'playing');   // what friends see
+    // what friends see, and the room they can come and watch
+    FRIENDS.setStatus(G.mode === 'menu' || G.mode === 'review' ? 'online' : 'playing', G.mode === 'online' ? 'xq:' + G.room : sgNet() ? 'sg:' + G.room : '');
     frameBoard();
     $('#bUndo').hidden = $('#bHint').hidden = !(vsAI() || (G.mode === 'sanguo' && !G.sg.net && sgPeople().length));
   }
@@ -1933,6 +1969,7 @@
     toast,
     busy: () => ((G.mode === 'online' && G.you && !G.over && G.moves.length) || (sgNet() && G.sg.net.you >= 0 && !G.over && sgMoves().length)
       ? 'Bạn đang trong một ván online: nhận lời sẽ là xin thua ván này. Bấm Nhận lần nữa nếu chắc chắn.' : ''),
+    watch(r) { const [v, code] = r.split(':'); SFX.init(); closePages(); if (v === 'sg') sgOnline(code); else goOnline(code); },
     onGo(room, tc, host) {
       if (G.ws && G.ws.readyState === 1) send({ t: 'leave' });   // a game under way here is given up
       G.privateRoom = room;

@@ -225,10 +225,11 @@ export async function api(req, env, url) {
         WHERE f.user_id = ?1 OR (f.friend_id = ?1 AND f.state = 0) ORDER BY u.name COLLATE NOCASE`).bind(me).all();
       const who = r => ({ id: r.id, name: r.name, title: r.title, rating: r.rating, sg_rating: r.sg_rating });
       const friends = results.filter(r => r.user_id === me && r.state === 1).map(who);
-      let online = {};
+      let online = { status: {}, rooms: {} };
       try { if (friends.length) online = await (await lobby(env).fetch('https://lobby/presence', { method: 'POST', body: JSON.stringify({ ids: friends.map(f => f.id) }) })).json(); } catch (e) { }
       return json({
-        friends: friends.map(f => ({ ...f, status: online[f.id] || 'offline' })),
+        // room: the online room a friend plays in, to watch
+        friends: friends.map(f => ({ ...f, status: online.status[f.id] || 'offline', ...(online.rooms[f.id] ? { room: online.rooms[f.id] } : {}) })),
         incoming: results.filter(r => r.user_id !== me).map(who),
         outgoing: results.filter(r => r.user_id === me && r.state === 0).map(who),
       });

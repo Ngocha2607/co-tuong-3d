@@ -421,6 +421,10 @@ const I18N = (() => {
     'Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.':
       'Unlocked with Campaign stars, achievements and ranked seasons. Online, your opponents see your pieces and warriors; the board is the host’s.',
 
+    // watching: cheers, how many watch, friends' games
+    'Cổ vũ': 'Cheer', 'Hay quá!': 'Brilliant!', 'Vỗ tay!': 'Applause!', 'Căng quá!': 'So tense!', 'Cố lên {0}!': 'Go {0}!',
+    '{0} người xem': '{0} watching', 'Đang đánh online': 'Playing online',
+
     // cờ úp (jieqi.js)
     'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
     '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',

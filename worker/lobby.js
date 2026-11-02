@@ -96,9 +96,11 @@ export class Lobby extends DurableObject {
       this.send(ws, { t: 'cancelled' });
       await this.pair();
     } else if (m.t === 'hi' || m.t === 'status') {
-      // a page saying it is here, and whether its player is in a game (tab: which page of theirs this is)
+      // a page saying it is here, and whether its player is in a game (tab: which page of theirs this is); room: the
+      // online room they play in ('xq:ABCD', 'sg:ABCD'), for their friends to come and watch
       const tab = typeof m.tab === 'string' ? m.tab.slice(0, 16) : me.a.tab || '';
-      ws.serializeAttachment({ ...me.a, presence: true, tab, status: m.status === 'playing' ? 'playing' : 'online' });
+      const playing = m.status === 'playing', room = playing && typeof m.room === 'string' && /^(xq|sg):[A-Z0-9]{4,8}$/.test(m.room) ? m.room : '';
+      ws.serializeAttachment({ ...me.a, presence: true, tab, status: playing ? 'playing' : 'online', room });
     } else if (m.t === 'challenge') await this.challenge(me, m);
     else if (m.t === 'answer') await this.answer(me, m);
     else if (m.t === 'unchallenge') await this.unchallenge(me, m);
@@ -109,15 +111,17 @@ export class Lobby extends DurableObject {
   pages(id, tab) {
     return this.ctx.getWebSockets().filter(ws => { const a = ws.deserializeAttachment(); return a && a.presence && a.user.id === id && (!tab || a.tab === tab); });
   }
-  // { [id]: 'online' | 'playing' } for those of ids who have a page open (free on any of their pages counts as free)
+  // status: { [id]: 'online' | 'playing' } for those of ids who have a page open (free on any of their pages counts as
+  // free); rooms: { [id]: 'xq:ABCD' } the online room of those playing in one
   presenceOf(ids) {
-    const want = new Set(ids.map(Number)), out = {};
+    const want = new Set(ids.map(Number)), out = {}, rooms = {};
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
       if (!a || !a.presence || !want.has(a.user.id)) continue;
       if (out[a.user.id] !== 'online') out[a.user.id] = a.status;
+      if (a.room && a.status === 'playing') rooms[a.user.id] = a.room;
     }
-    return out;
+    return { status: out, rooms };
   }
   async friends(a, b) {
     if (!this.env.DB) return false;

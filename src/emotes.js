@@ -33,11 +33,21 @@ const EMOTES = (() => {
     'khuong-duy': 'Kế chí Thừa tướng, Bắc phạt chưa thôi!',
     'chuc-dung': 'Phi đao của ta chưa trượt bao giờ!',
   };
-  const byId = Object.fromEntries(LINES.map(l => [l.id, l]));
+  // what people watching a game may call out: a few cheers, and 'len' (Cố lên …!) for one side, named by the page
+  const CHEERS = [
+    { id: 'hay', text: 'Hay quá!' },
+    { id: 'vo-tay', text: 'Vỗ tay!' },
+    { id: 'cang', text: 'Căng quá!' },
+    { id: 'oi', text: 'Ối chà!' },
+  ];
+  const byId = Object.fromEntries(LINES.map(l => [l.id, l])), cheerById = Object.fromEntries(CHEERS.map(l => [l.id, l]));
   const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);   // never toString and the like
   const GAP_MS = 2500;                       // one emote per player at most this often (the room enforces it)
   return {
-    LINES, CRY, GAP_MS,
+    LINES, CRY, GAP_MS, CHEERS,
+    cheerValid: id => id === 'len' || own(cheerById, id),
+    // a cheer's words; side: the name of the side cheered on, for 'len'
+    cheerText: (id, side) => (id === 'len' ? `Cố lên ${side}!` : own(cheerById, id) ? cheerById[id].text : ''),
     valid: id => id === 'cry' || own(byId, id),
     // the words for an emote by a player leading with hero (an id from heroes.js, '' for none)
     text: (id, hero) => (id === 'cry' ? (own(CRY, hero) ? CRY[hero] : CRY['']) : own(byId, id) ? byId[id].text : ''),

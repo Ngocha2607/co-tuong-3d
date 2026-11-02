@@ -252,6 +252,9 @@
   .bubble.cry::after { border-top-color: #e3b448; }
   .bubble.cry.left::after { border-top-color: transparent; border-left-color: #ecc562; }
   .bubble.gone { opacity: 0; transform: translateY(-6px); }
+  /* a cheer from someone watching: it rises from the bottom of the board and fades */
+  .cheer { position: absolute; bottom: 18%; transform: translateX(-50%); padding: 6px 12px; border-radius: 999px; background: rgba(20, 12, 8, 0.72); border: 1px solid rgba(240, 200, 120, 0.5); color: #ffe2a0; font: 700 15px/1.2 var(--serif); white-space: nowrap; animation: cheer-up 3.2s ease-out forwards; }
+  @keyframes cheer-up { 0% { opacity: 0; translate: 0 20px; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; translate: 0 -160px; } }
   @keyframes pop-in { from { opacity: 0; transform: scale(0.85) translateY(6px); } }
   .hlinks { display: flex; justify-content: center; gap: 18px; }
   /* the ranked games under way */
