@@ -48,8 +48,10 @@ const XQ = (() => {
   }
 
   // ---------- position ----------
+  // dark: cờ úp (jieqi.js) only, the squares still holding a face-down piece; it moves as the piece the square starts
+  // with, while an advisor or elephant once turned up goes anywhere on the board
   class Pos {
-    constructor() { this.b = new Int8Array(90); this.turn = RED; this.kings = [0, 0]; this.lo = 0; this.hi = 0; this.val = 0; }
+    constructor() { this.b = new Int8Array(90); this.turn = RED; this.kings = [0, 0]; this.lo = 0; this.hi = 0; this.val = 0; this.dark = null; }
     static fromFen(fen) {
       const p = new Pos(), [rows, side] = String(fen || START).trim().split(/\s+/);
       const LET = { k: K, a: A, b: B, e: B, n: N, h: N, r: R, c: C, p: P };
@@ -74,7 +76,7 @@ const XQ = (() => {
       this.b[s] = pc;
       if (pc) { this.lo ^= ZL[zi(pc)][s]; this.hi ^= ZH[zi(pc)][s]; this.val += SCORE[zi(pc) * 90 + s]; if (pc === K) this.kings[0] = s; if (pc === -K) this.kings[1] = s; }
     }
-    clone() { const p = new Pos(); p.b.set(this.b); p.turn = this.turn; p.kings = this.kings.slice(); p.lo = this.lo; p.hi = this.hi; p.val = this.val; return p; }
+    clone() { const p = new Pos(); p.b.set(this.b); p.turn = this.turn; p.kings = this.kings.slice(); p.lo = this.lo; p.hi = this.hi; p.val = this.val; if (this.dark) p.dark = this.dark.slice(); return p; }
     fen() {
       const L = { 1: 'k', 2: 'a', 3: 'b', 4: 'n', 5: 'r', 6: 'c', 7: 'p' };
       let out = '';
@@ -153,10 +155,18 @@ const XQ = (() => {
     gen(out, caps) {
       const b = this.b, side = this.turn;
       const add = (f, t) => { const q = b[t]; if (q * side > 0) return; if (caps && !q) return; out.push(f | (t << 7)); };
+      const dark = this.dark;
       for (let s = 0; s < 90; s++) {
-        const pc = b[s] * side; if (pc <= 0) continue;
+        let pc = b[s] * side; if (pc <= 0) continue;
         const r = row(s), c = col(s);
+        if (dark && !dark[s] && (pc === A || pc === B)) pc += 6;   // 8, 9: a turned-up advisor or elephant, unbound
         switch (pc) {
+          case 8: for (const [dr, dc] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const nr = r + dr, nc = c + dc; if (nr >= 0 && nr <= 9 && nc >= 0 && nc <= 8) add(s, nr * 9 + nc); } break;
+          case 9: for (const [dr, dc] of [[2, 2], [2, -2], [-2, 2], [-2, -2]]) {
+            const nr = r + dr, nc = c + dc;
+            if (nr < 0 || nr > 9 || nc < 0 || nc > 8 || b[(r + dr / 2) * 9 + c + dc / 2]) continue;
+            add(s, nr * 9 + nc);
+          } break;
           case K: for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nr = r + dr, nc = c + dc; if (inPalace(nr, nc, side)) add(s, nr * 9 + nc); } break;
           case A: for (const [dr, dc] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) { const nr = r + dr, nc = c + dc; if (inPalace(nr, nc, side)) add(s, nr * 9 + nc); } break;
           case B: for (const [dr, dc] of [[2, 2], [2, -2], [-2, 2], [-2, -2]]) {

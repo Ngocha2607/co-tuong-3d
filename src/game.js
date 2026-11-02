@@ -46,16 +46,29 @@
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
 
   // ---------- game record ----------
-  function reset() { G.pos = XQ.Pos.fromFen(G.fen0); G.moves = []; G.keys = []; G.log = []; G.quiet = 0; G.captured = []; G.over = null; }
-  function record(m) {
-    const pos = G.pos, text = XQ.notation(pos, m), side = Math.sign(pos.b[XQ.from(m)]);
+  // cờ úp (jieqi.js) against the computer or in a friendly room: G.deal is known here only against the computer;
+  // G.turns keeps what each move turned up ({ r, c }), which is all a room tells
+  const jqOn = () => G.variant === 'jq' && (G.mode === 'ai' || G.mode === 'online');
+  function reset() { G.pos = jqOn() ? JQ.start() : XQ.Pos.fromFen(G.fen0); G.moves = []; G.keys = []; G.log = []; G.quiet = 0; G.captured = []; G.turns = []; G.over = null; }
+  function record(m, info) {
+    const pos = G.pos, side = Math.sign(pos.b[XQ.from(m)]);
+    let text, cap, turned = 0;
     G.keys.push(pos.key());
-    const cap = pos.make(m);
+    if (pos.dark) {
+      info = info || (G.deal ? JQ.reveals(pos, m, G.deal) : { r: 0, c: 0 });
+      text = JQ.notation(pos, m, info);
+      ({ cap, turned } = JQ.apply(pos, m, info));
+      G.turns.push(info);
+    } else { text = XQ.notation(pos, m); cap = pos.make(m); }
     G.moves.push(m); G.log.push({ text, side, cap });
-    if (cap) { G.captured.push(cap); G.quiet = 0; } else G.quiet++;
+    if (cap) G.captured.push(cap);
+    G.quiet = cap || turned ? 0 : G.quiet + 1;            // turning a piece up can't be undone either
     return cap;
   }
-  function rebuild(moves) { reset(); for (const m of moves) record(m); }
+  function rebuild(moves, turns = G.turns) { const t = turns.slice(); reset(); moves.forEach((m, i) => record(m, t[i])); }
+  // the position as the computer is given it: an ordinary game from its start and moves; cờ úp as it stands now,
+  // without the deal
+  const aiJob = () => (G.pos.dark ? { fen: G.pos.fen(), moves: [], keys: G.keys.slice(), dark: JQ.darkList(G.pos) } : { fen: G.fen0, moves: G.moves.slice() });
   const kingOf = side => G.pos.kings[side > 0 ? 0 : 1];
   const legalFrom = s => G.pos.legal().filter(m => XQ.from(m) === s).map(XQ.to);
 
@@ -64,14 +77,18 @@
   const enqueue = fn => { G.animating++; chain = chain.then(fn).catch(e => console.error(e)).then(() => { G.animating--; if (!G.animating) updateStatus(); }); return chain; };
 
   // apply a move to the record now, animate it when its turn comes
-  function commit(m, fast) {
+  // info: in a room's game of cờ úp, what the move turned up, as the room told it (the player's own move too, which
+  // waits for the room: only the room knows the deal)
+  function commit(m, fast, info) {
     // against the clock the animations cost the player time: no close-ups, and none at all when time runs short
     const timed = G.mode === 'online' && !!G.clock;
     const opts = { fast: fast || (timed && G.you && clockOf(G.you) < 60000), closeUp: !timed };
     const mover = G.pos.turn;
-    if (timed && mover === G.you) { G.clock.left[mover] = clockOf(mover); G.clock.running = 0; G.clock.at = performance.now(); }   // the server's reply restarts it
+    if (timed && mover === G.you && !info) { G.clock.left[mover] = clockOf(mover); G.clock.running = 0; G.clock.at = performance.now(); }   // the server's reply restarts it
     if (G.mode === 'online' && mover === G.you && G.drawOffer === -G.you) G.drawOffer = 0;   // playing on turns the offer down
-    record(m);
+    G.sent = 0;
+    record(m, info);
+    if (G.pos.dark || info) { const t = G.turns[G.turns.length - 1]; opts.reveal = t.r; opts.taken = t.c; }
     const st = XQ.status(G.pos, G.keys, G.quiet, G.moves), turn = G.pos.turn, king = kingOf(turn), gen = G.gen;
     renderMoves();
     enqueue(async () => {
@@ -114,7 +131,7 @@
   function aiMove() {
     const id = ++aiId, L = G.mode === 'campaign' ? CAMPAIGN.AI[G.lv.ai] : LEVELS[G.level], t0 = Date.now();
     G.thinking = true; updateStatus();
-    ask({ fen: G.fen0, moves: G.moves.slice(), time: L.time, depth: L.depth, noise: L.noise ? (Math.random() * 1e9) | 1 : 0 }).then(r => {
+    ask({ ...aiJob(), time: L.time, depth: L.depth, noise: L.noise ? (Math.random() * 1e9) | 1 : 0 }).then(r => {
       if (id !== aiId || !vsAI() || G.over) return;
       setTimeout(() => {
         if (id !== aiId || !vsAI()) return;
@@ -128,14 +145,15 @@
   function startAI() {
     disconnect(); stopSeek(); resetOnline(); rvClose();
     G.mode = 'ai'; G.me = pref.side; G.level = pref.level; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
+    G.variant = pref.jq ? 'jq' : 'xq'; G.deal = pref.jq ? JQ.deal() : null;
     G.fen0 = XQ.START; G.lv = null; VIEW.setLayout('classic'); VIEW.setStage(myStage());
     const rivals = HEROES.list.filter(h => h.id !== pref.hero);  // the computer may lead with a hero still to earn
     G.heroes = { [G.me]: myHero(), [-G.me]: rivals[(Math.random() * rivals.length) | 0].id };
     VIEW.setHeroes(G.heroes);
     reset(); clearSel();
-    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
-    SFX.init(); SFX.gong(); banner('Khai cuộc', 'open');
+    SFX.init(); SFX.gong(); banner(G.pos.dark ? 'Cờ úp' : 'Khai cuộc', 'open');
     updateStatus();
     if (G.me < 0) setTimeout(() => { if (G.mode === 'ai' && !G.moves.length) aiMove(); }, 900);
   }
@@ -167,7 +185,7 @@
     G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
     reset(); clearSel();
     VIEW.setMenu(false); if (!i) VIEW.setViewer(1);
-    VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(G.pos.inCheck() ? kingOf(1) : -1); VIEW.hint(-1, -1);
+    VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(G.pos.inCheck() ? kingOf(1) : -1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init(); if (!i) { SFX.gong(); banner(`Học chơi · ${l.name}`, 'open'); }
     updateStatus();
@@ -202,7 +220,7 @@
     G.heroes = { [G.me]: myHero(), [-G.me]: foe };
     VIEW.setHeroes(G.heroes); VIEW.setStage(stage);
     reset(); clearSel();
-    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    VIEW.setMenu(false); VIEW.setViewer(G.me); VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init(); SFX.gong(); banner(lv.daily ? 'Chân Long Kỳ Trận' : lv.name, 'open');
     toast(CAMPAIGN.goal(lv));
@@ -241,7 +259,7 @@
     if (!n && !G.over) return;
     rebuild(G.moves.slice(0, G.moves.length - n));
     G.gen = (G.gen || 0) + 1;
-    VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
+    VIEW.setBoard(G.pos.b, G.captured, G.pos.dark); clearSel(); VIEW.hint(-1, -1);
     const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
     const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(st.check ? kingOf(G.pos.turn) : -1);
     showEnd(false); renderMoves(); updateStatus(); SFX.pick();
@@ -252,11 +270,11 @@
     if (!vsAI() || G.over || G.pos.turn !== G.me || G.thinking || G.animating) return;
     if (G.mode === 'campaign') { G.help = true; updateStatus(); }
     const b = $('#bHint'); b.disabled = true; b.textContent = 'Đang tìm…';
-    ask({ fen: G.fen0, moves: G.moves.slice(), time: G.mode === 'campaign' ? 1500 : 900 }).then(r => {
+    ask({ ...aiJob(), time: G.mode === 'campaign' ? 1500 : 900 }).then(r => {
       b.disabled = false; b.textContent = 'Gợi ý';
       if (!r.move || G.pos.turn !== G.me) return;
       VIEW.hint(XQ.from(r.move), XQ.to(r.move));
-      toast('Gợi ý: ' + XQ.notation(G.pos, r.move));
+      toast('Gợi ý: ' + (G.pos.dark ? JQ.notation(G.pos, r.move, { r: 0, c: 0 }) : XQ.notation(G.pos, r.move)));
     });
   }
   let resignArm = 0;
@@ -290,7 +308,7 @@
   // a finished game goes into the games kept on this device (Ván đã chơi), to be watched again and analysed
   function keepGame() {
     const o = G.over;
-    if (!G.moves.length || !o || o.reason === 'aborted') return null;
+    if (!G.moves.length || !o || o.reason === 'aborted' || G.pos.dark) { if (o) o.ach = []; return null; }
     const online = G.mode === 'online', lv = G.lv;
     const me = online ? G.you : G.me, you = ACCOUNT.user ? ACCOUNT.user.name : 'Bạn';
     const name = side => online ? (G.info[side] ? G.info[side].name : side === G.you ? you : G.you ? 'Đối thủ' : SIDE[side])
@@ -393,15 +411,15 @@
   const roomLink = () => `${location.origin}${location.pathname}?${G.mode === 'sanguo' ? 'tq' : 'room'}=${G.room}`;
   const wsBase = () => `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   let retryT = null;
-  function resetOnline() { G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
+  function resetOnline() { G.variant = 'xq'; G.deal = null; G.rated = false; G.info = { 1: null, '-1': null }; G.tc = null; G.clock = null; G.deadline = null; G.drawOffer = 0; G.heroes = { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes); }
   // tc: time control asked for by the player opening a friendly room ('' = untimed)
-  function goOnline(room, tc = '') {
+  function goOnline(room, tc = '', jq = false) {
     disconnect(); stopSeek(); resetOnline(); rvClose();
-    G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.gen = (G.gen || 0) + 1; aiId++;
+    G.mode = 'online'; G.room = room; G.you = 0; G.wantTc = tc; G.wantJq = jq; G.gen = (G.gen || 0) + 1; aiId++;
     G.fen0 = XQ.START; G.lv = null; VIEW.setLayout('classic'); VIEW.setStage(myStage());
     G.players = { 1: false, '-1': false }; G.rematch = { 1: false, '-1': false };
     history.replaceState(null, '', roomLink());
-    reset(); clearSel(); VIEW.setMenu(false); VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
+    reset(); clearSel(); VIEW.setMenu(false); VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1);
     showMenu(false); showEnd(false); renderMoves(); layoutMode();
     SFX.init();
     connect();
@@ -416,7 +434,7 @@
     clearTimeout(retryT);
     const sg = G.mode === 'sanguo', ws = new WebSocket(`${wsBase()}/ws${sg ? '/sg' : ''}?room=${G.room}`);
     G.ws = ws; G.netState = 'connecting'; updateStatus();
-    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, hero: myHero(), stage: myStage(), skin: SKINS.pack(mySkins()) })); };
+    ws.onopen = () => { G.netState = 'ok'; ws.send(JSON.stringify({ t: 'hello', token: token(), tc: G.wantTc, variant: !sg && G.wantJq ? 'jq' : '', hero: myHero(), stage: myStage(), skin: SKINS.pack(mySkins()) })); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (sg) sgNetMsg(m); else onNet(m); };
     ws.onclose = () => {
       if (G.ws !== ws) return;
@@ -433,17 +451,18 @@
         G.you = m.you; G.me = m.you || 1; G.players = m.players || G.players; G.rematch = m.rematch || { 1: false, '-1': false };
         G.rated = !!m.rated; G.info = m.info || { 1: null, '-1': null }; G.tc = m.tc || null; G.drawOffer = m.drawOffer || 0; setTiming(m);
         G.heroes = m.heroes || { 1: '', '-1': '' }; G.skins = m.skins || {}; G.boardSkin = m.board || '';
+        G.variant = m.variant === 'jq' ? 'jq' : 'xq'; G.deal = null; G.sent = 0;
         if (hallUpdate(m)) { updateStatus(); break; }
         G.gen = (G.gen || 0) + 1; chain = Promise.resolve(); G.animating = 0;
-        rebuild(m.moves || []);
+        rebuild(m.moves || [], m.turns || []);
         G.heroes = m.heroes || { 1: '', '-1': '' }; VIEW.setHeroes(G.heroes);
-        VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured); clearSel(); VIEW.hint(-1, -1);
+        VIEW.setViewer(G.me, false); VIEW.setBoard(G.pos.b, G.captured, G.pos.dark); clearSel(); VIEW.hint(-1, -1);
         const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
         const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(!m.over && st.check ? kingOf(G.pos.turn) : -1);
         G.over = m.over ? Object.assign({}, m.over, { shown: true }) : null;
         showEnd(!!m.over); renderMoves(); updateStatus();
         if (!G.moves.length && !m.over && (firstSeat || m.fresh)) {
-          SFX.gong(); banner(G.you ? `Bạn cầm quân ${SIDE[G.you]}` : 'Bạn đang xem trận', 'open');
+          SFX.gong(); banner(G.you ? `Bạn cầm quân ${SIDE[G.you]}${G.pos.dark ? ' · Cờ úp' : ''}` : 'Bạn đang xem trận', 'open');
           const opp = G.you && G.info[-G.you];
           if (G.rated && opp) toast(`Trận xếp hạng: gặp ${opp.name} · ${opp.rating} điểm`);
         }
@@ -452,7 +471,7 @@
       case 'move':
         setTiming(m);
         if ('draw' in m) G.drawOffer = m.draw;
-        if (m.ply === G.moves.length) { commit(m.m); }
+        if (m.ply === G.moves.length) { commit(m.m, false, G.pos.dark ? { r: m.r | 0, c: m.c | 0 } : undefined); }
         else if (m.ply > G.moves.length) send({ t: 'sync' });
         break;
       case 'presence':
@@ -931,7 +950,7 @@
       return { ...h, kind: '3 người chơi · Tam Quốc', sides: [0, 1, 2], me: net.you >= 0 ? net.you : null, players: net.players, info: net.info,
         label: k => KNAME[k], piece: k => 20 + 10 * k + SG.K, hero: k => G.heroes[k], raw: k => (net.heroesRaw || [])[k] || '' };
     }
-    return { ...h, kind: '2 người chơi · Cờ tướng', sides: [1, -1], me: G.you || null, players: G.players, info: G.info,
+    return { ...h, kind: `2 người chơi · ${G.variant === 'jq' ? 'Cờ úp' : 'Cờ tướng'}`, sides: [1, -1], me: G.you || null, players: G.players, info: G.info,
       label: k => `${SIDE[k]} · ${ARMY[k]}`, piece: k => k * XQ.K, hero: k => G.heroes[k] || '', raw: k => G.heroes[k] || '' };
   }
   // what still keeps the game from starting (as the server will judge it)
@@ -997,7 +1016,9 @@
     $('#hallStageNote').textContent = `Bối cảnh: ${stage.name}${host ? '' : ' · chủ phòng chọn'}`;
     const tc = G.mode === 'sanguo' ? G.sg.net.tc : G.tc;
     $('#hallTc').querySelectorAll('button').forEach(b => b.classList.toggle('on', (TC[+b.dataset.v] || '') === (tc ? `${tc.base / 60000}+${tc.inc / 1000}` : '')));
-    $('#hallInfo').textContent = `${r.public ? 'Công khai' : 'Riêng tư'} · ${tc ? TC_NAME[`${tc.base}+${tc.inc}`] : 'Không giờ'}`;
+    $('#hallInfo').textContent = `${r.public ? 'Công khai' : 'Riêng tư'} · ${tc ? TC_NAME[`${tc.base}+${tc.inc}`] : 'Không giờ'}${G.mode === 'online' && G.variant === 'jq' ? ' · Cờ úp' : ''}`;
+    $('#hallVariant').closest('label').hidden = G.mode !== 'online';
+    $('#hallVariant').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === (G.variant === 'jq' ? 1 : 0)));
     $('#hallInfo').title = r.public ? 'Phòng hiện trong danh sách phòng đang mở: ai cũng vào được' : 'Chỉ ai có link hoặc mã phòng mới vào được';
     $('#hallPublic').querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === (r.public ? 1 : 0)));
 
@@ -1089,7 +1110,7 @@
     history.replaceState(null, '', location.pathname);
     VIEW.setLayout('classic'); reset(); clearSel();
     G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
-    VIEW.setBoard(G.pos.b, []); VIEW.setStage(myStage());
+    VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.setStage(myStage());
     showEnd(false); renderMoves(); layoutMode(); updateStatus(); showMenu(true);
   }
 
@@ -1150,7 +1171,7 @@
     G.mode = 'menu'; G.fen0 = XQ.START; reset(); clearSel();
     G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
     VIEW.setViewer(1, true);                                 // a game watched from Black's side leaves the menu's board Red-side down
-    VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1); VIEW.setStage(myStage());
+    VIEW.setBoard(G.pos.b, [], G.pos.dark); VIEW.lastMove(-1, -1); VIEW.check(-1); VIEW.hint(-1, -1); VIEW.setStage(myStage());
     renderMoves(); layoutMode(); updateStatus(); showMenu(true);
     if (from === 'history') openHistory();
   }
@@ -1348,7 +1369,7 @@
   // ---------- input on the board ----------
   function clearSel() { G.sel = -1; G.targets = []; VIEW.select(-1, []); }
   const myTurn = () => G.mode !== 'menu' && !G.over && !G.thinking && G.pos.turn === G.me && (G.mode !== 'online' || G.you === G.me);
-  const canAct = () => myTurn() && !G.animating;
+  const canAct = () => myTurn() && !G.animating && !(G.sent && performance.now() - G.sent < 4000);
   // the scene took its effects down a step on a slow device (scene.js setQuality)
   VIEW.onQuality = q => toast(q === 'low' ? 'Máy hơi chậm: đã tắt bóng đổ để chơi mượt hơn' : 'Máy hơi chậm: đã giảm hiệu ứng để chơi mượt hơn');
   VIEW.onTap = s => {
@@ -1359,6 +1380,7 @@
     if (G.sel >= 0 && G.targets.includes(s)) {
       const m = XQ.mv(G.sel, s); clearSel(); VIEW.hint(-1, -1);
       if (G.mode === 'online') send({ t: 'move', m, ply: G.moves.length });
+      if (G.mode === 'online' && G.pos.dark) { G.sent = performance.now(); SFX.pick(); return; }
       commit(m);
       return;
     }
@@ -1462,6 +1484,7 @@
       else if (!G.you) text = `Đang xem · Lượt ${SIDE[turn]}`;
       else text = turn === G.you ? `Lượt bạn · ${SIDE[G.you]}` : 'Lượt đối thủ';
     }
+    if (text && G.pos.dark && !G.over && G.mode !== 'menu') text = 'Cờ úp · ' + text;
     st.textContent = text;
     st.classList.toggle('mine', !G.over && !G.animating && myTurn());
     for (const side of [1, -1]) {
@@ -1631,7 +1654,7 @@
     }
     box.innerHTML = list.map(r => {
       const code = cleanRoom(r.code), open = r.status === 'waiting' && r.seated < r.max, stage = STAGES.byId[r.stage];
-      const bits = [r.host ? `Chủ phòng ${ACCOUNT.esc(r.host)}` : '', stage ? stage.name : '', TC_LABEL[r.tc] || 'Không giờ'].filter(Boolean).join(' · ');
+      const bits = [r.host ? `Chủ phòng ${ACCOUNT.esc(r.host)}` : '', r.jq ? 'Cờ úp' : '', stage ? stage.name : '', TC_LABEL[r.tc] || 'Không giờ'].filter(Boolean).join(' · ');
       return `<button type="button" class="room-row" data-code="${code}" data-v="${r.v === 'sg' ? 'sg' : 'xq'}"><span class="st ${r.status === 'playing' ? 'playing' : 'waiting'}">${ROOM_STATUS[r.status] || ''}</span>`
         + `<span class="ri"><b>Phòng ${code}</b><small>${bits}</small></span><span class="cnt">${r.count | 0}/${r.max | 0}</span><span class="go">${open ? 'Vào' : 'Xem'}</span></button>`;
     }).join('');
@@ -1786,10 +1809,12 @@
   // the home page's game cards: beside Đánh với máy, the computer game as set up
   const renderAINote = () => {
     const side = pref.side > 0 ? 'Đỏ' : 'Đen', level = ['Dễ', 'Thường', 'Khó'][pref.level] || 'Thường';
-    $('#xqAiNote').textContent = `${side} · ${level}`;
+    $('#xqAiNote').textContent = `${pref.jq ? 'Cờ úp · ' : ''}${side} · ${level}`;
   };
   seg('#segSide', pref.side, v => { pref.side = v; savePref(); renderAINote(); });
   seg('#segLevel', pref.level, v => { pref.level = v; savePref(); renderAINote(); });
+  seg('#segVariant', pref.jq ? 1 : 0, v => { pref.jq = v; savePref(); renderAINote(); });
+  seg('#segRoomVariant', pref.roomJq ? 1 : 0, v => { pref.roomJq = v; savePref(); });
   seg('#segTc', pref.tc, v => { pref.tc = v; savePref(); });
   renderAINote();
   // the three-kingdom page: who leads each kingdom, and how strong the computer is
@@ -1963,6 +1988,7 @@
     SFX.pick(); send({ t: 'stage', stage: b.dataset.id });
   });
   $('#hallPublic').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'public', on: b.dataset.v === '1' }); });
+  $('#hallVariant').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'variant', on: b.dataset.v === '1' }); });
   $('#hallTc').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; SFX.init(); SFX.pick(); send({ t: 'tc', tc: TC[+b.dataset.v] || '' }); });
   $('#bHallGo').addEventListener('click', () => {
     const r = hallModel();
@@ -1989,7 +2015,7 @@
   $('#inSgRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinSg(); });
   $('#bSgRanked').addEventListener('click', () => seek('sg'));
   $('#bSgRanks').addEventListener('click', () => ACCOUNT.openRanks(2));
-  $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || ''));
+  $('#bCreate').addEventListener('click', () => goOnline(Array.from({ length: 4 }, () => ROOM_CHARS[(Math.random() * ROOM_CHARS.length) | 0]).join(''), TC[pref.tc] || '', !!pref.roomJq));
   const joinTyped = () => { const r = cleanRoom($('#inRoom').value); if (r.length < 4) { toast('Nhập mã phòng 4 ký tự'); $('#inRoom').focus(); return; } goOnline(r); };
   $('#bJoin').addEventListener('click', joinTyped);
   $('#inRoom').addEventListener('keydown', e => { if (e.key === 'Enter') joinTyped(); });
@@ -2136,7 +2162,7 @@
     VIEW.setStage(myStage());
     VIEW.init($('#view'));
     G.heroes[1] = myHero(); VIEW.setHeroes(G.heroes);
-    VIEW.setBoard(G.pos.b, []);
+    VIEW.setBoard(G.pos.b, [], G.pos.dark);
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();
     $('#boot').remove();

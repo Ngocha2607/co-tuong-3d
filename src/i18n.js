@@ -420,6 +420,12 @@ const I18N = (() => {
     'Trang phục này chưa mở khóa': 'This look is not unlocked yet',
     'Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.':
       'Unlocked with Campaign stars, achievements and ranked seasons. Online, your opponents see your pieces and warriors; the board is the host’s.',
+
+    // cờ úp (jieqi.js)
+    'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
+    '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',
+    'Cờ úp: mọi quân trừ Tướng úp mặt, xáo lẫn trên các điểm xuất phát. Quân úp đi như quân vốn đứng ở điểm đó, đi rồi mới lật ra; Sĩ, Tượng đã lật đi được khắp bàn.':
+      'Jieqi: every piece but the general starts face down, shuffled over the starting points. A face-down piece moves as the piece that starts on its point, and is turned up by that move; an advisor or elephant once turned up may go anywhere.',
   };
 
   // ---------- translating ----------
@@ -444,6 +450,7 @@ const I18N = (() => {
     if (exact.has(t)) return exact.get(t);
     let m = MOVE.exec(t);
     if (m) return WHICH[m[2]] ? `${WHICH[m[2]]}${PIECE[m[1]]}${ACT[m[3]]}${m[4]}` : `${PIECE[m[1]]}${m[2]}${ACT[m[3]]}${m[4]}`;
+    if ((m = /^(Tướng|Sĩ|Tượng|Mã|Xe|Pháo|Tốt) úp (.+)$/.exec(t))) return '?' + one(m[1] + ' ' + m[2]);   // cờ úp: a face-down piece
     if ((m = SGMOVE.exec(t))) return `${EN[m[1]]} ${one(m[2])} → ${one(m[3])}${m[4] ? ` takes ${EN[m[4]].toLowerCase()}` : ''}`;
     if (!VI.test(t)) return t;
     const dotted = t.includes(' · ');

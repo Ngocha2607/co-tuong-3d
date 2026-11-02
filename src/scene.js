@@ -229,21 +229,22 @@ const VIEW = (() => {
     const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
   })() });
-  function makeUnit(piece, s) {
-    const side = L.sideOf(piece), root = new THREE.Group(), disc = MODELS.disc(piece, false, skins.pieces[side]), war = MODELS.warrior(piece, heroes[side], skins.army[side]);
+  // dark: a face-down piece (cờ úp)
+  function makeUnit(piece, s, dark) {
+    const side = L.sideOf(piece), root = new THREE.Group(), disc = MODELS.disc(piece, false, skins.pieces[side], dark), war = MODELS.warrior(piece, heroes[side], skins.army[side], dark);
     root.add(disc); war.rotation.y = rest(piece); root.add(war);
     const blob = new THREE.Mesh(blobGeo, blobMat); blob.renderOrder = 1; blob.visible = false; root.add(blob);
     disc.rotation.y = L.yaw(viewer);
     war.visible = armyOn; war.scale.setScalar(REST());
     root.position.copy(pos(s)); root.userData.sq = s; root.visible = !hall;
     scene.add(root);
-    return { piece, root, disc, war, blob, sq: s, phase: Math.random() * 100 };
+    return { piece, root, disc, war, blob, sq: s, phase: Math.random() * 100, dark: !!dark };
   }
   function disposeUnit(u) { scene.remove(u.root); }
-  // captured: the pieces already taken, each a piece or [piece, side that took it]
-  function setBoard(b, captured) {
+  // captured: the pieces already taken, each a piece or [piece, side that took it]; dark: cờ úp's face-down points
+  function setBoard(b, captured, dark) {
     for (const u of units.values()) disposeUnit(u); units.clear();
-    for (let s = 0; s < b.length; s++) if (b[s]) units.set(s, makeUnit(b[s], s));
+    for (let s = 0; s < b.length; s++) if (b[s]) units.set(s, makeUnit(b[s], s, !!(dark && dark[s])));
     for (const side of Object.keys(trays)) for (const d of trays[side]) scene.remove(d);
     trays = Object.fromEntries(L.sides.map(side => [side, []]));
     if (captured) for (const c of captured) Array.isArray(c) ? addToTray(c[0], false, c[1]) : addToTray(c, false);
@@ -269,7 +270,7 @@ const VIEW = (() => {
     if (skins.board !== was.board && boardMesh) { scene.remove(boardMesh); boardMesh = L.board(); boardMesh.visible = !hall; scene.add(boardMesh); }
     const same = k => (skins.pieces[k] || '') === (was.pieces[k] || '') && (skins.army[k] || '') === (was.army[k] || '');
     if (L.sides.every(same)) return;
-    for (const [s, u] of units) { const fresh = makeUnit(u.piece, s); disposeUnit(u); units.set(s, fresh); }
+    for (const [s, u] of units) { const fresh = makeUnit(u.piece, s, u.dark); disposeUnit(u); units.set(s, fresh); }
     for (const side of Object.keys(trays)) trays[side] = trays[side].map(d => {
       const p = d.userData.piece, n = MODELS.disc(p, true, skins.pieces[L.sideOf(p)]);
       n.userData.piece = p; n.position.copy(d.position); n.rotation.copy(d.rotation); n.visible = d.visible;
@@ -576,11 +577,33 @@ const VIEW = (() => {
 
   // play one move; captured is the piece taken (0 for none). Resolves when the animation is over.
   // opts.via: the points the move passes over, when the lines it follows bend (the three-kingdom board)
+  // cờ úp: a face-down piece is turned up, its hooded figure vanishing in a puff as the piece flips over to show what
+  // it really is
+  function wear(u, piece) {
+    const side = L.sideOf(piece), disc = MODELS.disc(piece, false, skins.pieces[side]), war = MODELS.warrior(piece, heroes[side], skins.army[side]);
+    disc.rotation.y = L.yaw(viewer); war.rotation.y = u.war.rotation.y; war.visible = u.war.visible; war.scale.copy(u.war.scale);
+    u.root.remove(u.disc); u.root.remove(u.war); u.root.add(disc); u.root.add(war);
+    u.mirrored = false; Object.assign(u, { piece, disc, war, dark: false });
+  }
+  async function turnUp(u, piece, fast) {
+    if (!u || !u.dark || !piece) return;
+    if (fast) { wear(u, piece); return; }
+    const at = u.root.position.clone().setY(0.45), s0 = u.war.scale.x;
+    SFX.whoosh(); smoke(at, 12, '#d9cfbf', 0.8); sparks(at, '#ffe6a8', 18, 0.18);
+    await tween(170, k => { u.disc.rotation.x = k * Math.PI / 2; u.disc.position.y = k * 0.3; u.war.scale.setScalar(Math.max(0.001, s0 * (1 - k))); });
+    wear(u, piece);
+    u.disc.rotation.x = -Math.PI / 2; u.disc.position.y = 0.3;
+    await tween(230, k => { const e = out(k); u.disc.rotation.x = -Math.PI / 2 * (1 - e); u.disc.position.y = 0.3 * (1 - e); u.war.scale.setScalar(Math.max(0.001, s0 * backOut(k))); });
+    SFX.place();
+  }
+  // opts.reveal: the piece the move turns up (cờ úp); opts.taken: the face-down piece it takes, as it really is
   async function play(m, opts = {}) {
     const f = L.from(m), t = L.to(m), u = units.get(f);
     if (!u) return;
     busy = true; clearMarks(); hint(-1, -1);
-    const target = units.get(t), dest = pos(t), type = L.typeOf(u.piece), fast = opts.fast, by = L.sideOf(u.piece);
+    const target = units.get(t), fast = opts.fast;
+    await Promise.all([target && opts.taken ? turnUp(target, opts.taken, fast) : null, opts.reveal ? turnUp(u, opts.reveal, fast) : null]);
+    const dest = pos(t), type = L.typeOf(u.piece), by = L.sideOf(u.piece);
     u.root.userData.sq = t;
     if (fast) {
       if (target) { disposeUnit(target); units.delete(t); addToTray(target.piece, false, by); }

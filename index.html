@@ -810,6 +810,7 @@
     <div class="hstrip" id="hallStages" hidden></div>
     <div class="hopts" id="hallRoomOpts" hidden>
       <label>Ai được vào<div class="seg mini" id="hallPublic"><button type="button" data-v="1">Công khai</button><button type="button" data-v="0">Riêng tư</button></div></label>
+      <label>Kiểu cờ<div class="seg mini" id="hallVariant"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Cờ úp</button></div></label>
       <label>Thời gian mỗi bên<div class="seg mini" id="hallTc"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div></label>
     </div>
     <div class="hgo"><p id="hallWait"></p><button class="btn primary" id="bHallGo" type="button">Sẵn sàng</button><span class="hlinks"><button class="linkish" id="bHallEmote" type="button" hidden>Biểu cảm</button><button class="linkish" id="bHallLeave" type="button">Rời phòng</button></span></div>
@@ -863,6 +864,9 @@
         <div class="seg" id="segSide"><button type="button" data-v="1">Đỏ (đi trước)</button><button type="button" data-v="-1">Đen</button></div>
         <h2>Độ khó</h2>
         <div class="seg" id="segLevel"><button type="button" data-v="0">Dễ</button><button type="button" data-v="1">Thường</button><button type="button" data-v="2">Khó</button></div>
+        <h2>Kiểu cờ</h2>
+        <div class="seg" id="segVariant"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Cờ úp</button></div>
+        <p class="note">Cờ úp: mọi quân trừ Tướng úp mặt, xáo lẫn trên các điểm xuất phát. Quân úp đi như quân vốn đứng ở điểm đó, đi rồi mới lật ra; Sĩ, Tượng đã lật đi được khắp bàn.</p>
       </section>
       <button class="btn primary wide" id="bPlayAI" type="button">Vào trận</button>
     </div>
@@ -882,6 +886,8 @@
       <section>
         <h2>Thời gian mỗi bên</h2>
         <div class="seg" id="segTc" title="Thời gian mỗi bên"><button type="button" data-v="0">Không giờ</button><button type="button" data-v="1">10′ + 5s</button><button type="button" data-v="2">5′ + 3s</button></div>
+        <h2>Kiểu cờ</h2>
+        <div class="seg" id="segRoomVariant"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Cờ úp</button></div>
         <p class="note">Bạn làm chủ phòng: trong sảnh chờ còn đổi được thời gian, bối cảnh, và chọn phòng công khai hay riêng tư. Gửi link mời cho bạn bè, hoặc chờ người vào từ danh sách phòng.</p>
       </section>
       <button class="btn primary wide" id="bCreate" type="button">Tạo phòng</button>
@@ -1133,6 +1139,7 @@
 <script src="src/i18n.js"></script>
 <script src="src/vendor/three.min.js"></script>
 <script src="src/xiangqi.js"></script>
+<script src="src/jieqi.js"></script>
 <script src="src/review.js"></script>
 <script src="src/sanguo.js"></script>
 <script src="src/audio.js"></script>

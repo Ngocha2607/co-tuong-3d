@@ -207,8 +207,14 @@ const MODELS = (() => {
   };
   const pieceLook = id => PIECE_LOOK[id] || PIECE_LOOK.nga;
   const inkOf = (piece, look) => (look.ink && look.ink[palKey(piece)]) || PAL[palKey(piece)].ink;
-  function faceTexture(piece, skin) {
-    const key = piece + (PIECE_LOOK[skin] ? skin : 'nga');
+  // the back of a piece (cờ úp, face down): the rings round a knot of four loops, no character
+  function knot(g, w) {
+    const m = w / 2;
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; g.beginPath(); g.ellipse(m + Math.cos(a) * 26, m + Math.sin(a) * 26, 30, 13, a, 0, Math.PI * 2); g.stroke(); }
+    g.beginPath(); g.arc(m, m, 9, 0, Math.PI * 2); g.fill();
+  }
+  function faceTexture(piece, skin, hidden) {
+    const key = piece + (PIECE_LOOK[skin] ? skin : 'nga') + (hidden ? 'h' : '');
     if (faceCache.has(key)) return faceCache.get(key);
     const look = pieceLook(skin), ink = inkOf(piece, look), ch = han(piece);
     const t = canvas(256, 256, (g, w) => {
@@ -217,25 +223,28 @@ const MODELS = (() => {
       g.fillStyle = gr; g.fillRect(0, 0, w, w);
       g.strokeStyle = ink; g.lineWidth = 7; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 22, 0, Math.PI * 2); g.stroke();
       g.lineWidth = 2; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 34, 0, Math.PI * 2); g.stroke();
-      g.fillStyle = ink; g.font = `bold 150px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(ch, w / 2, w / 2 + 8);
+      g.fillStyle = ink;
+      if (hidden) { g.lineWidth = 6; knot(g, w); }
+      else { g.font = `bold 150px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, w / 2, w / 2 + 8); }
     });
     faceCache.set(key, t);
     return t;
   }
   // the same rings and character cut into the face, for its normal map
   const reliefCache = new Map();
-  function faceRelief(piece) {
-    if (reliefCache.has(piece)) return reliefCache.get(piece);
+  function faceRelief(piece, hidden) {
+    const key = hidden ? 'h' : piece;
+    if (reliefCache.has(key)) return reliefCache.get(key);
     const ch = han(piece);
     const t = reliefTexture(256, 256, (g, w) => {
       g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, w);
       g.strokeStyle = '#555555'; g.lineWidth = 10; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 22, 0, Math.PI * 2); g.stroke();
       g.lineWidth = 4; g.beginPath(); g.arc(w / 2, w / 2, w / 2 - 34, 0, Math.PI * 2); g.stroke();
-      g.fillStyle = '#606060'; g.font = `bold 150px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(ch, w / 2, w / 2 + 8);
+      g.fillStyle = '#606060';
+      if (hidden) { g.strokeStyle = '#606060'; g.lineWidth = 9; knot(g, w); }
+      else { g.font = `bold 150px ${BRUSH}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, w / 2, w / 2 + 8); }
     }, 2.5);
-    reliefCache.set(piece, t);
+    reliefCache.set(key, t);
     return t;
   }
   // banner cloth for army view: the character in gold on the side's colour
@@ -555,14 +564,14 @@ const MODELS = (() => {
     }
     return discBodies[id];
   }
-  function disc(piece, small, skin) {
+  function disc(piece, small, skin, hidden) {
     const g = new THREE.Group(), look = pieceLook(skin);
     const body = mesh(discGeo(), discBody(PIECE_LOOK[skin] ? skin : 'nga'), g);
     // a thin coloured band around the side tells the sides apart from any angle
     mesh(geo('band', () => new THREE.CylinderGeometry(DISC_R + 0.008, DISC_R + 0.008, 0.05, 48, 1, true)), mat(inkOf(piece, look)), g, 0, DISC_H / 2, 0);
     // the face, with its rings and character cut into it
     const face = new THREE.Mesh(geo('face', () => new THREE.CircleGeometry(DISC_R - LIP, 48)),
-      new THREE.MeshStandardMaterial({ map: faceTexture(piece, skin), normalMap: faceRelief(piece), roughness: Math.min(0.7, look.rough + 0.15), metalness: (look.metal || 0) * 0.6 }));
+      new THREE.MeshStandardMaterial({ map: faceTexture(piece, skin, hidden), normalMap: faceRelief(piece, hidden), roughness: Math.min(0.7, look.rough + 0.15), metalness: (look.metal || 0) * 0.6 }));
     face.rotation.x = -Math.PI / 2; face.position.y = DISC_H - SINK + 0.001; face.receiveShadow = true; g.add(face);
     g.userData = { body, face };
     if (small) g.scale.setScalar(0.62);
@@ -997,6 +1006,18 @@ const MODELS = (() => {
     },
   };
 
+  // a face-down piece (cờ úp): a figure in a dark hooded cloak, nothing in its hands, its side shown by the trim
+  const HOOD = '#1d1815';
+  function buildHooded(pal) {
+    const h = humanoid(pal, { robe: HOOD, noLegs: true }), j = h.userData.j;
+    part(lathe('hood', [[0.074, -0.02], [0.08, 0.06], [0.066, 0.13], [0.03, 0.19], [0.002, 0.215]]), HOOD, j.head, 0, 0.02, -0.006);
+    part(geo('hoodRim', () => new THREE.TorusGeometry(0.058, 0.008, 6, 18)), pal.trim, j.head, 0, 0.07, 0.03, TRIM);
+    const back = group(h, 0, 0.43, -0.06); back.rotation.x = 0.12;
+    box(0.25, 0.4, 0.02, HOOD, back, 0, -0.2, 0);
+    for (const sx of [-1, 1]) sball(0.009, '#ffd98a', j.head, sx * 0.021, 0.07, 0.054);   // eyes catching the light under the hood
+    return h;
+  }
+
   const BUILD = { 1: buildGeneral, 2: buildAdvisor, 3: buildElephant, 4: buildHorse, 5: buildChariot, 6: buildCatapult, 7: buildSoldier };
 
   // figures from model files (a glTF scene, loaded by whoever has one) in place of the built ones: by hero id, or by
@@ -1024,12 +1045,13 @@ const MODELS = (() => {
   // a warrior for a piece, facing the enemy; with a banner pole for the army view.
   // hero: id from heroes.js for a general led by that hero (its banner then bears the hero's character); skin: the
   // warriors' look (skins.js), painted if unknown
-  function warrior(piece, hero, skin) {
+  // hidden: a face-down piece of cờ úp, whose banner shows only a question
+  function warrior(piece, hero, skin, hidden) {
     const side = palKey(piece), type = typeOf(piece), pal = PAL[side];
     const led = type === XQ.K && HEROES.valid(hero) ? hero : '';
     const root = new THREE.Group();
     const model = (led && FIGURES.get(led)) || FIGURES.get(type + ':' + side) || FIGURES.get(String(type));
-    const fig = model ? fromModel(model) : led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
+    const fig = hidden ? buildHooded(pal) : model ? fromModel(model) : led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
     if (STATUE[skin]) { const m = mat(...STATUE[skin]); fig.traverse(o => { if (o.isMesh) o.material = m; }); }
     root.add(fig);
     root.rotation.y = side === 1 ? Math.PI : 0;              // Red sits at +z and faces -z
@@ -1039,7 +1061,7 @@ const MODELS = (() => {
     cyl(0.01, 0.01, tall, '#2a160a', flag, 0, tall / 2, 0, 4);
     ball(0.025, pal.trim, flag, 0, tall + 0.01, 0, { metal: 0.6, rough: 0.3 });
     const cloth = new THREE.Mesh(geo('banner', () => { const p = new THREE.PlaneGeometry(0.3, 0.41); p.translate(0.15, 0, 0); return p; }),
-      new THREE.MeshStandardMaterial({ map: bannerTexture(piece, led ? HEROES.byId[led].han : han(piece)), side: THREE.DoubleSide, roughness: 0.85 }));
+      new THREE.MeshStandardMaterial({ map: bannerTexture(piece, hidden ? '?' : led ? HEROES.byId[led].han : han(piece)), side: THREE.DoubleSide, roughness: 0.85 }));
     cloth.position.y = tall - 0.24; cloth.castShadow = true; flag.add(cloth);
     root.userData = { fig, j: fig.userData.j || {}, flag, cloth, type, side, hero: led };
     return root;
