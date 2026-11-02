@@ -7,6 +7,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import XQ from '../src/xiangqi.js';
 import HEROES from '../src/heroes.js';
+import SKINS from '../src/skins.js';
 import EMOTES from '../src/emotes.js';
 import * as C from './clock.js';
 import { rate } from './elo.js';
@@ -21,6 +22,7 @@ const fresh = () => ({
   recorded: false, retryAt: 0,                                // ranked result written to D1 / when to try again
   drawOffer: 0, offeredAt: { 1: -99, '-1': -99 },             // side offering a draw now / ply of each side's last offer
   heroes: { 1: '', '-1': '' },                                // hero leading each side (heroes.js id, '' = the plain general)
+  skins: { 1: '', '-1': '' }, board: '',                      // each side's looks (skins.js, packed); the board's, the host's
   phase: 'lobby', host: '', ready: { 1: false, '-1': false }, stage: '',   // the hall: see hall.js
 });
 
@@ -80,8 +82,8 @@ export class Room extends DurableObject {
     };
   }
   stateFor(ws, extra = {}) {
-    const { moves, over, rematch, rated, info, tc, drawOffer, heroes } = this.st;
-    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, players: this.presence(), ...H.hallInfo(this.st, SIDES), ...this.timing(), ...extra };
+    const { moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board } = this.st;
+    return { t: 'state', you: this.sideOf(ws), moves, over, rematch, rated, info, tc, drawOffer, heroes, skins, board, players: this.presence(), ...H.hallInfo(this.st, SIDES), ...this.timing(), ...extra };
   }
   // everyone gets the whole state again (the hall changes rarely, and each page needs its own `you`)
   async resync(extra) { for (const w of this.ctx.getWebSockets()) this.send(w, this.stateFor(w, extra)); await this.announce(); }
@@ -184,17 +186,21 @@ export class Room extends DurableObject {
         if (side && side === H.hostSide(st, SIDES) && st.phase === 'lobby' && st.game === 1) {
           if (!st.tc && C.CONTROLS[m.tc]) { st.tc = C.CONTROLS[m.tc]; st.left = C.fullClock(st.tc); dirty = true; }
           if (!st.stage && H.validStage(m.stage)) { st.stage = m.stage; dirty = true; }
+          if (!st.board) { st.board = SKINS.unpack(m.skin).board; dirty = true; }
         }
       }
       if (side && st.away[side]) { st.away[side] = 0; dirty = true; }
       // each player brings their hero; once the game is under way it stays the one they started with
       const hero = HEROES.valid(m.hero) ? m.hero : '';
       if (side && st.heroes[side] !== hero && (st.phase === 'lobby' || !st.heroes[side])) { st.heroes = { ...st.heroes, [side]: hero }; dirty = true; }
+      // and their looks, the same way
+      const skin = SKINS.pack(SKINS.unpack(m.skin));
+      if (side && st.skins[side] !== skin && (st.phase === 'lobby' || !st.skins[side])) { st.skins = { ...st.skins, [side]: skin }; dirty = true; }
       ws.serializeAttachment({ ...a, side });
       if (dirty) { await this.save(); await this.schedule(); }
       if (st.phase === 'lobby') { await this.resync(); return; }   // the hall shows everyone who came in
       this.send(ws, this.stateFor(ws));
-      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, ...this.timing() }, ws);
+      this.broadcast({ t: 'presence', players: this.presence(), info: st.info, heroes: st.heroes, skins: st.skins, board: st.board, ...this.timing() }, ws);
       await this.announce();
       return;
     }
@@ -212,7 +218,7 @@ export class Room extends DurableObject {
       await this.announce(this.presence(ws));
       return;
     }
-    if (['hero', 'stage', 'tc', 'ready', 'start', 'kick', 'public'].includes(m.t)) { if (side) await this.hall(side, m, now); return; }
+    if (['hero', 'skin', 'stage', 'tc', 'ready', 'start', 'kick', 'public'].includes(m.t)) { if (side) await this.hall(side, m, now); return; }
     if (st.phase !== 'play') { this.send(ws, this.stateFor(ws)); return; }   // nothing is played in the hall
 
     if (m.t === 'move') {
@@ -266,9 +272,9 @@ export class Room extends DurableObject {
       st.rematch[side] = true;
       if (st.rematch[1] && st.rematch[-1]) {
         // new game, the players swap colours and keep the time control
-        const seats = { 1: st.seats[-1], '-1': st.seats[1] }, info = { 1: st.info[-1], '-1': st.info[1] }, heroes = { 1: st.heroes[-1], '-1': st.heroes[1] };
+        const seats = { 1: st.seats[-1], '-1': st.seats[1] }, info = { 1: st.info[-1], '-1': st.info[1] }, heroes = { 1: st.heroes[-1], '-1': st.heroes[1] }, skins = { 1: st.skins[-1], '-1': st.skins[1] };
         // back to the hall, where generals and battlefield can be changed before the host starts again
-        this.st = { ...fresh(), seats, info, heroes, game: st.game + 1, tc: st.tc, left: C.fullClock(st.tc), turnAt: now, host: st.host, stage: st.stage, banned: st.banned, bannedIds: st.bannedIds };
+        this.st = { ...fresh(), seats, info, heroes, skins, game: st.game + 1, tc: st.tc, left: C.fullClock(st.tc), turnAt: now, host: st.host, stage: st.stage, board: st.board, banned: st.banned, bannedIds: st.bannedIds };
         for (const w of this.ctx.getWebSockets()) { const a = w.deserializeAttachment(); if (a && a.side) w.serializeAttachment({ ...a, side: -a.side }); }
         await this.save(); await this.schedule();
         await this.resync({ fresh: true });
@@ -293,6 +299,7 @@ export class Room extends DurableObject {
     const st = this.st, host = H.hostSide(st, SIDES);
     if (st.phase !== 'lobby' || st.rated) return;
     if (m.t === 'hero') { if (m.hero !== '' && !HEROES.valid(m.hero)) return; st.heroes = { ...st.heroes, [side]: m.hero }; }
+    else if (m.t === 'skin') { const s = SKINS.pack(SKINS.unpack(m.skin)); st.skins = { ...st.skins, [side]: s }; if (side === host) st.board = SKINS.unpack(s).board; }
     else if (m.t === 'ready') { if (side === host) return; st.ready = { ...st.ready, [side]: !!m.on }; }
     else if (side !== host) return;
     else if (m.t === 'stage') { if (!H.validStage(m.stage)) return; st.stage = m.stage; }

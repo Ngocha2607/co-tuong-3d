@@ -537,6 +537,8 @@
   .picks button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   .picks button.locked { opacity: 0.55; border-style: dashed; }
   .picks button.locked .hz { background: #3a2c22; color: var(--dim); box-shadow: inset 0 0 0 2px rgba(227, 180, 72, 0.35); }
+  .skin-kind { margin: 10px 0 6px; color: var(--dim); font-size: 12.5px; font-weight: 600; }
+  .skin-kind:first-of-type { margin-top: 0; }
   .picks .hz { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #ecd6a8; color: #a3201a; box-shadow: inset 0 0 0 2px currentColor; font: 700 16px/1 var(--han); }
   .linkish { background: none; border: 0; padding: 0; color: var(--gold); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; justify-self: start; }
   #ranks .card { width: min(560px, 100%); position: relative; }
@@ -587,6 +589,16 @@
   @media (max-width: 980px) {
     body.in-menu .brand b { display: none; }
     #nav button { padding: 8px 10px; }
+  }
+
+  /* ---------- middling widths: the pages get a row of their own under the bar (sliding sideways if they still don't
+     fit), so the sound, music and sign-in on the right are never pushed off the screen; the name has room again ---------- */
+  @media (min-width: 761px) and (max-width: 1279px) {
+    body.in-menu #top { flex-wrap: wrap; row-gap: 4px; }
+    body.in-menu #top .tools { margin-left: auto; }
+    body.in-menu .brand b { display: block; }
+    body.in-menu #nav { order: 3; flex-basis: 100%; margin: 0; justify-content: center; overflow-x: auto; scrollbar-width: none; }
+    body.in-menu #menu, body.in-menu :is(#campaign, #ranks, #rules, #brief, #seek, #daily, #history, #friends) { padding-top: calc(128px + env(safe-area-inset-top, 0px)); }
   }
 
   /* ---------- phones ---------- */
@@ -948,6 +960,13 @@
         <p class="note" id="stageNote"></p>
       </section>
       <section>
+        <h2>Trang phục</h2>
+        <p class="skin-kind">Bàn cờ</p><div class="picks" data-skins="board"></div>
+        <p class="skin-kind">Quân cờ</p><div class="picks" data-skins="pieces"></div>
+        <p class="skin-kind">Chiến binh</p><div class="picks" data-skins="army"></div>
+        <p class="note">Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.</p>
+      </section>
+      <section>
         <div class="rhead"><h2>Thành tựu</h2><small id="achSum"></small></div>
         <div class="medals" id="achGrid"></div>
         <label class="ach-title" id="achTitleBox" hidden>Danh hiệu<select id="achTitle"></select></label>
@@ -972,6 +991,7 @@
       <button class="btn" id="bEndRetry" type="button" hidden>Đánh lại</button>
       <button class="btn" id="bEndUndo" type="button">Đi lại</button>
       <button class="btn" id="bEndReview" type="button" hidden>Xem lại · phân tích</button>
+      <button class="btn" id="bEndShare" type="button" hidden>Chia sẻ khoảnh khắc</button>
       <button class="btn" id="bEndMap" type="button" hidden>Bản đồ chiến dịch</button>
       <button class="btn" id="bEndLeave" type="button" hidden>Rời phòng</button>
       <button class="btn" id="bEndMenu" type="button">Về menu</button>
@@ -1005,7 +1025,11 @@
   <div class="card">
     <button class="icon" id="bRulesClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <h2 class="rtitle">Luật chơi</h2>
-    <div class="seg" id="rulesTabs"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Tam Quốc</button><button type="button" data-v="2">Điều khiển</button></div>
+    <div class="seg" id="rulesTabs"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Tam Quốc</button><button type="button" data-v="2">Điều khiển</button><button type="button" data-v="3">Học chơi</button></div>
+    <div class="rpage" data-page="3" hidden>
+      <p class="note">Mỗi bài một quân, vài bước nhỏ: chạm vào quân để xem nó đi được những đâu, rồi làm theo nhiệm vụ ở khung bên cạnh. Bài xong được đánh dấu ✓.</p>
+      <div class="picks" id="lessonList"></div>
+    </div>
     <div class="rpage" data-page="0">
       <ul class="rules">
         <li>Đỏ đi trước. Tướng và Sĩ không ra khỏi cung; hai Tướng không được đối mặt trên một cột trống.</li>
@@ -1116,6 +1140,7 @@
 <script src="src/models.js"></script>
 <script src="src/portraits.js"></script>
 <script src="src/stage-list.js"></script>
+<script src="src/skins.js"></script>
 <script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
 <script src="src/campaign.js"></script>
@@ -1123,6 +1148,7 @@
 <script src="src/seasons.js"></script>
 <script src="src/titles.js"></script>
 <script src="src/daily.js"></script>
+<script src="src/lessons.js"></script>
 <script src="src/account.js"></script>
 <script src="src/campaign-ui.js"></script>
 <script src="src/daily-ui.js"></script>

@@ -60,6 +60,10 @@ const SFX = (() => {
     gallop: () => play(t => { for (let i = 0; i < 3; i++) { tone(140, 'sine', t + i * 0.09, 0.002, 0.06, 0.18, master, 90); noise(t + i * 0.09, 0.04, 0.06, 'lowpass', 600); } }),
     roll: () => play(t => { noise(t, 0.45, 0.12, 'lowpass', 300); tone(70, 'sawtooth', t, 0.05, 0.4, 0.05); }),
     whoosh: () => play(t => { noise(t, 0.3, 0.16, 'bandpass', 900, 0.8); }),
+    splash: () => play(t => {
+      noise(t, 0.28, 0.22, 'bandpass', 1700, 0.7); noise(t + 0.03, 0.18, 0.1, 'highpass', 3600);
+      for (let i = 0; i < 3; i++) tone(520 + i * 180, 'sine', t + 0.05 + i * 0.06, 0.002, 0.05, 0.05, master, 980 + i * 120);   // bubbles
+    }),
     clash: () => play(t => {
       for (const [f, d] of [[1870, 0.5], [2630, 0.35], [3310, 0.3], [4420, 0.25]]) tone(f, 'square', t, 0.001, d, 0.05);
       noise(t, 0.12, 0.4, 'highpass', 3000); tone(220, 'triangle', t, 0.001, 0.15, 0.25, master, 110);

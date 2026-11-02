@@ -9,12 +9,13 @@ import CAMPAIGN from '../src/campaign.js';
 import DAILY from '../src/daily.js';
 import HEROES from '../src/heroes.js';
 import STAGE_LIST from '../src/stage-list.js';
+import SKINS from '../src/skins.js';
 import ACHIEVEMENTS from '../src/achievements.js';
 import SEASONS from '../src/seasons.js';
 import { titlesOf as seasonTitlesOf } from './seasons.js';
 
 export const authReady = env => !!(env.DB && env.GOOGLE_CLIENT_ID && env.SESSION_SECRET);
-const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage, sg_rating, sg_games, sg_wins, sg_draws, sg_losses, season_games, sg_season_games';
+const USER_COLS = 'id, name, rating, games, wins, draws, losses, title, hero, stage, skin, sg_rating, sg_games, sg_wins, sg_draws, sg_losses, season_games, sg_season_games';
 
 const json = (body, init = {}) => Response.json(body, { ...init, headers: { 'cache-control': 'no-store', ...init.headers } });
 const fail = (status, error) => json({ error }, { status });
@@ -147,7 +148,14 @@ export async function api(req, env, url) {
       if (STAGE_LIST.byId[b.stage].campaign && !(await earned()).stages.has(b.stage)) return fail(403, 'Bối cảnh này chưa mở khóa');
       next.stage = b.stage;
     }
-    await env.DB.prepare('UPDATE users SET name = ?, title = ?, hero = ?, stage = ? WHERE id = ?').bind(next.name, next.title, next.hero, next.stage, user.id).run();
+    if ('skin' in b) {                                         // 'board/pieces/army' (skins.js)
+      const s = SKINS.unpack(b.skin);
+      if (SKINS.pack(s) !== b.skin) return fail(400, 'no such look');
+      const rec = { stars: (await earned()).total, ach: new Set((await achievementsOf(env, user)).map(a => a.id)), season: (await seasonTitlesOf(env.DB, user.id)).length > 0 };
+      if (SKINS.NAMES.some(k => !SKINS.earned(k, s[k], rec))) return fail(403, 'Trang phục này chưa mở khóa');
+      next.skin = b.skin;
+    }
+    await env.DB.prepare('UPDATE users SET name = ?, title = ?, hero = ?, stage = ?, skin = ? WHERE id = ?').bind(next.name, next.title, next.hero, next.stage, next.skin ?? null, user.id).run();
     return json({ user: { ...await withRanks(env, next), titles: await titlesBeyond(env, next) } });
   }
   if (p === '/api/campaign') {
