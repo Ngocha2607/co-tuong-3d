@@ -33,7 +33,7 @@
   const myHero = () => heroAllowed(pref.hero) ? pref.hero : '';
   const myStage = () => stageAllowed(pref.stage) ? pref.stage : 'room';
   // looks (skins.js) open with the campaign's stars, achievements and a top ten season finish
-  const skinRecord = () => ({ stars: CAMPAIGN_UI.unlocked().total, ach: ACH_UI.earned, season: !!(ACCOUNT.user && (ACCOUNT.user.titles || []).some(t => String(t).startsWith('s:'))) });
+  const skinRecord = () => ({ quests: questState().stars | 0, stars: CAMPAIGN_UI.unlocked().total, ach: ACH_UI.earned, season: !!(ACCOUNT.user && (ACCOUNT.user.titles || []).some(t => String(t).startsWith('s:'))) });
   const skinAllowed = (kind, id) => SKINS.valid(kind, id) && SKINS.earned(kind, id, skinRecord());
   function mySkins() { const s = SKINS.unpack(pref.skin); for (const k of SKINS.NAMES) if (!skinAllowed(k, s[k])) s[k] = SKINS.DEFAULT[k]; return s; }
   // a signed-in player's hero and stage follow them: each pick is saved to the account
@@ -44,6 +44,32 @@
   if (!HEROES.valid(pref.hero)) pref.hero = '';
   if (!STAGES.valid(pref.stage)) pref.stage = 'room';
   const savePref = () => { try { localStorage.setItem('cotuong_pref', JSON.stringify(pref)); } catch (e) { } };
+
+  // ---------- weekly quests (quests.js) ----------
+  // each finished game counts towards the week's three tasks; a task done gives a quest star (they open a look)
+  function questState() { try { return JSON.parse(localStorage.getItem('cotuong_quests')) || {}; } catch (e) { return {}; } }
+  function questGame(g) {
+    const r = QUESTS.count(questState(), g);
+    try { localStorage.setItem('cotuong_quests', JSON.stringify(r.st)); } catch (e) { }
+    r.done.forEach((q, i) => setTimeout(() => { SFX.gong(); toast(`Xong nhiệm vụ tuần: ${q.text} · +1 sao`); }, 2600 + i * 2200));
+    renderQuests();
+    if (r.done.length) renderSkins();
+  }
+  function renderQuests() {
+    const st = questState(), week = QUESTS.weekOf(), got = st.week === week ? st.got || {} : {}, stars = st.stars | 0;
+    $('#questList').innerHTML = QUESTS.of(week).map(id => {
+      const q = QUESTS.byId[id], n = Math.min(q.goal, got[id] | 0), done = n >= q.goal;
+      return `<li class="${done ? 'done' : ''}"><span class="qt">${q.text}</span><span class="qbar"><i style="width:${(100 * n) / q.goal}%"></i></span><span class="qn">${done ? '✓' : `${n}/${q.goal}`}</span></li>`;
+    }).join('');
+    const left = Math.max(1, Math.ceil((QUESTS.weekEnds(week) - Date.now()) / 86400000));
+    $('#questNote').textContent = `Còn ${left} ngày · ${stars} sao nhiệm vụ${stars < 6 ? ` · 6 sao mở quân Sơn son` : ''}`;
+  }
+  // a game of xiangqi over: how it went, for the quests
+  function questXq(won, reason) {
+    const me = G.mode === 'online' ? G.you : G.me;
+    if (!me || G.mode === 'lesson' || G.mode === 'menu') return;
+    questGame({ mode: G.mode, level: G.level, won, reason, plies: G.moves.length, jq: !!G.pos.dark, daily: !!(G.lv && G.lv.daily), me, log: G.log });
+  }
 
   // ---------- game record ----------
   // cờ úp (jieqi.js) against the computer or in a friendly room: G.deal is known here only against the computer;
@@ -60,7 +86,7 @@
       ({ cap, turned } = JQ.apply(pos, m, info));
       G.turns.push(info);
     } else { text = XQ.notation(pos, m); cap = pos.make(m); }
-    G.moves.push(m); G.log.push({ text, side, cap });
+    G.moves.push(m); G.log.push({ text, side, cap, pc: pos.b[XQ.to(m)] });   // pc: the piece that moved, as it is now
     if (cap) G.captured.push(cap);
     G.quiet = cap || turned ? 0 : G.quiet + 1;            // turning a piece up can't be undone either
     return cap;
@@ -242,6 +268,7 @@
     aiId++; G.thinking = false;
     G.over = { winner: r.reason === 'held' || r.reason === 'limit' || (lv.type === 'survive' && r.win) ? 0 : winner, reason: r.reason, shown: true, camp: r, stars: CAMPAIGN.stars(lv, r, G.help), lv };
     G.over.kept = keepGame();
+    questXq(!!r.win, r.reason);
     VIEW.check(-1); clearSel();
     const onBoard = r.reason === 'checkmate' || r.reason === 'stalemate';
     const finale = onBoard ? VIEW.defeat(kingOf(-winner), true) : 0;
@@ -304,6 +331,7 @@
     if (G.over && G.over.shown) return;
     G.over = Object.assign({}, st, { shown: true });
     G.over.kept = keepGame();
+    questXq(!!st.winner && st.winner === (G.mode === 'online' ? G.you : G.me), st.reason);
     VIEW.check(-1); VIEW.setMood({}); clearSel();
     const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'noshow', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     const finale = st.winner && onBoard ? VIEW.defeat(kingOf(-st.winner), true) : 0;
@@ -706,6 +734,7 @@
   // ---------- the end ----------
   function sgEnd(st) {
     if (G.over && G.over.shown) { if (st.places && !G.over.places) Object.assign(G.over, { places: st.places }); return; }
+    if (sgNet() ? G.sg.net.you >= 0 : sgPeople().length) questGame({ mode: 'sanguo' });
     aiId++; G.thinking = false;
     const [title, sub, result] = sgEndText(st);
     G.over = Object.assign({}, st, { shown: true, sg: true, title, sub, result });
@@ -1990,6 +2019,7 @@
     $('#bDaily').classList.toggle('done', done);
   };
   DAILY_UI.onChange(dailyChip); dailyChip();
+  renderQuests(); setInterval(renderQuests, 600000);   // a new week while the page is open
   // friends and challenges (friends.js): a challenge accepted opens a new private friendly room for both; whoever
   // challenged goes in first, so they hold the room (and Red), the other a moment later
   // tournaments (tournament-ui.js): a match's room, played or watched; from a match's end, back to its bracket

@@ -268,6 +268,14 @@
   #friends .card { width: min(620px, 100%); position: relative; }
   #bFriendsClose { position: absolute; top: 18px; right: 18px; }
   #friends .camp-head h2 { margin: 0; font: 700 26px/1.15 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
+  /* weekly quests (quests.js) on the Chủ tướng page */
+  .quests { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .quests li { display: grid; grid-template-columns: 1fr 90px 34px; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font: 600 14px/1.3 var(--ui); }
+  .quests .qbar { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+  .quests .qbar i { display: block; height: 100%; background: var(--gold); border-radius: 3px; }
+  .quests .qn { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
+  .quests li.done { border-color: rgba(232, 182, 80, 0.55); }
+  .quests li.done .qn { color: var(--gold); opacity: 1; }
   /* tournaments (tournament-ui.js), inside the Bạn bè page: one shown hides the rest of it */
   #friends.touring .card > :not(#tourView):not(#bFriendsClose) { display: none; }
   #tourView .tname { margin: 8px 0 4px; font: 700 24px/1.2 var(--serif); color: var(--ink); }
@@ -992,11 +1000,16 @@
         <p class="note">Bối cảnh ban ngày đổi theo giờ trên máy: chạng vạng ánh vàng, đêm có trăng sao. Quân trướng, Xích Bích, Ngũ Trượng Nguyên vốn là cảnh đêm.</p>
       </section>
       <section>
+        <h2>Nhiệm vụ tuần</h2>
+        <ul class="quests" id="questList"></ul>
+        <p class="note" id="questNote"></p>
+      </section>
+      <section>
         <h2>Trang phục</h2>
         <p class="skin-kind">Bàn cờ</p><div class="picks" data-skins="board"></div>
         <p class="skin-kind">Quân cờ</p><div class="picks" data-skins="pieces"></div>
         <p class="skin-kind">Chiến binh</p><div class="picks" data-skins="army"></div>
-        <p class="note">Mở khóa bằng sao Chiến dịch, thành tựu và mùa giải xếp hạng. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.</p>
+        <p class="note">Mở khóa bằng sao Chiến dịch, thành tựu, mùa giải xếp hạng và nhiệm vụ tuần. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.</p>
       </section>
       <section>
         <div class="rhead"><h2>Thành tựu</h2><small id="achSum"></small></div>
@@ -1177,6 +1190,7 @@
 <script src="src/portraits.js"></script>
 <script src="src/stage-list.js"></script>
 <script src="src/skins.js"></script>
+<script src="src/quests.js"></script>
 <script src="src/stages.js"></script>
 <script src="src/scene.js"></script>
 <script src="src/campaign.js"></script>

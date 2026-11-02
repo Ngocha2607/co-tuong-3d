@@ -204,6 +204,7 @@ const MODELS = (() => {
     ngoc: { body: '#5d9c7f', rough: 0.22, shine: 0.9, face: ['#d4ebdc', '#9fcbb3'] },
     dong: { body: '#9a6a35', rough: 0.36, metal: 0.8, shine: 1, face: ['#cf9f60', '#9a6a35'], ink: { 1: '#6e120c', '-1': '#1b1209' } },
     mun: { body: '#2a1912', rough: 0.35, shine: 0.6, face: ['#3a2418', '#22140d'], ink: { 1: '#ff6a4a', '-1': '#efe4cc', 2: '#7be0a0' } },
+    son: { body: '#9a1d12', rough: 0.28, shine: 0.85, face: ['#c8402a', '#8c1a0f'], ink: { 1: '#f6d27a', '-1': '#160b06', 2: '#bff0c8' } },   // vermilion lacquer
   };
   const pieceLook = id => PIECE_LOOK[id] || PIECE_LOOK.nga;
   const inkOf = (piece, look) => (look.ink && look.ink[palKey(piece)]) || PAL[palKey(piece)].ink;

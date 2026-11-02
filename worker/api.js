@@ -152,7 +152,8 @@ export async function api(req, env, url) {
     if ('skin' in b) {                                         // 'board/pieces/army' (skins.js)
       const s = SKINS.unpack(b.skin);
       if (SKINS.pack(s) !== b.skin) return fail(400, 'no such look');
-      const rec = { stars: (await earned()).total, ach: new Set((await achievementsOf(env, user)).map(a => a.id)), season: (await seasonTitlesOf(env.DB, user.id)).length > 0 };
+      // quest stars are counted on the player's device (quests.js): the server takes the page's word for them
+      const rec = { stars: (await earned()).total, ach: new Set((await achievementsOf(env, user)).map(a => a.id)), season: (await seasonTitlesOf(env.DB, user.id)).length > 0, quests: Infinity };
       if (SKINS.NAMES.some(k => !SKINS.earned(k, s[k], rec))) return fail(403, 'Trang phục này chưa mở khóa');
       next.skin = b.skin;
     }

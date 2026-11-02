@@ -3,7 +3,7 @@
 // account has been earned. In a room each side's pieces and warriors wear their player's look; the board is the
 // host's, as the stage is.
 // Each look but the first of its kind is earned: campaign stars, a number of achievements, one achievement in
-// particular, or a top ten finish in a ranked season.
+// particular, a top ten finish in a ranked season, or quest stars (quests.js: counted on the player's device).
 'use strict';
 const SKINS = (() => {
   const KINDS = {
@@ -18,6 +18,7 @@ const SKINS = (() => {
       { id: 'ngoc', name: 'Ngọc', han: '玉', need: { achs: 3 } },
       { id: 'dong', name: 'Đồng', han: '銅', need: { ach: 'bach-chien' } },
       { id: 'mun', name: 'Gỗ mun', han: '烏', need: { stars: 48 } },
+      { id: 'son', name: 'Sơn son', han: '朱', need: { quests: 6 } },
     ],
     army: [
       { id: 'mau', name: 'Tô màu', han: '彩' },
@@ -37,6 +38,7 @@ const SKINS = (() => {
     if (n.ach) return rec.ach.has(n.ach);
     if (n.achs) return rec.ach.size >= n.achs;
     if (n.season) return !!rec.season;
+    if (n.quests) return (rec.quests | 0) >= n.quests;
     return false;
   }
   function requirement(kind, id) {
@@ -45,6 +47,7 @@ const SKINS = (() => {
     if (n.stars) return `Đạt ${n.stars} sao trong Chiến dịch`;
     if (n.achs) return `Đạt ${n.achs} thành tựu`;
     if (n.season) return 'Lọt vào top 10 một mùa giải xếp hạng';
+    if (n.quests) return `Hoàn thành ${n.quests} nhiệm vụ tuần`;
     return n.ach === 'that-tinh' ? 'Thành tựu Thất tinh: phá Chân Long Kỳ Trận 7 ngày liên tiếp' : 'Thành tựu Thân kinh bách chiến: đánh 50 ván xếp hạng cờ tướng';
   }
   // the three looks travel and are stored as one string, 'board/pieces/army'; anything unknown falls back to the first

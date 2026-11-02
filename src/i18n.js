@@ -453,6 +453,18 @@ const I18N = (() => {
     'Camera điện ảnh: quay cận cảnh nước hay, nước hớ và chiếu bí': 'Cinematic camera: close-ups of fine moves, blunders and the mate',
     'Bật camera điện ảnh: nước hay, nước hớ và chiếu bí được quay cận cảnh': 'Cinematic camera on: fine moves, blunders and the mate in close-up',
 
+    // weekly quests (quests.js)
+    'Nhiệm vụ tuần': 'Weekly quests', 'Xong nhiệm vụ tuần: {0} · +1 sao': 'Weekly quest done: {0} · +1 star', 'Còn {0} ngày': '{0} days left',
+    '{0} sao nhiệm vụ': '{0} quest stars', '6 sao mở quân Sơn son': '6 stars open the Vermilion pieces', 'Sơn son': 'Vermilion', 'Hoàn thành {0} nhiệm vụ tuần': 'Complete {0} weekly quests',
+    'Ăn 3 quân bằng Mã': 'Take 3 pieces with a horse', 'Ăn 4 quân bằng Pháo': 'Take 4 pieces with a cannon', 'Tốt ăn 2 quân': 'Take 2 pieces with soldiers',
+    'Ăn 2 Xe của đối phương': 'Take 2 enemy chariots', 'Thắng 3 ván cờ tướng': 'Win 3 xiangqi games', 'Thắng máy ở mức Khó': 'Beat the computer on Hard',
+    'Thắng một ván mà không mất Pháo nào': 'Win a game without losing a cannon', 'Thắng một ván mà không mất Xe nào': 'Win a game without losing a chariot',
+    'Chiếu bí bằng Mã': 'Checkmate with a horse', 'Thắng trong vòng 30 nước': 'Win within 30 moves', 'Đánh 2 ván online': 'Play 2 online games',
+    'Chơi 2 ván cờ úp': 'Play 2 games of jieqi', 'Thắng 2 trận Chiến dịch': 'Win 2 Campaign battles', 'Chơi 1 ván Tam Quốc': 'Play a Three Kingdoms game',
+    'Mở khóa bằng sao Chiến dịch, thành tựu, mùa giải xếp hạng và nhiệm vụ tuần. Chơi online, đối thủ thấy quân cờ và chiến binh của bạn; bàn cờ theo chủ phòng.':
+      'Unlocked with Campaign stars, achievements, ranked seasons and weekly quests. Online, your opponents see your pieces and warriors; the board is the host’s.',
+    'Chiếu bí!': 'Checkmate!',
+
     // cờ úp (jieqi.js)
     'Cờ úp': 'Jieqi (face-down)', 'Kiểu cờ': 'Kind of game', 'Cờ úp · {0}': 'Jieqi · {0}', 'Bạn cầm quân {0} · Cờ úp': 'You play {0} · Jieqi',
     '2 người chơi · Cờ úp': '2 players · Jieqi', '{0}, lật {1}': '{0}, turns up {1}', '{0}, ăn {1} úp': '{0}, takes a face-down {1}',
