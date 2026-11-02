@@ -1,4 +1,4 @@
-// daily-ui.js — the daily puzzle's page (Bát Trận Đồ, 八陣圖, a battle formation to break each day): today's position on a small board, the player's streak,
+// daily-ui.js — the daily puzzle's page (Chân Long Kỳ Trận, 真龍棋陣, a battle formation to break each day): today's position on a small board, the player's streak,
 // the time to the next puzzle and the board of the fastest; and the day's attempts, kept in the browser. The puzzle
 // is played in game.js like a campaign battle. Signed in, the Worker hands out a ticket the first time the day's
 // puzzle is opened (the clock runs from then, through every retry) and replays the solution before it goes on the
@@ -65,7 +65,7 @@ const DAILY_UI = (() => {
       try {
         board = await call('api/daily', { ticket: local.ticket, moves, tries: local.tries, help: !!help });
         if (board.me && board.me.solved) Object.assign(res, board.me.solved, { rank: board.me.rank, sent: true });
-      } catch (e) { toast(e.status === 410 ? e.message : 'Chưa ghi được lên bảng Bát Trận Đồ'); }
+      } catch (e) { toast(e.status === 410 ? e.message : 'Chưa ghi được lên bảng Chân Long Kỳ Trận'); }
     }
     res.streak = streak();
     emit();

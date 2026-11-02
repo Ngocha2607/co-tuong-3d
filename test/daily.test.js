@@ -1,4 +1,4 @@
-// daily.test.js — the daily puzzle, Bát Trận Đồ: every formation is sound (as the campaign's puzzles are) and hard,
+// daily.test.js — the daily puzzle, Chân Long Kỳ Trận: every formation is sound (as the campaign's puzzles are) and hard,
 // the days fall where they should in Vietnam's time, streaks count, and a solution is judged like a campaign battle.
 // `npm test` proves the first three formations in full (a long mate takes seconds to prove) and checks the rest
 // quickly; `npm run verify:daily` (node test/daily.test.js all) proves every one, which takes a while.

@@ -68,7 +68,7 @@ async function relation(env, a, b) {
 }
 
 // ---------- achievements (src/achievements.js) ----------
-// a player's achievements; those the records now prove (Bát Trận Đồ days in a row, ranked games, rating) are added
+// a player's achievements; those the records now prove (Chân Long Kỳ Trận days in a row, ranked games, rating) are added
 async function achievementsOf(env, u) {
   const db = env.DB;
   const { results: days } = await db.prepare('SELECT day FROM daily WHERE user_id = ? ORDER BY day').bind(u.id).all();

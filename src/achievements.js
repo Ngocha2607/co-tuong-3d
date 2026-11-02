@@ -1,5 +1,5 @@
 // achievements.js — thành tựu: feats of the board, each a seal to collect, some with a title to wear by one's name.
-// Most are earned in a game (any game of cờ tướng: against the computer, the campaign, Bát Trận Đồ, online) and all
+// Most are earned in a game (any game of cờ tướng: against the computer, the campaign, Chân Long Kỳ Trận, online) and all
 // of those need a checkmate, so a list of moves proves them: the page checks each game it finishes, the Worker replays
 // the moves before it saves one (worker/api.js). The last few the Worker sees for itself in its records.
 // Shared by the page and the Worker.
@@ -19,7 +19,7 @@ const ACHIEVEMENTS = (() => {
     { id: 'thi-xe', han: '車', name: 'Thí Xe', desc: 'Mất Xe rồi chiếu bí trong vòng 5 nước sau đó', title: 'Khí phách anh hùng' },
     { id: 'truong-ky', han: '久', name: 'Trường kỳ', desc: 'Chiếu bí sau một ván dài từ 100 nước trở lên' },
     // the Worker's own records say these
-    { id: 'that-tinh', han: '陣', name: 'Thất tinh', desc: 'Phá Bát Trận Đồ 7 ngày liên tiếp', title: 'Phá trận tiên sinh', server: true },
+    { id: 'that-tinh', han: '陣', name: 'Thất tinh', desc: 'Phá Chân Long Kỳ Trận 7 ngày liên tiếp', title: 'Phá trận tiên sinh', server: true },
     { id: 'bach-chien', han: '戰', name: 'Thân kinh bách chiến', desc: 'Đánh 50 ván xếp hạng cờ tướng', server: true },
     { id: 'danh-chan', han: '名', name: 'Danh chấn thiên hạ', desc: 'Đạt 1600 điểm xếp hạng cờ tướng', title: 'Danh chấn thiên hạ', server: true },
     { id: 'tam-quoc', han: '統', name: 'Thống nhất Tam Quốc', desc: 'Một mình nhất thống thiên hạ trong một ván xếp hạng Tam Quốc', server: true },
@@ -87,7 +87,7 @@ const ACHIEVEMENTS = (() => {
     if (attackers.length === 1 && Math.abs(attackers[0]) === N) out.add('don-ky');
     return [...out];
   }
-  // the ones the Worker's records prove: u a player row (users), streak the Bát Trận Đồ days in a row
+  // the ones the Worker's records prove: u a player row (users), streak the Chân Long Kỳ Trận days in a row
   function fromRecords(u, streak) {
     const out = [];
     if (streak >= 7) out.push('that-tinh');

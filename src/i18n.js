@@ -22,7 +22,7 @@ const I18N = (() => {
   // ---------- the words ----------
   const EN = {
     // the game, its parts and its people
-    'Cờ Tướng 3D': 'Xiangqi 3D', 'Cờ tướng': 'Xiangqi', 'Tam Quốc': 'Three Kingdoms', 'Bát Trận Đồ': 'Eight Formations',
+    'Cờ Tướng 3D': 'Xiangqi 3D', 'Cờ tướng': 'Xiangqi', 'Tam Quốc': 'Three Kingdoms', 'Chân Long Kỳ Trận': 'True Dragon Formation',
     'Đỏ': 'Red', 'Đen': 'Black', 'Thục': 'Shu', 'Ngô': 'Wu', 'Ngụy': 'Wei',
     'Tướng': 'General', 'Sĩ': 'Advisor', 'Tượng': 'Elephant', 'Mã': 'Horse', 'Xe': 'Chariot', 'Pháo': 'Cannon', 'Tốt': 'Soldier',
     'Quan Vũ': 'Guan Yu', 'Trương Phi': 'Zhang Fei', 'Triệu Vân': 'Zhao Yun', 'Gia Cát Lượng': 'Zhuge Liang', 'Lưu Bị': 'Liu Bei',
@@ -65,8 +65,8 @@ const I18N = (() => {
     'Chinh chiến Tam Quốc': 'The Three Kingdoms Campaign', 'Phần thưởng': 'Rewards', 'Điều khiển': 'Controls', 'Mục tiêu:': 'Objective:',
     'Quay lại': 'Back', 'Xuất trận': 'March out', 'Đỏ đi trước ·': 'Red to move ·', 'Phá trận': 'Break it', 'Phá trận nhanh nhất hôm nay': 'Fastest today',
     'ngày phá trận liên tiếp': 'days in a row',
-    'Trận đồ của Gia Cát Lượng: mỗi ngày một trận mới, giống nhau cho mọi người, chỉ dành cho bậc cao thủ. Máy giữ quân Đen, chống đỡ hết sức, và chỉ có đúng một nước mở đầu phá được trận.':
-      'Zhuge Liang’s battle formations: a new one every day, the same for everyone, for strong players only. The computer holds Black and defends with all it has, and exactly one first move breaks the formation.',
+    'Mỗi ngày một trận mới, giống nhau cho mọi người, chỉ dành cho bậc cao thủ. Máy giữ quân Đen, chống đỡ hết sức, và chỉ có đúng một nước mở đầu phá được trận.':
+      'A new formation every day, the same for everyone, for strong players only. The computer holds Black and defends with all it has, and exactly one first move breaks the formation.',
     'Lưu 30 ván cờ tướng gần nhất trên máy này, kèm phần phân tích. Ván xếp hạng còn xem lại được trong Hồ sơ.':
       'The last 30 games of xiangqi on this device, with their analysis. Ranked games can also be reviewed from the profile.',
     'Tìm': 'Search', 'Thách đấu với': 'Challenge with',
@@ -122,7 +122,7 @@ const I18N = (() => {
     'Bạn đã rút quân': 'You withdrew', 'Bạn bị chiếu bí': 'You were checkmated', 'Đối phương hết nước đi': 'The enemy has no move', 'Bạn hết nước đi': 'You have no move',
     'Đối phương chiếu dai, phạm luật': 'The enemy checked perpetually, against the rules', 'Bạn chiếu dai, phạm luật': 'You checked perpetually, against the rules',
     'Đối phương đuổi dai, phạm luật': 'The enemy chased perpetually, against the rules', 'Bạn đuổi dai, phạm luật': 'You chased perpetually, against the rules',
-    'Phá trận!': 'Formation broken!', 'Chưa phá được trận': 'Not broken yet', 'Bát Trận Đồ · Trận {0}': 'Eight Formations · No. {0}',
+    'Phá trận!': 'Formation broken!', 'Chưa phá được trận': 'Not broken yet', 'Chân Long Kỳ Trận · Trận {0}': 'True Dragon Formation · No. {0}',
     'Đại thắng!': 'Great victory!', 'Thất bại': 'Defeat', 'Ván bị hủy': 'Game called off', 'Một bên không đi nước đầu trong 30 giây': 'A side made no first move within 30 seconds',
     'Hòa cờ': 'Draw', '{0} thắng': '{0} wins', 'Chiến thắng!': 'Victory!', '{0} ({1}) thắng': '{0} ({1}) wins', 'Hai bên bất phân thắng bại': 'Neither side could win',
     '{0} hết giờ': '{0} ran out of time', 'Hết giờ, nhưng bên kia không còn quân để chiếu bí': 'Out of time, but the other side cannot checkmate',
@@ -169,8 +169,8 @@ const I18N = (() => {
     'Thế cờ ban đầu. Dùng các nút dưới đây, phím ← → hoặc chạm vào biên bản để đi từng nước.': 'The starting position. Use the buttons below, the ← → keys, or tap the move list to step through.',
     'Máy đang chấm từng nước… {0}%': 'The computer is judging every move… {0}%', 'Phân tích tiếp': 'Continue analysis', 'Dừng': 'Pause', 'Đang phân tích…': 'Analysing…',
     '{0} ván gần nhất trên máy này': 'The last {0} games on this device', 'Chưa có ván nào': 'No games yet',
-    'Đánh xong một ván cờ tướng (với máy, chiến dịch, Bát Trận Đồ hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.':
-      'Finish a game of xiangqi (against the computer, in the campaign, the Eight Formations or online) and it is kept here, to step through and have the computer analyse.',
+    'Đánh xong một ván cờ tướng (với máy, chiến dịch, Chân Long Kỳ Trận hay online) là ván đó được lưu ở đây, để xem lại từng nước và nhờ máy phân tích.':
+      'Finish a game of xiangqi (against the computer, in the campaign, the True Dragon Formation or online) and it is kept here, to step through and have the computer analyse.',
     'gặp {0}': 'vs {0}', 'Xếp hạng · {0}': 'Ranked · {0}', 'Không tải được ván cờ này': 'Could not load this game', 'Ván cờ': 'Game', 'Chính xác {0}%': 'Accuracy {0}%',
     '{0} xin hàng, rút quân khỏi bàn': '{0} resigns and leaves the board', '{0} diệt vong, tàn quân về {1}': '{0} falls; its army goes to {1}',
     'Chưa có nước nào. Thục đi trước, rồi Ngô, rồi Ngụy.': 'No moves yet. Shu moves first, then Wu, then Wei.', '{0} vòng': '{0} rounds',
@@ -192,7 +192,7 @@ const I18N = (() => {
     'Đã gửi lời mời đấu lại.': 'Rematch offered.', 'Thành tựu mới: {0}': 'New achievement: {0}', 'Trận tiếp: {0}': 'Next battle: {0}', 'Mở khóa: {0}!': 'Unlocked: {0}!',
     'Thành tích tốt nhất của bạn: {0}': 'Your best: {0}', 'Đánh lại để thử cách khác. Bí quá thì xem Gợi ý ở nước đầu, chỉ mất một sao.': 'Try another way. If stuck, take a hint on the first move: it costs only one star.',
     'Có thể Đi lại vài nước để gỡ, hoặc đánh lại từ đầu. Dùng Đi lại hay Gợi ý chỉ mất một sao.': 'Undo a few moves to recover, or start again. Undo or hints cost only one star.',
-    'Phá lại để luyện tay': 'Play it again for practice', 'Thử lại': 'Try again', 'Bảng Bát Trận Đồ': 'Eight Formations board',
+    'Phá lại để luyện tay': 'Play it again for practice', 'Thử lại': 'Try again', 'Bảng Chân Long Kỳ Trận': 'True Dragon Formation board',
     'Trận chưa vỡ: phải chiếu bí trong {0} nước. Đồng hồ vẫn chạy, thử đường khác nhé.': 'Still standing: checkmate within {0} moves. The clock keeps running; try another way.',
     'Đang ghi kết quả…': 'Saving the result…', 'Bạn đã phá trận hôm nay rồi: lần này để luyện tay.': 'You broke today’s formation already: this one is for practice.',
     'Phá trận trong {0}': 'Broken in {0}', 'ngay lần đầu': 'at the first try', '{0} lần thử': '{0} tries', 'hạng {0} hôm nay': 'rank {0} today', 'chuỗi {0} ngày': '{0}-day streak',
@@ -208,7 +208,7 @@ const I18N = (() => {
     'Ghép với người có điểm gần bạn. Mỗi bên 10 phút, cộng 5 giây sau mỗi nước.': 'Matched with someone close to your rating. 10 minutes each, plus 5 seconds a move.',
     'Đã sao chép link mời': 'Invite link copied', 'Nhập mã phòng 4 ký tự': 'Enter the 4-character room code', 'Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.': 'A game is under way. Resign or finish it to rematch.',
     'Đội quân: mọi quân hiện chiến binh': 'Army: every piece shows its warrior', 'Quân cờ: chiến binh chỉ hiện khi ra trận': 'Pieces: warriors appear only in battle',
-    'Đang offline: vẫn đánh với máy, chiến dịch, Bát Trận Đồ và xem lại ván cũ được.': 'Offline: you can still play the computer, the campaign, the Eight Formations, and review old games.',
+    'Đang offline: vẫn đánh với máy, chiến dịch, Chân Long Kỳ Trận và xem lại ván cũ được.': 'Offline: you can still play the computer, the campaign, the True Dragon Formation, and review old games.',
     'Chơi online cần chạy qua Cloudflare Worker (npm start hoặc bản đã deploy).': 'Online play needs the Cloudflare Worker (npm start or the deployed site).',
     'Đã cài Cờ Tướng 3D lên máy': 'Xiangqi 3D is installed', 'Có bản mới của trò chơi: bấm Cập nhật ở góc trên khi tiện': 'A new version is ready: click Update at the top when convenient',
     'Bạn đang trong ván': 'You are in a game',
@@ -288,8 +288,8 @@ const I18N = (() => {
     'Thắng trong {0} nước': 'Win within {0} moves', 'Cờ thế': 'Puzzle', 'Thủ thành': 'Siege', 'Chấp quân': 'Handicap', 'Quyết chiến': 'Decisive battle', 'Chiếu bí trong {0} nước': 'Checkmate in {0} moves',
 
     // the daily formation
-    'Chưa ghi được lên bảng Bát Trận Đồ': 'Not yet on the Eight Formations board', 'Trận {0}': 'No. {0}', 'Trận đồ hôm nay': 'Today’s formation', 'hạng {0} mùa này': '#{0} this season', '{0} ván trong mùa': '{0} games this season',
-    'còn {0} ván để có tên trên bảng mùa này': '{0} more games to be on this season’s board', '{0}: {1}': '{0}: {1}','Bậc Đại sư': 'Grandmaster', 'Bậc Cao thủ': 'Master', 'Bát Trận Đồ · Trận {0}{1}': 'Eight Formations · No. {0}{1}',
+    'Chưa ghi được lên bảng Chân Long Kỳ Trận': 'Not yet on the True Dragon Formation board', 'Trận {0}': 'No. {0}', 'Trận đồ hôm nay': 'Today’s formation', 'hạng {0} mùa này': '#{0} this season', '{0} ván trong mùa': '{0} games this season',
+    'còn {0} ván để có tên trên bảng mùa này': '{0} more games to be on this season’s board', '{0}: {1}': '{0}: {1}','Bậc Đại sư': 'Grandmaster', 'Bậc Cao thủ': 'Master', 'Chân Long Kỳ Trận · Trận {0}{1}': 'True Dragon Formation · No. {0}{1}',
     'Bạn đã phá trận trong {0}': 'You broke it in {0}', 'sau {0} lần thử': 'after {0} tries', '(có dùng gợi ý)': '(with hints)', 'Hạng {0} hôm nay.': 'Rank {0} today.',
     'Đã thử {0} lần. Đồng hồ chạy từ lần mở đầu tiên.': '{0} tries so far. The clock runs from the first time you opened it.',
     'Đồng hồ bắt đầu khi bạn bấm Phá trận, và chạy tiếp qua mỗi lần thử lại.': 'The clock starts when you click Break it, and keeps running through every retry.',
@@ -334,7 +334,7 @@ const I18N = (() => {
     'Đơn kỵ': 'Lone Rider', 'Chiếu bí khi quân tấn công duy nhất còn lại là một con Mã': 'Checkmate when your only attacking piece left is one horse', 'Đơn kỵ cứu chúa': 'Lone Rider to the Rescue',
     'Thí Xe': 'Chariot Sacrifice', 'Mất Xe rồi chiếu bí trong vòng 5 nước sau đó': 'Lose a chariot, then checkmate within 5 moves', 'Khí phách anh hùng': 'Heroic Spirit',
     'Trường kỳ': 'The Long War', 'Chiếu bí sau một ván dài từ 100 nước trở lên': 'Checkmate after a game of 100 moves or more',
-    'Thất tinh': 'Seven Stars', 'Phá Bát Trận Đồ 7 ngày liên tiếp': 'Break the Eight Formations 7 days in a row', 'Phá trận tiên sinh': 'Formation Breaker',
+    'Thất tinh': 'Seven Stars', 'Phá Chân Long Kỳ Trận 7 ngày liên tiếp': 'Break the True Dragon Formation 7 days in a row', 'Phá trận tiên sinh': 'Formation Breaker',
     'Thân kinh bách chiến': 'Veteran of a Hundred Battles', 'Đánh 50 ván xếp hạng cờ tướng': 'Play 50 ranked games of xiangqi',
     'Danh chấn thiên hạ': 'Renowned Under Heaven', 'Đạt 1600 điểm xếp hạng cờ tướng': 'Reach a xiangqi rating of 1600',
     'Thống nhất Tam Quốc': 'Unifier of the Three Kingdoms', 'Một mình nhất thống thiên hạ trong một ván xếp hạng Tam Quốc': 'Unite the realm alone in a ranked Three Kingdoms game',
