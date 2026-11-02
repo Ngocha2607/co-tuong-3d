@@ -448,6 +448,6 @@ const XQ = (() => {
     return n;
   }
 
-  return { K, A, B, N, R, C, P, RED, BLACK, START, Pos, row, col, mv, from, to, status, notation, think, perft, NAME, HAN, MATE };
+  return { K, A, B, N, R, C, P, RED, BLACK, START, Pos, row, col, mv, from, to, status, notation, think, perft, threats, NAME, HAN, MATE };
 })();
 if (typeof module === 'object' && module.exports) module.exports = XQ;

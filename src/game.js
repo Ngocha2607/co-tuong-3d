@@ -95,7 +95,7 @@
       if (gen !== G.gen) return;                           // a new game started meanwhile
       await VIEW.play(m, opts);
       if (gen !== G.gen) return;
-      VIEW.check(-1);
+      VIEW.check(-1); moods();
       if (G.mode === 'lesson') { lessonJudge(m, st); return; }
       if (G.mode === 'campaign') { const r = CAMPAIGN.judge(G.lv, G.moves); if (r.over) { endCampaign(r); return; } }
       if (st.over) { endGame(st); return; }
@@ -104,6 +104,14 @@
       if (vsAI() && G.pos.turn !== G.me && !G.over && G.animating <= 1) aiMove();
     });
     G.lastMover = mover; updateStatus();
+  }
+
+  // how the warriors feel (scene.js setMood): the pieces the side that just moved really threatens (XQ.threats: left
+  // unprotected, or worth more than the attacker) are afraid, a general in check is on the alert
+  function moods() {
+    if (G.over || !['ai', 'campaign', 'online', 'lesson'].includes(G.mode)) { VIEW.setMood({}); return; }
+    const afraid = [...new Set(XQ.threats(G.pos.clone(), -G.pos.turn).map(XQ.to))];
+    VIEW.setMood({ afraid, alert: G.pos.inCheck() ? kingOf(G.pos.turn) : -1 });
   }
 
   // ---------- computer player ----------
@@ -261,7 +269,7 @@
     G.gen = (G.gen || 0) + 1;
     VIEW.setBoard(G.pos.b, G.captured, G.pos.dark); clearSel(); VIEW.hint(-1, -1);
     const lm = G.moves[G.moves.length - 1]; VIEW.lastMove(lm ? XQ.from(lm) : -1, lm ? XQ.to(lm) : -1);
-    const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(st.check ? kingOf(G.pos.turn) : -1);
+    const st = XQ.status(G.pos, G.keys, G.quiet, G.moves); VIEW.check(st.check ? kingOf(G.pos.turn) : -1); moods();
     showEnd(false); renderMoves(); updateStatus(); SFX.pick();
     if (G.pos.turn !== G.me) aiMove();
   }
@@ -296,7 +304,7 @@
     if (G.over && G.over.shown) return;
     G.over = Object.assign({}, st, { shown: true });
     G.over.kept = keepGame();
-    VIEW.check(-1); clearSel();
+    VIEW.check(-1); VIEW.setMood({}); clearSel();
     const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'noshow', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     const finale = st.winner && onBoard ? VIEW.defeat(kingOf(-st.winner), true) : 0;
     recordFinale(finale);

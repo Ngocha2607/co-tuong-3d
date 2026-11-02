@@ -435,6 +435,36 @@ const VIEW = (() => {
     if (j.trunk) j.trunk.rotation.x = 0.5 + Math.sin(p * 0.9) * 0.2;
     if (cloth) cloth.rotation.y = Math.sin(p * 2.1) * 0.22 + Math.sin(p * 3.7) * 0.07;
   }
+  // how a warrior feels about where it stands (mood, set by the game after each move): 'afraid', a piece the enemy can
+  // take next, leans back behind its shield with its head down and trembles (a piece on the board shivers);
+  // 'alert', a general in check, holds the sword up and looks round. u.fear and u.alarm ease in and out.
+  function setMood(m = {}) {
+    const afraid = new Set(m.afraid || []);
+    for (const [s, u] of units) u.mood = afraid.has(s) ? 'afraid' : s === m.alert ? 'alert' : '';
+  }
+  function calm(u) {
+    const j = u.war.userData.j;
+    u.mood = ''; u.fear = u.alarm = 0;
+    u.war.rotation.x = 0; u.war.position.x = 0; u.disc.rotation.z = 0;
+    if (j.head) j.head.rotation.x = 0;
+    if (j.armL) j.armL.rotation.x = 0;
+    if (j.armR) j.armR.rotation.x = j.restArm || 0;
+  }
+  function feel(u, s, dt) {
+    const ease = Math.min(1, dt * 5);
+    u.fear = (u.fear || 0) + ((u.mood === 'afraid' ? 1 : 0) - (u.fear || 0)) * ease;
+    u.alarm = (u.alarm || 0) + ((u.mood === 'alert' ? 1 : 0) - (u.alarm || 0)) * ease;
+    const f = u.fear, a = u.alarm, j = u.war.userData.j;
+    if (f < 0.01 && a < 0.01) { if (u.felt) { u.felt = false; calm(u); } return; }
+    u.felt = true;
+    u.disc.rotation.z = Math.sin(s * 41 + u.phase) * 0.035 * f;
+    if (!u.war.visible) return;
+    u.war.rotation.x = -0.2 * f;
+    u.war.position.x = Math.sin(s * 47 + u.phase) * 0.012 * f;
+    if (j.head) { j.head.rotation.x = 0.3 * f; if (a > 0.01) j.head.rotation.y = Math.sin(s * 2.2 + u.phase) * 0.7 * a; }
+    if (j.armL) j.armL.rotation.x = -1.1 * f;
+    if (j.armR && a > 0.01) j.armR.rotation.x = (j.restArm || 0) - 2.2 * a;
+  }
   // the length of a route: from where the unit stands through the points given
   const routeLen = (u, pts) => pts.reduce((s, p, i) => s + p.distanceTo(i ? pts[i - 1] : u.root.position.clone().setY(0)), 0);
   // march to a point, or through a list of points (the lines of the three-kingdom board bend), turning at each bend
@@ -603,6 +633,7 @@ const VIEW = (() => {
     const f = L.from(m), t = L.to(m), u = units.get(f);
     if (!u) return;
     busy = true; clearMarks(); hint(-1, -1);
+    for (const x of units.values()) if (x.felt || x.mood) calm(x);   // the move changes everything: moods are set again after it
     if (opts.cinema && !opts.fast) {
       dragged = false; showing++;
       tFocus.copy(pos(f)).lerp(pos(t), 0.6).setY(0.4); cam.tZoom = 0.4; cam.tPhi = 0.6; cam.tTheta = cam.theta + (Math.random() < 0.5 ? -0.5 : 0.5);
@@ -1050,7 +1081,7 @@ const VIEW = (() => {
       u.blob.visible = show;
       if (show) { u.blob.position.y = 0.004 - p.y; u.blob.scale.setScalar(u.war.scale.x * 0.62 / (1 + up * 2)); }
     }
-    if (!busy) for (const u of units.values()) if (u.war.visible && !u.cheering) atEase(u, t / 1000);
+    if (!busy) for (const u of units.values()) { if (u.war.visible && !u.cheering) atEase(u, t / 1000); if (!u.cheering) feel(u, t / 1000, dt); }
     if (stage) stage.update(t, dt, camera);
     if (nightSky && nightSky.visible) nightSky.userData.stars.material.opacity = dayF * (0.82 + 0.18 * Math.sin(t / 900));   // the stars twinkle
     // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
@@ -1139,7 +1170,7 @@ const VIEW = (() => {
   // getters via defineProperties: Object.assign would copy their value once
   Object.defineProperties(S, { busy: { get: () => busy }, army: { get: () => armyOn } });
   return Object.assign(S, {
-    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, setDaytime, cheer,
+    init, setLayout, setHall, hallSpots, setBoard, setViewer, setArmy, setSkins, setQuality, select, lastMove, hint, check, play, alarm, defeat, resetCamera, setHeroes, showHero, heroShadow, setStage, setDaytime, cheer, setMood,
     setMenu(on) { menu = on; dragged = false; resetCamera(); },
     setInset(px, up = 0) { if (px === inset && up === lift) return; inset = px; lift = up; if (renderer) resize(); },
     onHover(fn) { hoverFn = fn; },
