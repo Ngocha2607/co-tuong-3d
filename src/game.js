@@ -79,6 +79,7 @@
       await VIEW.play(m, opts);
       if (gen !== G.gen) return;
       VIEW.check(-1);
+      if (G.mode === 'lesson') { lessonJudge(m, st); return; }
       if (G.mode === 'campaign') { const r = CAMPAIGN.judge(G.lv, G.moves); if (r.over) { endCampaign(r); return; } }
       if (st.over) { endGame(st); return; }
       if (st.check) { VIEW.check(king); VIEW.alarm(king); VIEW.heroShadow(mover); SFX.drum(); banner('Chiếu tướng!', 'check'); }
@@ -154,6 +155,45 @@
     startBattle(lv, rivals[(Math.random() * rivals.length) | 0].id, myStage());
   }
   const restartBattle = () => { if (G.lv.daily) startDaily(); else startCampaign(G.lv.id); };
+  // learning to play (lessons.js): a step's position, Red to move and one move to find; the computer plays no part.
+  // Each lesson done is ticked in the list (Luật chơi, Học chơi), kept on this device.
+  let lessonsDone = {};
+  try { lessonsDone = JSON.parse(localStorage.getItem('cotuong_lessons')) || {}; } catch (e) { }
+  function startLesson(id, i = 0) {
+    const l = LESSONS.byId[id], step = l.steps[i];
+    disconnect(); stopSeek(); resetOnline(); rvClose();
+    G.mode = 'lesson'; G.lesson = { id, i }; G.lv = null; G.fen0 = step.fen; G.me = 1; G.gen = (G.gen || 0) + 1; aiId++; G.thinking = false;
+    VIEW.setLayout('classic'); VIEW.setStage(myStage());
+    G.heroes = { 1: myHero(), '-1': '' }; VIEW.setHeroes(G.heroes);
+    reset(); clearSel();
+    VIEW.setMenu(false); if (!i) VIEW.setViewer(1);
+    VIEW.setBoard(G.pos.b, []); VIEW.lastMove(-1, -1); VIEW.check(G.pos.inCheck() ? kingOf(1) : -1); VIEW.hint(-1, -1);
+    showMenu(false); showEnd(false); renderMoves(); layoutMode();
+    SFX.init(); if (!i) { SFX.gong(); banner(`Học chơi · ${l.name}`, 'open'); }
+    updateStatus();
+  }
+  // the move made: right, on to the next step (or the next lesson); wrong, why, and the step again
+  function lessonJudge(m, st) {
+    const { id, i } = G.lesson, l = LESSONS.byId[id], step = l.steps[i], still = () => G.mode === 'lesson' && G.lesson.id === id && G.lesson.i === i;
+    if (!LESSONS.done(step, XQ.from(m), XQ.to(m), st)) {
+      SFX.error(); toast(step.why || 'Chưa đúng, thử lại nhé');
+      setTimeout(() => { if (still()) startLesson(id, i); }, 1300);
+      return;
+    }
+    SFX.win();
+    if (i + 1 < l.steps.length) { banner('Đúng rồi!', 'open'); setTimeout(() => { if (still()) startLesson(id, i + 1); }, 1300); return; }
+    lessonsDone[id] = 1; try { localStorage.setItem('cotuong_lessons', JSON.stringify(lessonsDone)); } catch (e) { }
+    renderLessons(); banner(`Xong bài ${l.name}!`, 'open');
+    const next = LESSONS.list[LESSONS.list.indexOf(l) + 1];
+    setTimeout(() => {
+      if (!still()) return;
+      if (next) startLesson(next.id);
+      else { toast('Bạn đã biết cách đi của mọi quân. Vào Chơi để đánh với máy!'); G.mode = 'menu'; showMenu(true); }
+    }, 1800);
+  }
+  function renderLessons() {
+    $('#lessonList').innerHTML = LESSONS.list.map(l => `<button type="button" data-id="${l.id}" class="${lessonsDone[l.id] ? 'on' : ''}"><span class="hz">${l.han}</span><span>${l.name}${lessonsDone[l.id] ? ' ✓' : ''}</span></button>`).join('');
+  }
   // a battle with a position of its own (a campaign level or the daily puzzle), judged by CAMPAIGN.judge
   function startBattle(lv, foe, stage) {
     disconnect(); stopSeek(); resetOnline(); rvClose();
@@ -1409,6 +1449,7 @@
     else if (G.animating && !G.thinking) text = vsAI() ? (G.lastMover === G.me ? 'Máy chuẩn bị đi…' : 'Máy đang đi quân…')
       : G.lastMover === G.you ? 'Đã đi, chờ đối thủ…' : G.you ? 'Đối thủ đang đi quân…' : `${SIDE[G.lastMover]} đang đi quân…`;
     else if (vsAI()) text = G.thinking ? 'Máy đang tính nước…' : turn === G.me ? `Lượt bạn · ${SIDE[G.me]}` : 'Máy chuẩn bị đi…';
+    else if (G.mode === 'lesson') text = 'Học chơi';
     else if (G.mode === 'online') {
       if (G.netState === 'connecting') text = 'Đang kết nối phòng…';
       else if (G.netState === 'lost') text = 'Mất kết nối, đang nối lại…';
@@ -1429,6 +1470,7 @@
       let who = '';
       if (G.mode === 'ai') who = side === G.me ? 'Bạn' : `Máy · ${LEVELS[G.level].name}`;
       else if (G.mode === 'campaign') who = side === G.me ? 'Bạn' : 'Máy';
+      else if (G.mode === 'lesson') who = side === G.me ? 'Bạn' : '';
       else if (G.mode === 'online') who = whoOnline(side);
       el.querySelector('.who').innerHTML = who;
       const ttl = G.mode === 'online' && G.info[side] && TITLES.text(G.info[side].title);
@@ -1441,7 +1483,7 @@
     $('#bResign').textContent = $('#bResign').classList.contains('warn') ? 'Chắc chắn?' : 'Xin thua';
     $('#bUndo').disabled = !vsAI() || !G.moves.length;
     $('#bHint').disabled = !vsAI() || !!G.over;
-    $('#bResign').disabled = !!G.over || G.mode === 'menu' || (G.mode === 'online' && !G.you);
+    $('#bResign').disabled = !!G.over || G.mode === 'menu' || G.mode === 'lesson' || (G.mode === 'online' && !G.you);
     // draw offers (online): mine pending, theirs waiting for an answer
     const canDraw = G.mode === 'online' && !!G.you && !G.over, mine = canDraw && G.drawOffer === G.you, theirs = canDraw && G.drawOffer === -G.you;
     const bDraw = $('#bDraw');
@@ -1457,14 +1499,22 @@
       $('#roomCode').textContent = G.room; $('#roomLink').textContent = roomLink();
       $('#roomCode').hidden = $('#roomLink').hidden = $('#bCopy').hidden = G.rated;
     }
-    $('#bNew').textContent = G.mode === 'campaign' ? 'Đánh lại' : G.mode !== 'online' ? 'Ván mới' : G.rated ? 'Trận mới' : 'Đấu lại';
+    $('#bNew').textContent = G.mode === 'campaign' ? 'Đánh lại' : G.mode === 'lesson' ? 'Làm lại' : G.mode !== 'online' ? 'Ván mới' : G.rated ? 'Trận mới' : 'Đấu lại';
     renderGoal();
     renderClocks();
   }
   // the battle's objective and how far along it is, in the side panel
   function renderGoal() {
     const box = $('#goal');
-    box.hidden = G.mode !== 'campaign';
+    box.hidden = G.mode !== 'campaign' && G.mode !== 'lesson';
+    if (G.mode === 'lesson') {
+      const l = LESSONS.byId[G.lesson.id];
+      $('#goalName').textContent = `${l.name} · Bước ${G.lesson.i + 1}/${l.steps.length}`;
+      $('#goalText').textContent = l.steps[G.lesson.i].say;
+      $('#goalCount').textContent = 'Chạm vào một quân để xem nó đi được những đâu.';
+      $('#goalHelp').hidden = true;
+      return;
+    }
     if (G.mode !== 'campaign') return;
     const lv = G.lv, r = CAMPAIGN.judge(lv, G.moves);
     $('#goalName').textContent = lv.daily ? `Chân Long Kỳ Trận · Trận ${lv.no}` : `${lv.id} · ${lv.name}`;
@@ -1957,6 +2007,8 @@
   });
   $('#rulesTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { SFX.pick(); rulesTab(+b.dataset.v); } });
   $('#bRulesClose').addEventListener('click', () => { $('#rules').hidden = true; });
+  $('#lessonList').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; $('#rules').hidden = true; startLesson(b.dataset.id); });
+  renderLessons();
   // a click beside the rules closes them, as a dialog only: lying flat over the menu, beside them is just the scene
   $('#rules').addEventListener('click', e => { if (e.target.id === 'rules' && !document.body.classList.contains('in-menu')) $('#rules').hidden = true; });
   $('#bUndo').addEventListener('click', undo);
@@ -1970,7 +2022,7 @@
   });
   $('#bDrawYes').addEventListener('click', () => send({ t: 'draw' }));
   $('#bDrawNo').addEventListener('click', () => { send({ t: 'draw-no' }); G.drawOffer = 0; updateStatus(); });
-  $('#bNew').addEventListener('click', () => { if (G.mode === 'review') rvExit(); else if (G.mode === 'campaign') restartBattle(); else if (G.mode === 'sanguo' && !G.sg.net) sgStart(); else if (G.mode === 'online' || G.mode === 'sanguo') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
+  $('#bNew').addEventListener('click', () => { if (G.mode === 'review') rvExit(); else if (G.mode === 'lesson') startLesson(G.lesson.id, G.lesson.i); else if (G.mode === 'campaign') restartBattle(); else if (G.mode === 'sanguo' && !G.sg.net) sgStart(); else if (G.mode === 'online' || G.mode === 'sanguo') { if (G.over) again(); else toast('Ván đang diễn ra. Xin thua hoặc chờ hết ván để đấu lại.'); } else startAI(); });
   $('#bAgain').addEventListener('click', again);
   $('#bEndMenu').addEventListener('click', () => { showEnd(false); showMenu(true); });
   $('#bEndLeave').addEventListener('click', () => { showEnd(false); leaveRoom(); });

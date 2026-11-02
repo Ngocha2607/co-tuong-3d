@@ -1014,7 +1014,11 @@
   <div class="card">
     <button class="icon" id="bRulesClose" type="button" aria-label="Đóng"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <h2 class="rtitle">Luật chơi</h2>
-    <div class="seg" id="rulesTabs"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Tam Quốc</button><button type="button" data-v="2">Điều khiển</button></div>
+    <div class="seg" id="rulesTabs"><button type="button" data-v="0">Cờ tướng</button><button type="button" data-v="1">Tam Quốc</button><button type="button" data-v="2">Điều khiển</button><button type="button" data-v="3">Học chơi</button></div>
+    <div class="rpage" data-page="3" hidden>
+      <p class="note">Mỗi bài một quân, vài bước nhỏ: chạm vào quân để xem nó đi được những đâu, rồi làm theo nhiệm vụ ở khung bên cạnh. Bài xong được đánh dấu ✓.</p>
+      <div class="picks" id="lessonList"></div>
+    </div>
     <div class="rpage" data-page="0">
       <ul class="rules">
         <li>Đỏ đi trước. Tướng và Sĩ không ra khỏi cung; hai Tướng không được đối mặt trên một cột trống.</li>
@@ -1133,6 +1137,7 @@
 <script src="src/seasons.js"></script>
 <script src="src/titles.js"></script>
 <script src="src/daily.js"></script>
+<script src="src/lessons.js"></script>
 <script src="src/account.js"></script>
 <script src="src/campaign-ui.js"></script>
 <script src="src/daily-ui.js"></script>
