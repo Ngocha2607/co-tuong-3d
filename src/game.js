@@ -173,7 +173,7 @@
     G.over.kept = keepGame();
     VIEW.check(-1); clearSel();
     const onBoard = r.reason === 'checkmate' || r.reason === 'stalemate';
-    if (onBoard) VIEW.defeat(kingOf(-winner));
+    const finale = onBoard ? VIEW.defeat(kingOf(-winner), true) : 0;
     if (r.win) { VIEW.heroShadow(G.me, true); SFX.win(); } else SFX.lose();
     updateStatus();
     const lvNow = lv;
@@ -181,7 +181,7 @@
     keep.then(res => {
       if (G.over && G.over.lv === lvNow) { G.over.saved = res; if (!$('#end').hidden) renderEnd(); }
     });
-    setTimeout(() => showEnd(true), onBoard ? 1300 : 300);
+    setTimeout(() => showEnd(true), onBoard ? Math.max(1300, finale) : 300);
   }
   function undo() {
     if (G.mode === 'sanguo') { sgUndo(); return; }
@@ -234,11 +234,11 @@
     G.over.kept = keepGame();
     VIEW.check(-1); clearSel();
     const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
-    if (st.winner && onBoard) VIEW.defeat(kingOf(-st.winner));
+    const finale = st.winner && onBoard ? VIEW.defeat(kingOf(-st.winner), true) : 0;
     if (st.winner) VIEW.heroShadow(st.winner, true);
     if (!st.winner) SFX.gong(); else if (!viewer || st.winner === viewer) SFX.win(); else SFX.lose();
     updateStatus();
-    setTimeout(() => showEnd(true), onBoard ? 1300 : 200);
+    setTimeout(() => showEnd(true), onBoard ? Math.max(1300, finale) : 200);
   }
   // a finished game goes into the games kept on this device (Ván đã chơi), to be watched again and analysed
   function keepGame() {

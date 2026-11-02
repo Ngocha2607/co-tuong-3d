@@ -525,12 +525,56 @@ const VIEW = (() => {
     tween(900, k => { if (j.armR) j.armR.rotation.x = (j.restArm || 0) - 2.6 * Math.sin(k * Math.PI); })
       .then(() => { if (!armyOn && !busy) return tween(220, k => u.war.scale.setScalar(Math.max(0.001, 1.8 * (1 - k)))).then(() => { if (!armyOn) u.war.visible = false; }); });
   }
-  // the losing general falls
-  function defeat(s) {
-    const u = units.get(s); if (!u) return;
-    u.war.visible = true; u.war.scale.setScalar(1.8);
-    tween(900, k => { u.war.rotation.x = -1.5 * out(k); });
-    smoke(u.root.position.clone().setY(0.3), 8, '#4a3a2a', 1);
+  // the losing general falls. At the end of a game (final) the field stops for it: the camera drops low and circles
+  // the beaten general as they sink to their knees, then turns to the winner, who leaps and raises their weapon in a
+  // burst of gold; the beaten side's banners come down to half-mast and its warriors bow, the winners raise their arms.
+  // Returns how long that takes (ms), for the end of game panel to wait.
+  const FINALE = 3400;
+  function defeat(s, final) {
+    const u = units.get(s); if (!u) return 0;
+    if (!final) {
+      u.war.visible = true; u.war.scale.setScalar(1.8);
+      tween(900, k => { u.war.rotation.x = -1.5 * out(k); });
+      smoke(u.root.position.clone().setY(0.3), 8, '#4a3a2a', 1);
+      return 0;
+    }
+    const side = L.sideOf(u.piece), w = [...units.values()].find(x => x.piece === L.king(-side));
+    const run = ++showing;                                 // a hero preview still running gives way
+    const grow = x => { x.war.visible = true; const a = x.war.scale.x; return tween(450, k => x.war.scale.setScalar(Math.max(0.001, lerp(a, 1.8, out(k))))); };
+    // the camera: low, close on the beaten general, circling a little
+    dragged = false; cam.tPhi = 0.5; cam.tZoom = 0.32; cam.tTheta = cam.theta + 0.5;
+    tFocus.copy(u.root.position).setY(0.5);
+    SFX.drum();
+    // the beaten general kneels: legs folded back under them, the body bowed, the head down
+    const j = u.war.userData.j, fig = u.war.userData.fig.scale.x;
+    grow(u).then(() => tween(900, k => {
+      const e = out(k);
+      if (j.legL) { j.legL.rotation.x = j.legR.rotation.x = 1.45 * e; u.war.position.y = -0.2 * fig * 1.8 * e; }
+      u.war.rotation.x = 0.35 * e; if (j.head) j.head.rotation.x = 0.55 * e; if (j.armR) j.armR.rotation.x = 0.5 * e;
+    }));
+    smoke(u.root.position.clone().setY(0.2), 6, '#4a3a2a', 0.9);
+    // the beaten side's banners to half-mast, its warriors bowing; the winners raising their weapons
+    for (const x of units.values()) {
+      if (x === u || x === w) continue;
+      const xj = x.war.userData.j, cloth = x.war.userData.cloth, mine = L.sideOf(x.piece) === side, d = Math.random() * 400;
+      if (mine) { const y0 = cloth.position.y; wait(600 + d).then(() => tween(1200, k => { cloth.position.y = y0 - 0.32 * out(k); if (xj.head) xj.head.rotation.x = 0.4 * out(k); })); }
+      else if (xj.armR) wait(1500 + d).then(() => tween(500, k => { xj.armR.rotation.x = (xj.restArm || 0) - 2.4 * out(k); }));
+    }
+    // then the winner
+    if (w) wait(1500).then(() => {
+      if (run !== showing) return;
+      tFocus.copy(w.root.position).setY(0.7); cam.tTheta = cam.theta + 0.6; cam.tZoom = 0.36;
+      const wj = w.war.userData.j;
+      grow(w).then(() => {
+        SFX.drum();
+        const at = w.root.position.clone().setY(1.1);
+        sparks(at, '#ffd27a', 40, 0.3); flash(at, '#ffcf6a', 6);
+        tween(700, k => { w.war.position.y = Math.sin(k * Math.PI) * 0.35; if (wj.armR) wj.armR.rotation.x = (wj.restArm || 0) - 2.7 * out(Math.min(1, k * 2)); });
+      });
+    });
+    // and back to the whole board once the panel is up
+    wait(FINALE + 1200).then(() => { if (run === showing && !dragged) { tFocus.copy(HOME); cam.tZoom = 1; resetCamera(); } });
+    return FINALE;
   }
 
   // ---------- stage ----------
