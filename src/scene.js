@@ -219,14 +219,22 @@ const VIEW = (() => {
   function hover(e) { if (hoverFn) renderer.domElement.style.cursor = hoverFn(pick(e.clientX, e.clientY)) ? 'pointer' : 'grab'; }
 
   // ---------- units ----------
+  // a soft dark patch on the board under a warrior's feet, so from afar they stand on it rather than float over it
+  const blobGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const blobMat = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.42, depthWrite: false, map: (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+  })() });
   function makeUnit(piece, s) {
     const side = L.sideOf(piece), root = new THREE.Group(), disc = MODELS.disc(piece, false, skins.pieces[side]), war = MODELS.warrior(piece, heroes[side], skins.army[side]);
     root.add(disc); war.rotation.y = rest(piece); root.add(war);
+    const blob = new THREE.Mesh(blobGeo, blobMat); blob.renderOrder = 1; blob.visible = false; root.add(blob);
     disc.rotation.y = L.yaw(viewer);
     war.visible = armyOn; war.scale.setScalar(REST());
     root.position.copy(pos(s)); root.userData.sq = s; root.visible = !hall;
     scene.add(root);
-    return { piece, root, disc, war, sq: s, phase: Math.random() * 100 };
+    return { piece, root, disc, war, blob, sq: s, phase: Math.random() * 100 };
   }
   function disposeUnit(u) { scene.remove(u.root); }
   // captured: the pieces already taken, each a piece or [piece, side that took it]
@@ -924,7 +932,13 @@ const VIEW = (() => {
     // lifted selection, lantern sway, check pulse
     for (const u of units.values()) { const y = (u.lift || 0) * 0.22; if (!busy || u.lift) u.root.position.y += (y - u.root.position.y) * Math.min(1, dt * 12); }
     // a warrior stands on the board itself: once it has grown out of its piece the piece is put away (still tappable)
-    for (const u of units.values()) u.disc.visible = !(u.war.visible && u.war.scale.x > 0.3);
+    for (const u of units.values()) {
+      u.disc.visible = !(u.war.visible && u.war.scale.x > 0.3);
+      // the patch under the feet stays on the board, smaller and fainter as they leave it; none in a river
+      const p = u.root.position, up = Math.max(0, p.y), show = !u.disc.visible && L.wet(p.x, p.z) < 0.2;
+      u.blob.visible = show;
+      if (show) { u.blob.position.y = 0.004 - p.y; u.blob.scale.setScalar(u.war.scale.x * 0.62 / (1 + up * 2)); }
+    }
     if (!busy) for (const u of units.values()) if (u.war.visible && !u.cheering) atEase(u, t / 1000);
     if (stage) stage.update(t, dt, camera);
     // scenery standing between the camera and the board steps aside (on the ground plane: distance to that line)
