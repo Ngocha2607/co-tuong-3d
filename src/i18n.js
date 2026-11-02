@@ -376,6 +376,9 @@ const I18N = (() => {
     'Năm 219, trên đỉnh núi đối diện Định Quân Sơn: cờ đỏ phất lên là Hoàng Trung đổ xuống.': 'The year 219, on the peak facing Mount Dingjun: when the red flag waves, Huang Zhong charges down.',
     'Năm 225, rừng rậm phương Nam bên sông Lô: khí độc trên mặt nước, voi chiến và cột vật tổ.': 'The year 225, the southern jungle by the Lu River: poison mist on the water, war elephants and totem poles.',
     'Năm 228, cổng thành mở toang, Khổng Minh gảy đàn trên lầu trước mười lăm vạn quân Tư Mã Ý.': 'The year 228: the gates wide open, Kongming plays his zither on the tower before Sima Yi’s hundred and fifty thousand.',
+    // sharing the moment
+    'Chia sẻ khoảnh khắc': 'Share the moment', 'Chiếu bí trên Cờ Tướng 3D! Vào chơi: {0}': 'Checkmate in Xiangqi 3D! Come and play: {0}',
+    'Đã lưu video; lời mời đã chép, dán kèm khi gửi': 'Video saved; the invitation is copied, paste it in when you send it', 'Đã lưu video': 'Video saved',
     // learning to play (lessons.js)
     'Học chơi': 'Learn to play', 'Học chơi · {0}': 'Learn to play · {0}', 'Đúng rồi!': 'That’s it!', 'Xong bài {0}!': 'Lesson done: {0}!', 'Làm lại': 'Again',
     '{0} · Bước {1}/{2}': '{0} · Step {1}/{2}', '{0} ✓': '{0} ✓', 'Chạm vào một quân để xem nó đi được những đâu.': 'Touch a piece to see where it can go.',

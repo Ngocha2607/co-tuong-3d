@@ -219,6 +219,7 @@
     VIEW.check(-1); clearSel();
     const onBoard = r.reason === 'checkmate' || r.reason === 'stalemate';
     const finale = onBoard ? VIEW.defeat(kingOf(-winner), true) : 0;
+    recordFinale(finale);
     if (r.win) { VIEW.heroShadow(G.me, true); SFX.win(); } else SFX.lose();
     updateStatus();
     const lvNow = lv;
@@ -280,6 +281,7 @@
     VIEW.check(-1); clearSel();
     const viewer = G.mode === 'online' ? G.you : G.me, onBoard = !['resign', 'time', 'abandon', 'aborted', 'agreement', 'perpetual-check', 'perpetual-chase'].includes(st.reason);
     const finale = st.winner && onBoard ? VIEW.defeat(kingOf(-st.winner), true) : 0;
+    recordFinale(finale);
     if (st.winner) VIEW.heroShadow(st.winner, true);
     if (!st.winner) SFX.gong(); else if (!viewer || st.winner === viewer) SFX.win(); else SFX.lose();
     updateStatus();
@@ -1721,6 +1723,39 @@
       : `Phá trận trong ${DAILY.clock(s.ms)} · ${s.tries > 1 ? `${s.tries} lần thử` : 'ngay lần đầu'}${s.rank ? ` · hạng ${s.rank} hôm nay` : ''} · chuỗi ${s.streak} ngày`;
   }
   function showEnd(on) { if (on) renderEnd(); $('#end').hidden = !on; }
+  // ---------- sharing the moment ----------
+  // The finale of a checkmate (VIEW.defeat) is recorded from the board's canvas as a short video, offered on the end
+  // panel: to the system's share sheet where it takes files, else saved, with the link to the game (to the room,
+  // among friends) copied to go with it.
+  const clip = { blob: null, run: 0 };
+  function recordFinale(ms) {
+    const run = ++clip.run, canvas = $('#view');
+    clip.blob = null; $('#bEndShare').hidden = true;
+    if (!ms || !window.MediaRecorder || !canvas.captureStream) return;
+    const type = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t));
+    if (!type) return;
+    try {
+      const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: type, videoBitsPerSecond: 5e6 }), parts = [];
+      rec.ondataavailable = e => { if (e.data.size) parts.push(e.data); };
+      rec.onstop = () => { if (run !== clip.run || !parts.length) return; clip.blob = new Blob(parts, { type: type.split(';')[0] }); $('#bEndShare').hidden = false; };
+      rec.start();
+      setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, ms + 600);
+    } catch (e) { }
+  }
+  async function shareFinale() {
+    if (!clip.blob) return;
+    const file = new File([clip.blob], `co-tuong-3d-chieu-bi.${clip.blob.type.includes('mp4') ? 'mp4' : 'webm'}`, { type: clip.blob.type });
+    const link = G.mode === 'online' && !G.rated && G.room ? roomLink() : location.origin + '/';
+    const text = `Chiếu bí trên Cờ Tướng 3D! Vào chơi: ${link}`;
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'Cờ Tướng 3D', text }); return; }
+    } catch (e) { if (e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => toast('Đã lưu video; lời mời đã chép, dán kèm khi gửi'), () => toast('Đã lưu video'));
+    else toast('Đã lưu video');
+  }
+  $('#bEndShare').addEventListener('click', () => { SFX.init(); SFX.pick(); shareFinale(); });
   function again() {
     if (G.mode === 'campaign' && G.lv.daily) { startDaily(); return; }
     if (G.mode === 'campaign') {
