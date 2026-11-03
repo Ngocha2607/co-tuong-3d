@@ -1462,7 +1462,7 @@
     $('#clList').innerHTML = CLASSICS.LIST.map(c => {
       const res = c.winner > 0 ? 'Đỏ thắng' : c.winner < 0 ? 'Đen thắng' : 'Hòa';
       return `<li class="draw"><span class="r">譜</span><span class="vs"><b>${ACCOUNT.esc(c.red)} – ${ACCOUNT.esc(c.black)}</b><br><small>${ACCOUNT.esc(c.event)} · ${c.date} · ${Math.ceil(c.iccs.split(' ').length / 2)} nước · ${res}</small></span>`
-        + `<span class="d"><button class="btn" type="button" data-classic="${c.id}">Xem</button><button class="btn gold" type="button" data-classic="${c.id}" data-quiz>Đi thay danh thủ</button></span></li>`;
+        + `<span class="d acts"><button class="btn" type="button" data-classic="${c.id}">Xem</button><button class="btn gold" type="button" data-classic="${c.id}" data-quiz>Đi thay danh thủ</button></span></li>`;
     }).join('');
     const list = REVIEW.list(), box = $('#hiList');
     $('#hiSum').textContent = list.length ? `${list.length} ván gần nhất trên máy này` : 'Chưa có ván nào';

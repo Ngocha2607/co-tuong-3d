@@ -602,6 +602,8 @@
   .glist a { color: var(--ink); font-weight: 700; }
   .glist .d { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
   .glist .d small { display: block; font-weight: 500; }
+  .glist .acts { display: flex; justify-content: flex-end; gap: 6px; }
+  @media (max-width: 560px) { .glist .acts { grid-column: 2 / -1; justify-content: flex-start; } }
   .glist .win .d { color: var(--jade); } .glist .lose .d { color: #ff8a7a; }
   #end[data-result="win"] .han { color: var(--gold); } #end[data-result="lose"] .han { color: #8a96a8; } #end[data-result="draw"] .han { color: var(--dim); }
   #endTitle { margin: 8px 0 6px; font: 700 34px/1.1 var(--serif); letter-spacing: 0; text-transform: none; color: var(--ink); }
