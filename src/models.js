@@ -1358,7 +1358,12 @@ const MODELS = (() => {
   // The rest of a model's limb follows what gets moved, as flex does for the built figures: bones named shoL/R,
   // foreL/R and handL/R under armL/R, shinL/R under legL/R. With shins it kneels as they do (j.kneel, 0..1): down on
   // the right knee, and a little lower than the built ones go, its legs being longer.
-  const KNEEL_DROP = 0.05;
+  // The weapon arm's poses: [turned across the body, raised, elbow bent, wrist bent]. CUT is the cut of a hand that has
+  // no wrist of its own, drawn back and then struck. A hand that grips (userData.hold) says all of its own, the wrist
+  // within what a wrist can do: rest, raise (the arm raised all the way), out (the arm struck forward), cut.
+  const GRIP_LEAN = 1.25;
+  const CUT = [[1.1, -1.25, -0.45, 2.5], [-0.8, -1.0, -0.15, 3.05]], REST = [0, 0, 0, 0];
+  const KNEEL_DROP = 0.05, AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1), QT = new THREE.Quaternion();
   function flexModel(fig, j) {
     const get = n => fig.getObjectByName(n), limbs = ['L', 'R'].map(s => ['arm', 'sho', 'fore', 'hand', 'leg', 'shin'].map(n => get(n + s)));
     let skin = null; fig.traverse(o => { if (o.isSkinnedMesh) skin = skin || o; });
@@ -1371,8 +1376,23 @@ const MODELS = (() => {
       limbs.forEach(([arm, sho, fore, hand, leg, shin], right) => {
         if (leg && shin) { const a = leg.rotation.x, bend = a < 0 ? -a * 0.9 : a * 0.35; shin.rotation.x = right ? bend + (1.6 - bend) * k : bend + 0.25 * k; }
         if (arm && sho && fore && hand) {
-          const a = arm.rotation.x, out = a > 0, reach = out ? -0.75 * a : a, bend = out ? -0.2 * a : 0.3 * a, tip = out ? 1.5 * a : 0.14 * a;
-          sho.rotation.x = reach - a; fore.rotation.x = bend; hand.rotation.x = tip - reach - bend;
+          // the cut (j.cutT: 0..1 drawing back, 1..2 the blow, 2..3 back to rest) is a backhand: the hand drawn up
+          // across the body to the far shoulder, then swept out and down to its own side
+          const a = arm.rotation.x, hold = hand.userData.hold, cut = right && j.cutT > 0, R = hold && hold.rest || REST;
+          if (hold || cut) {
+            let A = R, B = R, k = 0;
+            if (cut) { const C = hold ? hold.cut : CUT, t = Math.min(3, j.cutT), i = Math.min(2, Math.floor(t)); k = t - i; if (i) A = C[i - 1]; if (i < 2) B = C[i]; }
+            else if (a > 0) { B = hold.out; k = Math.min(1, a); }
+            else { B = hold.raise; k = Math.min(1, -a / 2.6); }
+            const at = n => A[n] + (B[n] - A[n]) * k;
+            sho.quaternion.setFromAxisAngle(AX, -a).multiply(QT.setFromAxisAngle(AY, at(0))).multiply(QT.setFromAxisAngle(AX, at(1)));
+            fore.rotation.x = at(2); hand.rotation.x = at(3);
+            return;
+          }
+          // a hand with no wrist: raised, the arm leans out from the head; what it holds stays upright, and tips forward when struck
+          const out = a > 0, side = right ? 1 : -1, reach = out ? -0.75 * a : a, bend = out ? -0.2 * a : 0.3 * a;
+          sho.quaternion.setFromAxisAngle(AX, -a).multiply(QT.setFromAxisAngle(AX, reach)).multiply(QT.setFromAxisAngle(AZ, out ? 0 : 0.1 * a * side));
+          fore.rotation.x = bend; hand.rotation.x = (out ? 1.5 : 0.14) * a - reach - bend;
         }
       });
     };
@@ -1394,8 +1414,20 @@ const MODELS = (() => {
   // fetched once the game is up (loadFigures), and stood on y = 0 at that height, centred; done(key) is told as each
   // arrives, since the figures built before then are the built ones.
   const FILES = {
-    // the file has no blade: ours stands in his right hand, its butt on the ground (k: the model's scale)
-    'quan-vu': ['src/figures/quan-vu.glb', 0.93, (f, k) => { const w = group(f.getObjectByName('handR'), 0.012, -0.115 / k, -0.02); w.scale.setScalar(1.15 / k); w.rotation.y = 0.5; glaive(w); }],
+    // The files have no weapons: ours go in the right hand, gripped, so leaning a little short of a quarter turn from
+    // the forearm (GRIP_LEAN). k: the model's scale.
+    // Guan Yu stands with his forearm out and the blade upright in his fist, its butt on the ground
+    'quan-vu': ['src/figures/quan-vu.glb', 0.93, (f, k) => {
+      const h = f.getObjectByName('handR'), w = group(h), d = 0.215 / k;
+      w.position.set(0.012, 0.02 - d * Math.cos(GRIP_LEAN), 0.02 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); glaive(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+    }],
+    // Cao Cao's sword Yitian is held out before him
+    'tao-thao': ['src/figures/tao-thao.glb', 0.9, (f, k) => {
+      const h = f.getObjectByName('handR'), w = sword(h, { trim: '#d4a017' });
+      w.position.set(0.012, 0.02, 0.02); w.scale.setScalar(1.45 / k); w.rotation.x = GRIP_LEAN;
+      h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
+    }],
   };
   function loadFigures(done) {
     if (!THREE.GLTFLoader) return;

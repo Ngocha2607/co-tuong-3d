@@ -1,4 +1,4 @@
-// rig.mjs <in.glb> <out.glb> — gives a one-piece standing figure (arms held out from the sides, facing +z once its
+// rig-figure.mjs <in.glb> <out.glb> [figure] — gives a one-piece standing figure (arms held out from the sides, facing +z once its
 // node's turn is baked in) a skeleton named as the game names its joints, with skin weights worked out from how
 // near each vertex is to each bone, then smoothed over the mesh.
 import { NodeIO } from '@gltf-transform/core';
@@ -15,6 +15,14 @@ for (const A of [P, Q]) for (let i = 0; i < n; i++) { const y = A[3 * i + 1], z 
 posA.setArray(P); norA.setArray(Q);
 node.setRotation([0, 0, 0, 1]);
 
+// each figure's measures (once turned: y up, 1.1 tall, facing +z), for his left side: where the shoulder, elbow and
+// wrist are, and the hip, knee and ankle
+const SHAPES = {
+  'quan-vu': { fist: 'R', tip: [0.255, 0.47, 0.07], sho: [0.13, 0.88, -0.01], elbow: [0.215, 0.71, 0], wrist: [0.255, 0.53, 0.06], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.165, 0.04, 0] },
+  'tao-thao': { fist: 'R', tip: [0.245, 0.49, 0.065], sho: [0.145, 0.86, -0.02], elbow: [0.20, 0.70, 0], wrist: [0.245, 0.55, 0.055], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.15, 0.04, 0] },
+};
+const M = SHAPES[process.argv[4] || 'quan-vu'];
+if (!M) throw new Error('no such figure: ' + process.argv[4]);
 // the skeleton: name, parent, where it turns, where it ends, how thick the flesh round it; side: -1 his right, 1 his left
 const B = [];
 const bone = (name, parent, at, to, r, o = {}) => B.push({ name, parent, at, to: to || at, r, ...o });
@@ -23,12 +31,15 @@ bone('skirt', 'hips', [0, 0.50, 0], [0, 0.16, 0], 0.07);          // the robe's 
 bone('body', 'hips', [0, 0.60, 0], [0, 0.90, 0], 0.13);
 bone('head', 'body', [0, 0.95, 0], [0, 1.07, 0], 0.085, { above: [0.91, 0.97] });
 for (const [s, sx] of [['R', -1], ['L', 1]]) {
-  bone('arm' + s, 'body', [sx * 0.13, 0.88, -0.01], null, 0);                                   // the one the game turns: no flesh of its own
-  bone('sho' + s, 'arm' + s, [sx * 0.13, 0.88, -0.01], [sx * 0.215, 0.71, 0], 0.055, { side: sx, out: [0.1, 0.16] });
-  bone('fore' + s, 'sho' + s, [sx * 0.215, 0.71, 0], [sx * 0.255, 0.53, 0.06], 0.05, { side: sx, out: [0.12, 0.18] });
-  bone('hand' + s, 'fore' + s, [sx * 0.255, 0.53, 0.06], null, 0);                              // what the hand holds hangs here
-  bone('leg' + s, 'hips', [sx * 0.07, 0.54, 0], [sx * 0.12, 0.30, 0], 0.075, { side: sx, below: [0.62, 0.5] });
-  bone('shin' + s, 'leg' + s, [sx * 0.12, 0.30, 0], [sx * 0.165, 0.04, 0], 0.065, { side: sx, below: [0.62, 0.5] });
+  const at = p => [sx * p[0], p[1], p[2]];
+  bone('arm' + s, 'body', at(M.sho), null, 0);                                                  // the one the game turns: no flesh of its own
+  bone('sho' + s, 'arm' + s, at(M.sho), at(M.elbow), 0.055, { side: sx, out: [0.1, 0.16] });
+  bone('fore' + s, 'sho' + s, at(M.elbow), at(M.wrist), 0.05, { side: sx, out: [0.12, 0.18] });
+  // what the hand holds hangs here; a hand that grips (fist: 'R', tip: the fingertips) bends at the wrist with it
+  if (M.fist === s) bone('hand' + s, 'fore' + s, at(M.wrist), at(M.tip), 0.04, { side: sx, out: [0.12, 0.18], below: [M.wrist[1] + 0.04, M.wrist[1] + 0.01] });
+  else bone('hand' + s, 'fore' + s, at(M.wrist), null, 0);
+  bone('leg' + s, 'hips', at(M.hip), at(M.knee), 0.075, { side: sx, below: [0.62, 0.5] });
+  bone('shin' + s, 'leg' + s, at(M.knee), at(M.ankle), 0.065, { side: sx, below: [0.62, 0.5] });
 }
 const step = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 function dist(v, a, b) {

@@ -424,6 +424,7 @@ const VIEW = (() => {
     if (j.legs) j.legs.forEach(L => { L.rotation.x = 0; });
     if (j.body) j.body.rotation.x = 0;
     if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
+    j.cutT = 0;
     u.war.position.y = 0;
   }
   // standing at ease while no move is played: a look round now and then, arms easing with the breath, the banner
@@ -499,7 +500,11 @@ const VIEW = (() => {
     const j = u.war.userData.j, type = L.typeOf(u.piece), yaw = u.war.rotation.y, ahead = u.root.position.clone().add(new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).multiplyScalar(0.6));
     const lunge = d => { u.war.position.x = Math.sin(yaw) * d; u.war.position.z = Math.cos(yaw) * d; };
     const arm = (a, b, ms) => tween(ms, k => { if (j.armR) j.armR.rotation.x = lerp(a, b, out(k)); });
-    const cut = async () => { await arm(j.restArm || 0, -2.4, 240); SFX.whoosh(); await tween(120, k => { if (j.armR) j.armR.rotation.x = lerp(-2.4, 0.9, k); lunge(0.18 * k); }); };
+    const cut = async () => {             // j.cutT tells a figure with elbows where in the cut it is (models.js, flexModel)
+      await tween(240, k => { j.cutT = out(k); if (j.armR) j.armR.rotation.x = lerp(j.restArm || 0, -2.4, out(k)); });
+      SFX.whoosh();
+      await tween(120, k => { j.cutT = 1 + k; if (j.armR) j.armR.rotation.x = lerp(-2.4, 0.9, k); lunge(0.18 * k); });
+    };
     const thrust = async (ms = 110) => { await arm(j.armR ? j.armR.rotation.x : 0, -0.3, 160); SFX.whoosh(); await tween(ms, k => { if (j.armR) j.armR.rotation.x = lerp(-0.3, 1.0, k); lunge(0.22 * k); }); await tween(120, k => lunge(0.22 * (1 - k))); };
     const hero = HERO_STRIKE[u.war.userData.hero];
     if (hero) await hero(u, j, { cut, thrust, lunge, arm, ahead });
