@@ -1344,14 +1344,48 @@ const MODELS = (() => {
   const FIGURES = new Map();
   function setFigure(key, scene) { if (scene) FIGURES.set(String(key), scene); else FIGURES.delete(String(key)); }
   const JOINTS = ['legL', 'legR', 'armL', 'armR', 'head', 'body', 'trunk', 'arm', 'stone'];
+  // a copy of a model; a skinned mesh of the copy is bound to the copy's own bones
+  function copyModel(src) {
+    const fig = src.clone(true), a = [], b = [];
+    src.traverse(o => a.push(o)); fig.traverse(o => b.push(o));
+    a.forEach((o, i) => {
+      if (!o.isSkinnedMesh) return;
+      b[i].bind(new THREE.Skeleton(o.skeleton.bones.map(x => b[a.indexOf(x)]), o.skeleton.boneInverses), o.bindMatrix);
+      b[i].frustumCulled = false;                       // its bounds are those of the pose it was made in
+    });
+    return fig;
+  }
+  // The rest of a model's limb follows what gets moved, as flex does for the built figures: bones named shoL/R,
+  // foreL/R and handL/R under armL/R, shinL/R under legL/R. With shins it kneels as they do (j.kneel, 0..1): down on
+  // the right knee, and a little lower than the built ones go, its legs being longer.
+  const KNEEL_DROP = 0.05;
+  function flexModel(fig, j) {
+    const get = n => fig.getObjectByName(n), limbs = ['L', 'R'].map(s => ['arm', 'sho', 'fore', 'hand', 'leg', 'shin'].map(n => get(n + s)));
+    let skin = null; fig.traverse(o => { if (o.isSkinnedMesh) skin = skin || o; });
+    if (!skin) return;
+    const body = fig.children[0], y0 = body.position.y;
+    if (limbs[0][5] && limbs[1][5]) j.kneeL = limbs[0][5];             // it has knees: scene.js brings it down on one
+    skin.userData.flex = skin.onBeforeRender = () => {
+      const k = j.kneel || 0;
+      body.position.y = y0 - KNEEL_DROP * k;
+      limbs.forEach(([arm, sho, fore, hand, leg, shin], right) => {
+        if (leg && shin) { const a = leg.rotation.x, bend = a < 0 ? -a * 0.9 : a * 0.35; shin.rotation.x = right ? bend + (1.6 - bend) * k : bend + 0.25 * k; }
+        if (arm && sho && fore && hand) {
+          const a = arm.rotation.x, out = a > 0, reach = out ? -0.75 * a : a, bend = out ? -0.2 * a : 0.3 * a, tip = out ? 1.5 * a : 0.14 * a;
+          sho.rotation.x = reach - a; fore.rotation.x = bend; hand.rotation.x = tip - reach - bend;
+        }
+      });
+    };
+  }
   function fromModel(src) {
-    const fig = src.clone(true), j = {};
+    const fig = copyModel(src), j = {};
     fig.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     for (const name of JOINTS) j[name] = fig.getObjectByName(name) || group(fig);
     for (const s of ['L', 'R']) j['hand' + s] = fig.getObjectByName('hand' + s) || group(j['arm' + s], 0, -0.18, 0.03);   // what a hand holds
     const list = pre => [0, 1, 2, 3].map(i => fig.getObjectByName(pre + i)).filter(Boolean);
     if (list('leg').length) j.legs = list('leg');
     if (list('wheel').length) j.wheels = list('wheel');
+    flexModel(fig, j);
     fig.userData.j = j;
     return fig;
   }
@@ -1360,9 +1394,8 @@ const MODELS = (() => {
   // fetched once the game is up (loadFigures), and stood on y = 0 at that height, centred; done(key) is told as each
   // arrives, since the figures built before then are the built ones.
   const FILES = {
-    // set aside until the other figures have files too (the file waits in assets/models, which is not shipped; index.html
-    // must load src/vendor/GLTFLoader.js again):
-    // 'quan-vu': ['src/figures/quan-vu.glb', 0.93, f => { const w = group(f, -0.228, GRIP * 1.15, 0.035); w.scale.setScalar(1.15); w.rotation.y = 0.5; glaive(w); }],   // the file has no blade: ours stands in his right hand
+    // the file has no blade: ours stands in his right hand, its butt on the ground (k: the model's scale)
+    'quan-vu': ['src/figures/quan-vu.glb', 0.93, (f, k) => { const w = group(f.getObjectByName('handR'), 0.012, -0.115 / k, -0.02); w.scale.setScalar(1.15 / k); w.rotation.y = 0.5; glaive(w); }],
   };
   function loadFigures(done) {
     if (!THREE.GLTFLoader) return;
@@ -1374,7 +1407,7 @@ const MODELS = (() => {
       body.scale.multiplyScalar(k); body.position.set(-k * (box.min.x + box.max.x) / 2, -k * box.min.y, -k * (box.min.z + box.max.z) / 2);
       body.traverse(o => { if (o.isMesh) shine(o.material, 0.6); });
       fig.add(body);
-      if (more) more(fig);
+      if (more) more(fig, k);
       setFigure(key, fig);
       if (done) done(key);
     }, undefined, () => {});
