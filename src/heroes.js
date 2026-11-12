@@ -9,7 +9,7 @@ const HEROES = (() => {
     { id: 'trieu-van', name: 'Triệu Vân', han: '趙', kingdom: 'Thục', look: 'Giáp bạc, mũ cắm lông trắng, ngân thương' },
     { id: 'gia-cat-luong', name: 'Gia Cát Lượng', han: '亮', kingdom: 'Thục', look: 'Áo trắng, khăn luân, quạt lông vũ' },
     { id: 'luu-bi', name: 'Lưu Bị', han: '劉', kingdom: 'Thục', look: 'Áo vàng, mũ miện, song cổ kiếm' },
-    { id: 'tao-thao', name: 'Tào Tháo', han: '曹', kingdom: 'Ngụy', look: 'Áo tía, mũ quan, Ỷ Thiên kiếm' },
+    { id: 'tao-thao', name: 'Tào Tháo', han: '曹', kingdom: 'Ngụy', look: 'Áo tía, giáp vàng, kim quan, Ỷ Thiên kiếm' },
     { id: 'ton-quyen', name: 'Tôn Quyền', han: '孫', kingdom: 'Ngô', look: 'Râu tím, giáp xanh ngọc, mũ vàng' },
     { id: 'lu-bo', name: 'Lữ Bố', han: '呂', kingdom: '', look: 'Hai lông trĩ thật dài, Phương Thiên họa kích' },
     // earned in the campaign (campaign.js says how)
