@@ -20,6 +20,7 @@ node.setRotation([0, 0, 0, 1]);
 const SHAPES = {
   'quan-vu': { fist: 'R', tip: [0.255, 0.47, 0.07], sho: [0.13, 0.88, -0.01], elbow: [0.215, 0.71, 0], wrist: [0.255, 0.53, 0.06], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.165, 0.04, 0] },
   'tao-thao': { fist: 'R', tip: [0.245, 0.49, 0.065], sho: [0.145, 0.86, -0.02], elbow: [0.20, 0.70, 0], wrist: [0.245, 0.55, 0.055], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.15, 0.04, 0] },
+  'luu-bi': { fist: 'RL', tip: [0.25, 0.51, 0.055], sho: [0.15, 0.87, -0.02], elbow: [0.205, 0.71, -0.01], wrist: [0.25, 0.575, 0.045], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.16, 0.04, 0] },
 };
 const M = SHAPES[process.argv[4] || 'quan-vu'];
 if (!M) throw new Error('no such figure: ' + process.argv[4]);
@@ -35,8 +36,8 @@ for (const [s, sx] of [['R', -1], ['L', 1]]) {
   bone('arm' + s, 'body', at(M.sho), null, 0);                                                  // the one the game turns: no flesh of its own
   bone('sho' + s, 'arm' + s, at(M.sho), at(M.elbow), 0.055, { side: sx, out: [0.1, 0.16] });
   bone('fore' + s, 'sho' + s, at(M.elbow), at(M.wrist), 0.05, { side: sx, out: [0.12, 0.18] });
-  // what the hand holds hangs here; a hand that grips (fist: 'R', tip: the fingertips) bends at the wrist with it
-  if (M.fist === s) bone('hand' + s, 'fore' + s, at(M.wrist), at(M.tip), 0.04, { side: sx, out: [0.12, 0.18], below: [M.wrist[1] + 0.04, M.wrist[1] + 0.01] });
+  // what the hand holds hangs here; a hand that grips (fist: 'R' or 'RL', tip: the fingertips) bends at the wrist with it
+  if ((M.fist || '').includes(s)) bone('hand' + s, 'fore' + s, at(M.wrist), at(M.tip), 0.04, { side: sx, out: [0.12, 0.18], below: [M.wrist[1] + 0.04, M.wrist[1] + 0.01] });
   else bone('hand' + s, 'fore' + s, at(M.wrist), null, 0);
   bone('leg' + s, 'hips', at(M.hip), at(M.knee), 0.075, { side: sx, below: [0.62, 0.5] });
   bone('shin' + s, 'leg' + s, at(M.knee), at(M.ankle), 0.065, { side: sx, below: [0.62, 0.5] });

@@ -1385,7 +1385,7 @@ const MODELS = (() => {
             else if (a > 0) { B = hold.out; k = Math.min(1, a); }
             else { B = hold.raise; k = Math.min(1, -a / 2.6); }
             const at = n => A[n] + (B[n] - A[n]) * k;
-            sho.quaternion.setFromAxisAngle(AX, -a).multiply(QT.setFromAxisAngle(AY, at(0))).multiply(QT.setFromAxisAngle(AX, at(1)));
+            sho.quaternion.setFromAxisAngle(AX, -a).multiply(QT.setFromAxisAngle(AY, at(0) * (right ? 1 : -1))).multiply(QT.setFromAxisAngle(AX, at(1)));
             fore.rotation.x = at(2); hand.rotation.x = at(3);
             return;
           }
@@ -1427,6 +1427,14 @@ const MODELS = (() => {
       const h = f.getObjectByName('handR'), w = sword(h, { trim: '#d4a017' });
       w.position.set(0.012, 0.02, 0.02); w.scale.setScalar(1.45 / k); w.rotation.x = GRIP_LEAN;
       h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
+    }],
+    // Liu Bei's pair of swords, one in each hand
+    'luu-bi': ['src/figures/luu-bi.glb', 0.9, (f, k) => {
+      for (const [n, x] of [['handR', 1], ['handL', -1]]) {
+        const h = f.getObjectByName(n), w = sword(h, { trim: '#d4a017' });
+        w.position.set(0.012 * x, 0.02, 0.02); w.scale.setScalar(1.2 / k); w.rotation.x = GRIP_LEAN;
+        h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
+      }
     }],
   };
   function loadFigures(done) {
