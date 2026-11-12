@@ -726,7 +726,7 @@ const STAGES = (() => {
     const ground = add(group, new THREE.CircleGeometry(95, 48), flat('#7a6a48'), 0, -13.4, 0); ground.rotation.x = -Math.PI / 2;
     const sweepers = [-3, 3].map((x, i) => {
       const w = MODELS.warrior(7); w.scale.setScalar(2.6); w.position.set(x, -13.4, -15); w.rotation.y = Math.PI + (i ? -0.6 : 0.6); group.add(w);
-      const j = w.userData.j, broom = new THREE.Group(); broom.position.set(0, -0.18, 0.03); if (j.armR) j.armR.add(broom);
+      const j = w.userData.j, broom = new THREE.Group(); if (j.handR) j.handR.add(broom);
       add(broom, new THREE.CylinderGeometry(0.008, 0.008, 0.5, 4), flat('#6a4a2a'), 0, -0.1, 0);
       add(broom, new THREE.BoxGeometry(0.12, 0.08, 0.03), flat('#c8a85a'), 0, -0.36, 0);
       return { w, j, ph: i * 2 };

@@ -358,7 +358,7 @@ const I18N = (() => {
     'Mặt đỏ, râu dài, áo xanh, Thanh Long Yển Nguyệt đao': 'Red face, long beard, green robe, the Green Dragon Crescent Blade',
     'Râu hùm rậm, giáp đen, Trượng bát xà mâu': 'Bristling tiger whiskers, black armour, the Serpent Spear',
     'Giáp bạc, mũ cắm lông trắng, ngân thương': 'Silver armour, a white-plumed helmet, a silver spear', 'Áo trắng, khăn luân, quạt lông vũ': 'White robe, scholar’s cap, feather fan',
-    'Áo vàng, mũ miện, song cổ kiếm': 'Yellow robe, a crown, twin swords', 'Áo tía, mũ quan, Ỷ Thiên kiếm': 'Purple robe, an official’s cap, the Heaven-Reliant Sword',
+    'Áo vàng, mũ miện, song cổ kiếm': 'Yellow robe, a crown, twin swords', 'Áo tía, giáp vàng, kim quan, Ỷ Thiên kiếm': 'Purple robe, gold armour, a small gold crown, the Heaven-Reliant Sword',
     'Râu tím, giáp xanh ngọc, mũ vàng': 'Purple beard, jade armour, golden helmet', 'Hai lông trĩ thật dài, Phương Thiên họa kích': 'Two very long pheasant plumes, the Sky Piercer halberd',
     'Lão tướng tóc bạc râu trắng, đại đao và cung': 'An old general, white hair and beard, a great blade and a bow',
     'Giáp bạc, mũ đầu sư tử, thương dài': 'Silver armour, a lion-head helmet, a long spear', 'Đô đốc trẻ, giáp đỏ sẫm, mũ cắm lông đỏ': 'A young admiral in dark red armour with a red-plumed helmet',

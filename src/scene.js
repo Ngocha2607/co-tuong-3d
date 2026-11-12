@@ -151,6 +151,7 @@ const VIEW = (() => {
 
     boardMesh = L.board(); scene.add(boardMesh);
     setStage(wantStage);
+    MODELS.loadFigures(heroArrived);
 
     // highlight meshes
     selRing = ringMesh(0.47, 0.56, '#ffd24a', 0.95); selRing.visible = false; scene.add(selRing);
@@ -419,7 +420,7 @@ const VIEW = (() => {
   }
   function restPose(u) {
     const j = u.war.userData.j;
-    if (j.legL) { j.legL.rotation.x = 0; j.legR.rotation.x = 0; }
+    if (j.legL) { j.legL.rotation.x = 0; j.legR.rotation.x = 0; j.kneel = 0; }
     if (j.legs) j.legs.forEach(L => { L.rotation.x = 0; });
     if (j.body) j.body.rotation.x = 0;
     if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
@@ -720,11 +721,12 @@ const VIEW = (() => {
     dragged = false; cam.tPhi = 0.5; cam.tZoom = 0.32; cam.tTheta = cam.theta + 0.5;
     tFocus.copy(u.root.position).setY(0.5);
     SFX.drum();
-    // the beaten general kneels: legs folded back under them, the body bowed, the head down
+    // the beaten general kneels (a figure without knees folds its legs back under it), the body bowed, the head down
     const j = u.war.userData.j, fig = u.war.userData.fig.scale.x;
     grow(u).then(() => tween(900, k => {
       const e = out(k);
-      if (j.legL) { j.legL.rotation.x = j.legR.rotation.x = 1.45 * e; u.war.position.y = -0.2 * fig * 1.8 * e; }
+      if (j.kneeL) { j.kneel = e; j.legL.rotation.x = -1.35 * e; j.legR.rotation.x = 0.1 * e; u.war.position.y = -0.155 * fig * 1.8 * e; }   // down on one knee
+      else if (j.legL) { j.legL.rotation.x = j.legR.rotation.x = 1.45 * e; u.war.position.y = -0.2 * fig * 1.8 * e; }
       u.war.rotation.x = 0.35 * e; if (j.head) j.head.rotation.x = 0.55 * e; if (j.armR) j.armR.rotation.x = 0.5 * e;
     }));
     smoke(u.root.position.clone().setY(0.2), 6, '#4a3a2a', 0.9);
@@ -875,6 +877,8 @@ const VIEW = (() => {
       }
     }
   }
+  // a hero's figure has arrived as a file (MODELS.loadFigures): the generals already led by that hero take it
+  function heroArrived(id) { for (const side of L.sides) if (heroes[side] === id) { heroes[side] = null; setHeroes({ [side]: id }); } }
   // the hero rises from the general's piece, raises their weapon and goes back (the menu's preview)
   let showing = 0, homeTheta = null;     // camera angle to return to after a preview (kept across quick re-picks)
   async function showHero(side) {
