@@ -871,15 +871,16 @@ const MODELS = (() => {
   // generals wear a cape in their side's colour, which also tells the sides apart when a hero leads them
   function cape(h, side) { h.userData.j.cape = cloak(h, CAPE[side]); }
   // a white feather fan held up in front (j.restArm keeps the arm raised between moves)
-  function featherFan(h, size = 1) {
-    const j = h.userData.j, fan = group(j.handR);
+  function fanOf(p, size = 1) {
+    const fan = group(p);
     cyl(0.005, 0.005, 0.07, WOOD, fan, 0, 0.02, 0, 5);
     for (let i = -3; i <= 3; i++) {
       const f = group(fan, 0, 0.045, 0); f.rotation.z = i * 0.27; f.scale.setScalar(size * (1 - Math.abs(i) * 0.04));
       part(geo('feather', () => new THREE.SphereGeometry(0.05, 8, 6).scale(0.27, 1, 0.06)), '#f4f1e8', f, 0, 0.05, 0);
     }
-    j.armR.rotation.x = j.restArm = -0.6;
+    return fan;
   }
+  function featherFan(h, size = 1) { const j = h.userData.j; fanOf(j.handR, size); j.armR.rotation.x = j.restArm = -0.6; }
 
   // a general stands over the ranks: taller than a soldier and a good deal broader (the same up and deep, so limbs
   // that swing forward keep their shape)
@@ -1435,6 +1436,16 @@ const MODELS = (() => {
         w.position.set(0.012 * x, 0.02, 0.02); w.scale.setScalar(1.2 / k); w.rotation.x = GRIP_LEAN;
         h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
       }
+    }],
+    'ton-quyen': ['src/figures/ton-quyen.glb', 0.9, (f, k) => {   // his hand hangs lower under the bracer than the others'
+      const h = f.getObjectByName('handR'), w = sword(h, { trim: '#d4a017' });
+      w.position.set(0.012, -0.022, 0.028); w.scale.setScalar(1.45 / k); w.rotation.x = GRIP_LEAN;
+      h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
+    }],
+    'gia-cat-luong': ['src/figures/gia-cat-luong.glb', 0.9, (f, k) => {   // the fan stands before his chest; a blow is a backhand sweep of it
+      const h = f.getObjectByName('handR'), w = fanOf(h, 1.3);
+      w.position.set(0.012, -0.041, -0.028); w.scale.setScalar(1.3 / k); w.rotation.x = GRIP_LEAN;
+      h.userData.hold = { rest: [0.5, 0.15, -1.8, 0.4], raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
     }],
   };
   function loadFigures(done) {
