@@ -882,8 +882,14 @@ const VIEW = (() => {
       }
     }
   }
-  // a hero's figure has arrived as a file (MODELS.loadFigures): the generals already led by that hero take it
-  function heroArrived(id) { for (const side of L.sides) if (heroes[side] === id) { heroes[side] = null; setHeroes({ [side]: id }); } }
+  // a figure has arrived as a file (MODELS.loadFigures): the generals already led by that hero take it, as do those
+  // no hero leads when it is their side's own
+  function heroArrived(id) {
+    for (const side of L.sides) {
+      const led = heroes[side];
+      if (led ? led === id : id === L.typeOf(L.king(side)) + ':' + MODELS.palKey(L.king(side))) { heroes[side] = null; setHeroes({ [side]: led }); }
+    }
+  }
   // the hero rises from the general's piece, raises their weapon and goes back (the menu's preview)
   let showing = 0, homeTheta = null;     // camera angle to return to after a preview (kept across quick re-picks)
   async function showHero(side) {

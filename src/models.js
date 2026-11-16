@@ -818,6 +818,13 @@ const MODELS = (() => {
     glaive: sh => { sh.moveTo(-0.01, 0); sh.lineTo(-0.012, 0.1); sh.lineTo(-0.032, 0.118); sh.lineTo(-0.012, 0.13); sh.quadraticCurveTo(-0.01, 0.2, 0.022, 0.25); sh.quadraticCurveTo(0.064, 0.15, 0.03, 0); },
     sabre: sh => { sh.moveTo(-0.008, 0); sh.lineTo(-0.008, 0.2); sh.quadraticCurveTo(-0.004, 0.26, 0.022, 0.29); sh.quadraticCurveTo(0.032, 0.2, 0.014, 0); },
     axe: sh => { sh.moveTo(0, 0.012); sh.lineTo(0.05, 0.042); sh.quadraticCurveTo(0.07, 0, 0.05, -0.042); sh.lineTo(0, -0.012); },
+    jiPoint: sh => { sh.moveTo(0, 0); sh.lineTo(-0.013, 0.03); sh.lineTo(-0.008, 0.09); sh.lineTo(0, 0.15); sh.lineTo(0.008, 0.09); sh.lineTo(0.013, 0.03); },   // a long leaf of a spear point
+    jiMoon: sh => {                          // a crescent blade, its edge bowed away from the shaft, its horns turned back to it
+      const R = 0.09, at = (t, r) => [-0.005 + r * Math.cos(t), r * Math.sin(t)], wide = t => 0.027 * (1 - t * t) + 0.0015;
+      sh.moveTo(...at(-1, R));
+      for (let i = -11; i <= 12; i++) sh.lineTo(...at(i / 12, R));
+      for (let i = 12; i >= -12; i--) sh.lineTo(...at(i / 12, R - wide(i / 12)));
+    },
     serpent: sh => {                         // a blade that winds like a snake to its point
       const edge = (t, s) => [s * (0.013 * (1 - t) + 0.0015) + 0.009 * Math.sin(t * Math.PI * 3) * (1 - t * 0.6), t * 0.21];
       sh.moveTo(...edge(0, -1));
@@ -861,6 +868,48 @@ const MODELS = (() => {
       const tip = group(f, 0, 0.22 * len, 0); tip.rotation.x = -0.7; tip.rotation.z = -sx * 0.3;
       part(geo('quillTip' + len, () => new THREE.CylinderGeometry(0.001, 0.0055, 0.16 * len, 6)), color, tip, 0, 0.08 * len, 0);
     }
+  }
+  // the two long tail feathers of a pheasant, rising from the crown and sweeping back over the shoulders: each one
+  // tapering tube, barred dark along its length (p: where they root; units are the built figure's)
+  let plumeMat = null;
+  function longPlumes(p) {
+    plumeMat = plumeMat || new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
+    for (const sx of [-1, 1]) {
+      const g = geo('longPlume' + sx, () => {
+        const V = (x, y, z) => new THREE.Vector3(sx * x, y, z), SEG = 28, RAD = 6;
+        const curve = new THREE.CatmullRomCurve3([V(0.018, 0, 0), V(0.06, 0.15, -0.02), V(0.13, 0.29, -0.1), V(0.2, 0.36, -0.24), V(0.25, 0.35, -0.4)]);
+        const tube = new THREE.TubeGeometry(curve, SEG, 0.0085, RAD), P = tube.attributes.position, col = [], c = new THREE.Color(), o = new THREE.Vector3(), v = new THREE.Vector3();
+        for (let i = 0; i <= SEG; i++) {
+          const t = i / SEG, thin = 0.5 + 0.5 * Math.sin(Math.min(1, t * 6) * Math.PI / 2) - 0.92 * t * t;      // slim at the root, fullest a little above it, a point at the tip
+          curve.getPointAt(t, o);
+          c.set(i % 4 === 3 ? '#4a2a14' : t > 0.85 ? '#8a5a26' : '#e2b24e');
+          for (let k = 0; k <= RAD; k++) { const n = i * (RAD + 1) + k; v.fromBufferAttribute(P, n).sub(o).multiplyScalar(Math.max(0.06, thin)).add(o); P.setXYZ(n, v.x, v.y, v.z); col.push(c.r, c.g, c.b); }
+        }
+        tube.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); tube.computeVertexNormals();
+        return tube;
+      });
+      mesh(g, plumeMat, p);
+    }
+  }
+  // a tuft of horsehair on a helmet's knob: three locks that rise a little, then fall behind (p: where it roots; units
+  // are the built figure's)
+  function horsehair(p, color = '#f6f4ee') {
+    for (const turn of [-0.32, 0, 0.32]) {
+      const g = geo('horsehair' + turn, () => {
+        const SEG = 18, RAD = 8, far = turn ? 0.84 : 1;
+        const curve = new THREE.CatmullRomCurve3([[0, 0, 0], [0, 0.042, -0.004], [0, 0.074, -0.03 * far], [0, 0.07, -0.074 * far], [0, 0.034, -0.116 * far], [0, -0.022 * far, -0.142 * far]].map(a => new THREE.Vector3(...a)));
+        const tube = new THREE.TubeGeometry(curve, SEG, 0.021 * far, RAD), P = tube.attributes.position, o = new THREE.Vector3(), v = new THREE.Vector3();
+        for (let i = 0; i <= SEG; i++) {
+          const t = i / SEG, thin = 0.26 + 0.74 * Math.sin(Math.min(1, t * 2.6) * Math.PI / 2) - 0.86 * t * t * t;      // bound tight at the root, full over the bend, a wisp at the end
+          curve.getPointAt(t, o);
+          for (let k = 0; k <= RAD; k++) { const n = i * (RAD + 1) + k; v.fromBufferAttribute(P, n).sub(o).multiplyScalar(Math.max(0.08, thin)).add(o); P.setXYZ(n, v.x, v.y, v.z); }
+        }
+        tube.computeVertexNormals();
+        return tube.rotateY(turn);
+      });
+      part(g, color, p, 0, 0, 0);
+    }
+    cyl(0.006, 0.0075, 0.014, '#d4a017', p, 0, 0.004, 0, 8, GOLDS);       // the ring that binds it
   }
   // a cloak from the shoulders to the calves, widening as it falls
   function cloak(h, color) {
@@ -1082,14 +1131,23 @@ const MODELS = (() => {
     cut('serpent', w, 0, y - 0.005);
     tassel(w, y - 0.02);
   }
+  function silverSpear(p) {                 // Zhao Yun's spear: a silver shaft, a long leaf of a point, a red tassel under it
+    const len = 0.84, w = group(p), y = top(len);
+    cyl(0.007, 0.007, len, '#e3e8ee', w, 0, len / 2 - GRIP, 0, 8, { metal: 0.6, rough: 0.3, smooth: true });
+    cut('jiPoint', w, 0, y - 0.01, 0.012);
+    cyl(0.0105, 0.0085, 0.022, '#d4a017', w, 0, y - 0.016, 0, 8, GOLDS);
+    tassel(w, y - 0.045);
+    cyl(0.0095, 0.004, 0.03, '#c9ccd2', w, 0, 0.015 - GRIP, 0, 8, STEELS);
+  }
   function skyPiercer(p) {                  // Lü Bu's halberd: a spear point with a crescent blade on each side
-    const len = 0.84, w = pole(p, len, '#3a1a0a'), y = top(len);
-    point(w, y, STEELS, '#e8eef4');
+    const len = 0.84, w = pole(p, len, '#3a1a0a'), y = top(len), m = y - 0.06;      // m: the middle of the crescents
+    cut('jiPoint', w, 0, y - 0.01, 0.012);
     for (const sx of [-1, 1]) {
-      const c = mesh(geo('crescent', () => new THREE.TorusGeometry(0.055, 0.012, 4, 10, Math.PI)), mat('#e8eef4', STEEL), w, sx * 0.05, y - 0.03, 0);
-      c.rotation.z = -sx * Math.PI / 2;
+      cut('jiMoon', w, 0, m, 0.009).rotation.y = sx > 0 ? 0 : Math.PI;
+      for (const up of [-1, 1]) cyl(0.0035, 0.0035, 0.05, '#c9ccd2', w, sx * 0.025, m + up * 0.062, 0, 6, STEEL).rotation.z = Math.PI / 2;   // the bars that hold it
     }
-    tassel(w, y - 0.1);
+    cyl(0.0105, 0.0105, 0.026, '#d4a017', w, 0, m - 0.1, 0, 8, GOLDS);
+    tassel(w, m - 0.13);
   }
   function sabre(p) {                       // a broad, slightly curved single-edged blade
     const w = group(p);
@@ -1453,20 +1511,48 @@ const MODELS = (() => {
       w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); serpentSpear(w);
       h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
     }],
+    'lu-bo': ['src/figures/lu-bo.glb', 0.9, (f, k) => {   // the halberd in his right hand; the two long pheasant plumes rise from his crown
+      const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); skyPiercer(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      const pl = group(f.getObjectByName('head'), 0, 0.115, -0.005); pl.scale.setScalar(1 / k); longPlumes(pl);
+    }],
+    'trieu-van': ['src/figures/trieu-van.glb', 0.9, (f, k) => {   // the silver spear in his right hand; a white tuft falls back from his helmet
+      const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); silverSpear(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      const tuft = group(f.getObjectByName('head'), 0.003, 0.188, -0.006); tuft.scale.setScalar(1 / k); horsehair(tuft);
+    }],
+    // The general no hero leads is one figure for every side: the file's armour is blue, and the other sides wear the
+    // same picture dyed their colour (a fourth entry: key -> picture). A sword in his right hand, a tuft of the side's
+    // plume colour on his helmet (Red's is red: its yellow plume, in this shape, is a bunch of bananas).
+    '1:-1': ['src/figures/chu-tuong.glb', 0.9, (f, k, key) => {
+      const pal = PAL[key.split(':')[1]], h = f.getObjectByName('handR'), w = sword(h, pal);
+      w.position.set(0.012, -0.022, 0.028); w.scale.setScalar(1.45 / k); w.rotation.x = GRIP_LEAN;
+      h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
+      const tuft = group(f.getObjectByName('head'), 0, 0.19, 0); tuft.scale.setScalar(1 / k); horsehair(tuft, pal === PAL[1] ? '#c0201a' : pal.plume);
+    }, { '1:1': 'src/figures/chu-tuong-do.webp', '1:2': 'src/figures/chu-tuong-luc.webp' }],
   };
   function loadFigures(done) {
     if (!THREE.GLTFLoader) return;
     const loader = new THREE.GLTFLoader(), box = new THREE.Box3();
-    for (const [key, [url, tall, more]] of Object.entries(FILES)) loader.load(url, g => {
-      const fig = new THREE.Group(), body = g.scene;
+    for (const [key, [url, tall, more, dyed]] of Object.entries(FILES)) loader.load(url, g => {
+      const body = g.scene;
       box.setFromObject(body);
       const k = tall / (box.max.y - box.min.y);
       body.scale.multiplyScalar(k); body.position.set(-k * (box.min.x + box.max.x) / 2, -k * box.min.y, -k * (box.min.z + box.max.z) / 2);
       body.traverse(o => { if (o.isMesh) shine(o.material, 0.6); });
-      fig.add(body);
-      if (more) more(fig, k);
-      setFigure(key, fig);
-      if (done) done(key);
+      const stand = (body, key) => { const fig = new THREE.Group(); fig.add(body); if (more) more(fig, k, key); setFigure(key, fig); if (done) done(key); };
+      // the same figure in other colours: a copy, taken before anything is put in its hands, with another picture on it
+      for (const [as, pic] of Object.entries(dyed || {})) {
+        const copy = copyModel(body);
+        new THREE.TextureLoader().load(pic, t => {
+          t.flipY = false; t.encoding = THREE.sRGBEncoding;
+          copy.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.map = t; shine(o.material, 0.6); } });
+          stand(copy, as);
+        }, undefined, () => {});
+      }
+      stand(body, key);
     }, undefined, () => {});
   }
 
@@ -1527,7 +1613,7 @@ const MODELS = (() => {
     const side = palKey(piece), type = typeOf(piece), pal = PAL[side];
     const led = type === XQ.K && HEROES.valid(hero) ? hero : '';
     const root = new THREE.Group();
-    const model = (led && FIGURES.get(led)) || FIGURES.get(type + ':' + side) || FIGURES.get(String(type));
+    const model = led ? FIGURES.get(led) : FIGURES.get(type + ':' + side) || FIGURES.get(String(type));       // a hero without a file is built, not stood in for
     const fig = hidden ? buildHooded(pal) : model ? fromModel(model) : led ? HERO_BUILD[led](pal, side) : BUILD[type](pal, side);
     if (STATUE[skin]) { const m = mat(...STATUE[skin]); fig.traverse(o => { if (o.isMesh) o.material = m; }); }
     if (hidden || !model) fuse(fig);

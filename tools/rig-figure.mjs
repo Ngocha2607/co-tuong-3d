@@ -24,6 +24,9 @@ const SHAPES = {
   'ton-quyen': { fist: 'R', tip: [0.25, 0.52, 0.06], sho: [0.155, 0.87, -0.02], elbow: [0.21, 0.72, 0], wrist: [0.25, 0.595, 0.045], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.155, 0.04, 0] },
   'gia-cat-luong': { fist: 'R', tip: [0.26, 0.51, 0.045], sho: [0.13, 0.86, -0.02], elbow: [0.195, 0.71, -0.01], wrist: [0.255, 0.595, 0.035], hip: [0.07, 0.54, 0], knee: [0.11, 0.30, 0], ankle: [0.155, 0.04, 0] },
   'truong-phi': { fist: 'R', tip: [0.27, 0.47, 0.07], sho: [0.17, 0.87, -0.02], elbow: [0.235, 0.71, 0], wrist: [0.26, 0.56, 0.05], hip: [0.08, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.15, 0.04, 0] },
+  'lu-bo': { face: [0.92, 0.96, 1.0, -0.01, 0.85], fist: 'R', tip: [0.285, 0.48, 0.06], sho: [0.165, 0.87, -0.02], elbow: [0.215, 0.71, 0], wrist: [0.265, 0.575, 0.045], hip: [0.07, 0.54, 0], knee: [0.09, 0.30, 0], ankle: [0.11, 0.04, 0] },
+  'chu-tuong': { face: [0.92, 0.96, 1.0, -0.01, 0.85], fist: 'R', tip: [0.29, 0.485, 0.05], sho: [0.165, 0.87, -0.02], elbow: [0.21, 0.70, 0], wrist: [0.27, 0.575, 0.04], hip: [0.07, 0.54, 0], knee: [0.095, 0.30, 0], ankle: [0.11, 0.04, 0] },
+  'trieu-van': { face: [0.92, 0.96, 1.0, -0.01, 0.85], fist: 'R', tip: [0.29, 0.47, 0.055], sho: [0.165, 0.87, -0.02], elbow: [0.22, 0.70, 0], wrist: [0.265, 0.575, 0.045], hip: [0.07, 0.54, 0], knee: [0.095, 0.30, 0], ankle: [0.115, 0.04, 0] },
 };
 const M = SHAPES[process.argv[4] || 'quan-vu'];
 if (!M) throw new Error('no such figure: ' + process.argv[4]);
@@ -81,6 +84,26 @@ for (let pass = 0; pass < 8; pass++) {
     for (let k = 0; k < nb; k++) { let s = 0; for (const o of near[i]) s += W[o * nb + k]; N[i * nb + k] = m ? 0.5 * W[i * nb + k] + 0.5 * s / m : W[i * nb + k]; }
   }
   W = N;
+}
+// A head whose face came out in flat, broken planes (M.face: [from y, full by y, centre y, centre z, how much]) is
+// lit as a rounder one: its normals are made again from the faces round each place, seams counted as one, then
+// leant towards those of a ball about the head's centre. The face's drawing is in the texture, so it loses nothing.
+if (M.face) {
+  const [y0, y1, cy, cz, much] = M.face, N = new Float32Array(n * 3);
+  for (let t = 0; t < idx.length; t += 3) {
+    const [a, b, c] = [idx[t], idx[t + 1], idx[t + 2]], e = k => [P[3 * b + k] - P[3 * a + k], P[3 * c + k] - P[3 * a + k]];
+    const [ux, vx] = e(0), [uy, vy] = e(1), [uz, vz] = e(2), f = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+    const way = f[0] * Q[3 * a] + f[1] * Q[3 * a + 1] + f[2] * Q[3 * a + 2] < 0 ? -1 : 1;      // a face drawn the other way round
+    for (const i of [a, b, c]) for (let k = 0; k < 3; k++) N[3 * same[i] + k] += way * f[k];
+  }
+  for (let i = 0; i < n; i++) {
+    const w = step(y0, y1, P[3 * i + 1]) * much, o = 3 * same[i];
+    if (!w) continue;
+    const l = Math.hypot(N[o], N[o + 1], N[o + 2]) || 1, d = [P[3 * i], P[3 * i + 1] - cy, P[3 * i + 2] - cz], dl = Math.hypot(...d) || 1;
+    const v = [0, 1, 2].map(k => N[o + k] / l * (1 - w) + d[k] / dl * w), vl = Math.hypot(...v) || 1;
+    for (let k = 0; k < 3; k++) Q[3 * i + k] = v[k] / vl;
+  }
+  norA.setArray(Q);
 }
 // the four strongest bones of each vertex
 const J = new Uint8Array(n * 4), WT = new Float32Array(n * 4);
