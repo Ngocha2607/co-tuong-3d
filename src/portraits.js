@@ -6,9 +6,9 @@ const PORTRAITS = (() => {
   // raise lifts the weapon arm (the hero preview's pose in scene.js); zoom closes in past the frame the figures fit
   // (long weapons widen it)
   const CAST = {
-    xq: { zoom: 1.35, figs: [   // two players: Quan Vũ of Red against Lữ Bố of Black
-      { piece: 1, hero: 'quan-vu', x: -0.3, z: 0, turn: 0.8, raise: -2.5 },
-      { piece: -1, hero: 'lu-bo', x: 0.3, z: 0, turn: -0.8, raise: -2.3 },
+    xq: { zoom: 1.08, figs: [   // two players: Quan Vũ of Red against Lữ Bố of Black
+      { piece: 1, hero: 'quan-vu', x: -0.34, z: 0, turn: 0.8, raise: -2.5 },
+      { piece: -1, hero: 'lu-bo', x: 0.34, z: 0, turn: -0.8, raise: -1.7 },
     ] },
     sg: { zoom: 1, figs: [   // three kingdoms: Thục, Ngụy at the back, Ngô
       { piece: 21, hero: 'luu-bi', x: -0.62, z: 0.12, turn: 0.55, raise: -1.4 },
@@ -27,6 +27,7 @@ const PORTRAITS = (() => {
       const war = MODELS.warrior(c.piece, c.hero), j = war.userData.j;
       war.rotation.y = c.turn; war.position.set(c.x, 0, c.z);
       if (j.armR) j.armR.rotation.x = c.raise;
+      MODELS.settle(war);
       group.add(war);
     }
     scene.add(group); group.updateMatrixWorld(true);
