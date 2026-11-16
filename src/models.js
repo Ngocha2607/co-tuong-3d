@@ -1379,13 +1379,14 @@ const MODELS = (() => {
         if (arm && sho && fore && hand) {
           // the cut (j.cutT: 0..1 drawing back, 1..2 the blow, 2..3 back to rest) is a backhand: the hand drawn up
           // across the body to the far shoulder, then swept out and down to its own side
-          const a = arm.rotation.x, hold = hand.userData.hold, cut = right && j.cutT > 0, R = hold && hold.rest || REST;
+          // (hold.kneel: how a hand keeps what it holds once he is down on one knee, so a long weapon stands on the ground)
+          const a = arm.rotation.x, hold = hand.userData.hold, cut = right && j.cutT > 0, R = hold && hold.rest || REST, down = hold && hold.kneel, kn = down ? k : 0;
           if (hold || cut) {
             let A = R, B = R, k = 0;
             if (cut) { const C = hold ? hold.cut : CUT, t = Math.min(3, j.cutT), i = Math.min(2, Math.floor(t)); k = t - i; if (i) A = C[i - 1]; if (i < 2) B = C[i]; }
             else if (a > 0) { B = hold.out; k = Math.min(1, a); }
             else { B = hold.raise; k = Math.min(1, -a / 2.6); }
-            const at = n => A[n] + (B[n] - A[n]) * k;
+            const at = n => { const v = A[n] + (B[n] - A[n]) * k; return kn ? v + (down[n] - v) * kn : v; };
             sho.quaternion.setFromAxisAngle(AX, -a).multiply(QT.setFromAxisAngle(AY, at(0) * (right ? 1 : -1))).multiply(QT.setFromAxisAngle(AX, at(1)));
             fore.rotation.x = at(2); hand.rotation.x = at(3);
             return;
@@ -1421,7 +1422,7 @@ const MODELS = (() => {
     'quan-vu': ['src/figures/quan-vu.glb', 0.93, (f, k) => {
       const h = f.getObjectByName('handR'), w = group(h), d = 0.215 / k;
       w.position.set(0.012, 0.02 - d * Math.cos(GRIP_LEAN), 0.02 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); glaive(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
     }],
     // Cao Cao's sword Yitian is held out before him
     'tao-thao': ['src/figures/tao-thao.glb', 0.9, (f, k) => {
@@ -1446,6 +1447,11 @@ const MODELS = (() => {
       const h = f.getObjectByName('handR'), w = fanOf(h, 1.3);
       w.position.set(0.012, -0.041, -0.028); w.scale.setScalar(1.3 / k); w.rotation.x = GRIP_LEAN;
       h.userData.hold = { rest: [0.5, 0.15, -1.8, 0.4], raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
+    }],
+    'truong-phi': ['src/figures/truong-phi.glb', 0.9, (f, k) => {   // the serpent spear stands in his right hand, its butt on the ground
+      const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
+      w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); serpentSpear(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
     }],
   };
   function loadFigures(done) {

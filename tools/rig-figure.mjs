@@ -23,6 +23,7 @@ const SHAPES = {
   'luu-bi': { fist: 'RL', tip: [0.25, 0.51, 0.055], sho: [0.15, 0.87, -0.02], elbow: [0.205, 0.71, -0.01], wrist: [0.25, 0.575, 0.045], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.16, 0.04, 0] },
   'ton-quyen': { fist: 'R', tip: [0.25, 0.52, 0.06], sho: [0.155, 0.87, -0.02], elbow: [0.21, 0.72, 0], wrist: [0.25, 0.595, 0.045], hip: [0.07, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.155, 0.04, 0] },
   'gia-cat-luong': { fist: 'R', tip: [0.26, 0.51, 0.045], sho: [0.13, 0.86, -0.02], elbow: [0.195, 0.71, -0.01], wrist: [0.255, 0.595, 0.035], hip: [0.07, 0.54, 0], knee: [0.11, 0.30, 0], ankle: [0.155, 0.04, 0] },
+  'truong-phi': { fist: 'R', tip: [0.27, 0.47, 0.07], sho: [0.17, 0.87, -0.02], elbow: [0.235, 0.71, 0], wrist: [0.26, 0.56, 0.05], hip: [0.08, 0.54, 0], knee: [0.12, 0.30, 0], ankle: [0.15, 0.04, 0] },
 };
 const M = SHAPES[process.argv[4] || 'quan-vu'];
 if (!M) throw new Error('no such figure: ' + process.argv[4]);
