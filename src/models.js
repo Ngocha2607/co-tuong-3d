@@ -1433,7 +1433,7 @@ const MODELS = (() => {
     if (!skin) return;
     const body = fig.children[0], y0 = body.position.y;
     if (limbs[0][5] && limbs[1][5]) j.kneeL = limbs[0][5];             // it has knees: scene.js brings it down on one
-    skin.userData.flex = skin.onBeforeRender = () => {
+    const flex = skin.userData.flex = () => {
       const k = j.kneel || 0;
       body.position.y = y0 - KNEEL_DROP * k;
       limbs.forEach(([arm, sho, fore, hand, leg, shin], right) => {
@@ -1462,6 +1462,11 @@ const MODELS = (() => {
         }
       });
     };
+    // The limbs follow as the figure's places in the world are worked out, before it is drawn: the shoulder undoes
+    // the turn of the arm it hangs from, so a frame behind it the whole arm would be thrown by as much as the arm
+    // turned in that frame, and what it holds would shake through every raise and blow.
+    const place = fig.updateMatrixWorld;
+    fig.updateMatrixWorld = function (force) { flex(); place.call(this, force); };
   }
   function fromModel(src) {
     const fig = copyModel(src), j = {};
@@ -1478,7 +1483,7 @@ const MODELS = (() => {
 
   // What a figure holds can come as a file too (GEAR: name -> file, made ready for a hand by tools/fit-prop.mjs); it
   // is fetched before the figures, and where it has not come the weapon is built instead.
-  const GEAR = { sword: 'src/figures/kiem.glb', glaive: 'src/figures/dao.glb', halberd: 'src/figures/kich.glb' }, gear = {};
+  const GEAR = { sword: 'src/figures/kiem.glb', glaive: 'src/figures/dao.glb', halberd: 'src/figures/kich.glb', serpent: 'src/figures/mau.glb' }, gear = {};
   // a lord's sword: a beast's mask for a guard, gold clouds up the blade
   function lordSword(p) {
     if (!gear.sword) return sword(p, { trim: '#d4a017' });
@@ -1494,6 +1499,11 @@ const MODELS = (() => {
   function flameHalberd(p) {
     if (!gear.halberd) return skyPiercer(p);
     p.add(gear.halberd.clone());
+  }
+  // Zhang Fei's spear: a blade that winds like a snake to a forked tip, out of the coils of one, a red tassel
+  function coiledSpear(p) {
+    if (!gear.serpent) return serpentSpear(p);
+    p.add(gear.serpent.clone());
   }
 
   // The figures that come as files: key (as for setFigure) -> [file, height on the board, what to add]. They are
@@ -1535,7 +1545,7 @@ const MODELS = (() => {
     }],
     'truong-phi': ['src/figures/truong-phi.glb', 0.9, (f, k) => {   // the serpent spear stands in his right hand, its butt on the ground
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
-      w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); serpentSpear(w);
+      w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); coiledSpear(w);
       h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
     }],
     'lu-bo': ['src/figures/lu-bo.glb', 0.9, (f, k) => {   // the halberd in his right hand; the two long pheasant plumes rise from his crown
@@ -1634,8 +1644,9 @@ const MODELS = (() => {
     }
   }
 
-  // The knees, elbows and hocks follow the joints that get moved as a figure is drawn, a frame behind; a figure posed
-  // for a single picture (portraits.js) is settled by hand.
+  // The knees, elbows and hocks of a built figure follow the joints that get moved as it is drawn, a frame behind (a
+  // figure from a file follows at once: flexModel); a figure posed for a single picture (portraits.js) is settled by
+  // hand.
   function settle(w) { w.traverse(o => { if (o.userData.flex) o.userData.flex(); }); }
 
   // a warrior for a piece, facing the enemy; with a banner pole for the army view.

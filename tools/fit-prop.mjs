@@ -1,19 +1,22 @@
-// fit-prop.mjs <in.glb> <out.glb> <scale> <lo> <hi> [y] [from by [to thin]] [turn] — a weapon that came as a file,
+// fit-prop.mjs <in.glb> <out.glb> <scale> <lo> <hi> [y] [from by [to thin [above wide]]] [turn] — a weapon that came as a file,
 // made ready for a hand: it stands along y as it did, shrunk by scale, its axis (the middle of what lies between the
 // heights lo and hi of the file: the grip, or a ring of the shaft) on the y axis, the middle of lo and hi at height y
 // (default 0), so the game holds it the way it holds the ones it builds.
 // from, by, to: what lies between the heights from and to is drawn out by that much, and what is above goes up with
 // it (to left out: all that is above from) — the files' blades are short for their hilts, and their shafts are
 // asked for short, since a long one comes back bent. thin: what is below to is made that much thinner about the axis.
+// above, wide: what is above the height above is made that much wider across its flat (x), for a blade that
+// came too slight to be seen on the board.
 // turn: turned half round, for a blade whose edge is towards -x (the game's are towards +x).
 // As used (heights measured with a per-height listing of the model's extents):
 //   sword:  kiem.glb 0.33 0.13 0.31 -0.008 0.5 1.35
 //   glaive: dao.glb  0.58 0.11 0.19 -0.163 0.21 2.59 0.53 0.7 turn
 //   halberd: kich.glb 0.55 0.08 0.20 -0.173 0.22 2.72 0.54 1
+//   serpent spear: mau.glb 0.55 0.06 0.18 -0.184 0.22 3.2 0.52 0.8 0.79 1.8
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 const args = process.argv.slice(2), turn = args[args.length - 1] === 'turn' ? (args.pop(), -1) : 1;
-const [src, out, scale, lo, hi, gripY = 0, from = Infinity, by = 1, to = Infinity, thin = 1] = args;
+const [src, out, scale, lo, hi, gripY = 0, from = Infinity, by = 1, to = Infinity, thin = 1, above = Infinity, wide = 1] = args;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS), doc = await io.read(src), s = +scale;
 const parts = [];
 for (const node of doc.getRoot().listNodes()) {
@@ -45,7 +48,7 @@ for (const acc of parts) {
   for (let i = 0; i < A.length; i += 3) {
     const y = A[i + 1], k = y < +to ? +thin : 1;
     const drawn = y > +from ? +from + (Math.min(y, +to) - +from) * +by + Math.max(0, y - +to) : y;
-    A[i] = turn * (A[i] - cx) * k * s; A[i + 1] = (drawn - cy) * s + +gripY; A[i + 2] = turn * (A[i + 2] - cz) * k * s;
+    A[i] = turn * (A[i] - cx) * k * (y > +above ? +wide : 1) * s; A[i + 1] = (drawn - cy) * s + +gripY; A[i + 2] = turn * (A[i + 2] - cz) * k * s;
     top = Math.max(top, A[i + 1]); bot = Math.min(bot, A[i + 1]);
   }
   acc.setArray(A);
