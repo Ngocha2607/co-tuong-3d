@@ -424,7 +424,7 @@ const VIEW = (() => {
     if (j.legs) j.legs.forEach(L => { L.rotation.x = 0; });
     if (j.body) j.body.rotation.x = 0;
     if (j.armR) j.armR.rotation.x = j.restArm || 0;      // fan bearers keep the fan up
-    j.cutT = 0;
+    j.cutT = 0; j.cutAs = null;
     u.war.position.y = 0;
   }
   // standing at ease while no move is played: a look round now and then, arms easing with the breath, the banner
@@ -547,11 +547,15 @@ const VIEW = (() => {
   }
   // the heroes' own blows (heroes.js ids); the rest cut down like any general
   const HERO_STRIKE = {
-    // Guan Yu sweeps the Green Dragon blade round in a full circle, then brings it down
+    // Guan Yu sweeps the Green Dragon blade round in a full circle, held level (the hand's 'sweep', models.js), then
+    // brings it down
     'quan-vu': async (u, j, s) => {
       SFX.whoosh(); const y = u.war.rotation.y;
-      await tween(420, k => { u.war.rotation.y = y + out(k) * Math.PI * 2; j.armR.rotation.x = -1.6 * Math.sin(k * Math.PI); });
-      u.war.rotation.y = y; await s.cut();
+      j.cutAs = 'sweep';
+      await tween(480, k => { u.war.rotation.y = y + out(k) * Math.PI * 2; j.armR.rotation.x = -1.6 * Math.sin(k * Math.PI); j.cutT = k < 0.2 ? k / 0.2 : k < 0.8 ? 1 : 2 + (k - 0.8) / 0.2; });
+      u.war.rotation.y = y; j.cutAs = null; j.cutT = 0;
+      await s.cut();
+      dustRing(s.ahead); shake = Math.max(shake, 0.14);
     },
     // Zhang Fei roars first, the ground shaking, then drives the serpent spear in
     'truong-phi': async (u, j, s) => {
@@ -562,11 +566,11 @@ const VIEW = (() => {
     // Zhao Yun and Ma Chao: three thrusts, quick as lightning
     'trieu-van': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
     'ma-sieu': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
-    // Lü Bu leaps high and brings the halberd down, the board shaking under him
+    // Lü Bu leaps high, the halberd drawn back over his head, and brings it down, the board shaking under him
     'lu-bo': async (u, j, s) => {
-      await tween(300, k => { u.war.position.y = Math.sin(k * Math.PI * 0.5) * 0.45; j.armR.rotation.x = -2.6 * out(k); s.lunge(0.15 * k); });
+      await tween(300, k => { u.war.position.y = Math.sin(k * Math.PI * 0.5) * 0.45; j.cutT = out(k); j.armR.rotation.x = -2.6 * out(k); s.lunge(0.15 * k); });
       SFX.whoosh();
-      await tween(140, k => { u.war.position.y = 0.45 * (1 - k); j.armR.rotation.x = lerp(-2.6, 1.0, k); s.lunge(lerp(0.15, 0.3, k)); });
+      await tween(140, k => { u.war.position.y = 0.45 * (1 - k); j.cutT = 1 + k; j.armR.rotation.x = lerp(-2.6, 1.0, k); s.lunge(lerp(0.15, 0.3, k)); });
       SFX.thud(); dustRing(s.ahead); smoke(s.ahead.clone().setY(0.1), 5, '#8a7a6a', 0.8); shake = Math.max(shake, 0.28);
     },
     // Zhuge Liang's feather fan raises a gale
