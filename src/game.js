@@ -1529,8 +1529,8 @@
   function clearSel() { G.sel = -1; G.targets = []; VIEW.select(-1, []); }
   const myTurn = () => G.mode !== 'menu' && !G.over && !G.thinking && G.pos.turn === G.me && (G.mode !== 'online' || G.you === G.me);
   const canAct = () => myTurn() && !G.animating && !(G.sent && performance.now() - G.sent < 4000);
-  // the scene took its effects down a step on a slow device (scene.js setQuality)
-  VIEW.onQuality = q => toast(q === 'low' ? 'Máy hơi chậm: đã tắt bóng đổ để chơi mượt hơn' : 'Máy hơi chậm: đã giảm hiệu ứng để chơi mượt hơn');
+  // the scene took its effects down a step on a slow device (scene.js setQuality): the dock's heroes stand still too
+  VIEW.onQuality = q => { artSlow = true; dockArt(); toast(q === 'low' ? 'Máy hơi chậm: đã tắt bóng đổ để chơi mượt hơn' : 'Máy hơi chậm: đã giảm hiệu ứng để chơi mượt hơn'); };
   VIEW.onTap = s => {
     SFX.init();
     if (G.mode === 'review') { if (G.rv && G.rv.quiz) quizTap(s); return; }
@@ -1745,15 +1745,23 @@
     $('#bResume').hidden = !(on && G.mode !== 'menu');
     $('#bResume').textContent = G.mode === 'review' ? 'Tiếp tục xem lại' : 'Tiếp tục ván đang chơi';
     if (on) { menuView('home'); VIEW.setMenu(G.mode === 'menu'); }
+    dockArt();
   }
   // the menu's pages: 'home' lists the ways to play, the others hold each one's options
-  let curView = 'home';
+  let curView = 'home', artUp = false, artSlow = false;
+  // the dock's heroes are at blows (portraits.js) while the home page shows them, and still otherwise; artUp: the
+  // board is up, so they can be made; artSlow: the device has shown it is slow, and is spared them
+  function dockArt() {
+    const game = pref.game === 'sg' ? 'sg' : 'xq', on = artUp && !artSlow && !$('#menu').hidden && curView === 'home';
+    PORTRAITS.show(on ? game : null, on ? $(`.dock .game.${game} .art`) : null);
+  }
   function menuView(name) {
     document.querySelectorAll('#menu .view').forEach(v => { v.hidden = v.dataset.view !== name; });
     $('#menu').dataset.at = curView = name; navMark(); frameBoard();   // the home page's column is wider
     $('#menu .legal').hidden = name !== 'home';             // the legal links only beside the short home page
     $('#menu').scrollTop = 0;
     clearTimeout(roomsT); loadRooms();
+    dockArt();
   }
   // ---------- the open friendly rooms (worker/lobby.js, rooms.js) ----------
   // The Phòng chơi page of each game: a filter (a free seat, playing, all, each with how many rooms it holds), a search
@@ -2003,6 +2011,7 @@
   function gameTab(v) {
     document.querySelectorAll('#gameTabs button').forEach(b => { const on = b.dataset.v === v; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
     document.querySelectorAll('.dock .game').forEach(g => { g.hidden = g.dataset.game !== v; });
+    dockArt();
   }
   $('#gameTabs').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.dataset.v === pref.game) return;
@@ -2346,6 +2355,7 @@
     setTimeout(() => {
       const art = PORTRAITS.render(400, 340);
       if (art) [['#artXq', art.xq], ['#artSg', art.sg]].forEach(([el, url]) => { $(el).src = url; $(el).hidden = false; });
+      artUp = true; dockArt();
     }, 50);
     let info = null;
     try { const r = await fetch('info', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { }

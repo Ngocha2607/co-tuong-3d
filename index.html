@@ -527,6 +527,11 @@
   #onlineBox, #sgOnlineBox { display: contents; }
   .game .art { position: absolute; left: 8px; bottom: 10px; width: 164px; height: 176px; pointer-events: none; }
   .game .art img { width: 100%; height: 100%; object-fit: contain; object-position: center bottom; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)); }
+  /* the heroes at blows (portraits.js): a picture with room about the still's box for a leap and a long blade, in its
+     place once it is drawn */
+  .game .art canvas { position: absolute; left: -20px; bottom: 0; width: calc(100% + 40px); height: calc(100% + 54px); visibility: hidden; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.55)); }
+  .game .art.live canvas { visibility: visible; }
+  .game .art.live img { visibility: hidden; }
   .game .play { display: grid; align-content: center; gap: 2px; padding: 9px 16px; border-radius: 12px; border: 1px solid #e0574c; background: linear-gradient(180deg, #d63b2f, #a3201a); color: #fff4e2; text-align: left; cursor: pointer; box-shadow: 0 6px 20px rgba(200, 49, 42, 0.35); transition: filter 150ms, transform 150ms; }
   .game .play:hover { filter: brightness(1.1); }
   .game .play:active { transform: translateY(1px); }
