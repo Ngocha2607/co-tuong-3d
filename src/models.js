@@ -1426,6 +1426,9 @@ const MODELS = (() => {
   // A long blade is not cut with but brought down: drawn back over the head, then over and down to the ground ahead.
   // LEVEL: a long weapon held level before him, to scythe round as he turns.
   const CLEAVE = [[0, -2.35, -0.45, 0.15], [0.3, -0.6, -0.05, 1.2]], LEVEL = [0, -0.9, -0.1, 1.0];
+  // A spear is thrust: drawn back level by the hip, then driven straight in at arm's length (scene.js goes through
+  // the two as it does through a cut's, the hand's 'stab').
+  const STAB = [[0, 0.8, -1.5, 0.95], [0, -0.8, -0.08, 0.8]];
   const KNEEL_DROP = 0.05, AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1), QT = new THREE.Quaternion();
   function flexModel(fig, j) {
     const get = n => fig.getObjectByName(n), limbs = ['L', 'R'].map(s => ['arm', 'sho', 'fore', 'hand', 'leg', 'shin'].map(n => get(n + s)));
@@ -1546,7 +1549,7 @@ const MODELS = (() => {
     'truong-phi': ['src/figures/truong-phi.glb', 0.9, (f, k) => {   // the serpent spear stands in his right hand, its butt on the ground
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
       w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); coiledSpear(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
     }],
     'lu-bo': ['src/figures/lu-bo.glb', 0.9, (f, k) => {   // the halberd in his right hand; the two long pheasant plumes rise from his crown
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
@@ -1557,7 +1560,7 @@ const MODELS = (() => {
     'trieu-van': ['src/figures/trieu-van.glb', 0.9, (f, k) => {   // the silver spear in his right hand; a white tuft falls back from his helmet
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
       w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); silverSpear(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
       const tuft = group(f.getObjectByName('head'), 0.003, 0.188, -0.006); tuft.scale.setScalar(1 / k); horsehair(tuft);
     }],
     // The general no hero leads is one figure for every side: the file's armour is blue, and the other sides wear the

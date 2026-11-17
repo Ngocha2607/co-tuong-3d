@@ -505,7 +505,17 @@ const VIEW = (() => {
       SFX.whoosh();
       await tween(120, k => { j.cutT = 1 + k; if (j.armR) j.armR.rotation.x = lerp(-2.4, 0.9, k); lunge(0.18 * k); });
     };
-    const thrust = async (ms = 110) => { await arm(j.armR ? j.armR.rotation.x : 0, -0.3, 160); SFX.whoosh(); await tween(ms, k => { if (j.armR) j.armR.rotation.x = lerp(-0.3, 1.0, k); lunge(0.22 * k); }); await tween(120, k => lunge(0.22 * (1 - k))); };
+    // a hand that holds a spear draws it back level by the hip and drives it straight in (the hand's 'stab', models.js;
+    // from where the last thrust left it, if there was one); the others lower what they hold as they lunge
+    const stab = j.handR && j.handR.userData.hold && j.handR.userData.hold.stab;
+    const thrust = async (ms = 110) => {
+      const a0 = j.armR ? j.armR.rotation.x : 0, c0 = j.cutT || 0;
+      if (stab) j.cutAs = 'stab';
+      await tween(160, k => { if (j.armR) j.armR.rotation.x = lerp(a0, -0.3, out(k)); if (stab) j.cutT = lerp(c0, 1, out(k)); });
+      SFX.whoosh();
+      await tween(ms, k => { if (j.armR) j.armR.rotation.x = lerp(-0.3, 1.0, k); if (stab) j.cutT = 1 + k; lunge(0.22 * k); });
+      await tween(120, k => lunge(0.22 * (1 - k)));
+    };
     const hero = HERO_STRIKE[u.war.userData.hero];
     if (hero) await hero(u, j, { cut, thrust, lunge, arm, ahead });
     else if (type === B) {
@@ -562,6 +572,7 @@ const VIEW = (() => {
       SFX.drum(); shake = Math.max(shake, 0.18);
       await tween(380, k => { j.head.rotation.x = -0.5 * Math.sin(k * Math.PI); u.war.scale.setScalar(BIG() * (1 + 0.12 * Math.sin(k * Math.PI))); });
       await s.thrust(90);
+      dustRing(s.ahead); shake = Math.max(shake, 0.16);
     },
     // Zhao Yun and Ma Chao: three thrusts, quick as lightning
     'trieu-van': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
