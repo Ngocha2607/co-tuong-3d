@@ -13,6 +13,7 @@
 //   glaive: dao.glb  0.58 0.11 0.19 -0.163 0.21 2.59 0.53 0.7 turn
 //   halberd: kich.glb 0.55 0.08 0.20 -0.173 0.22 2.72 0.54 1
 //   serpent spear: mau.glb 0.55 0.06 0.18 -0.184 0.22 3.2 0.52 0.8 0.79 1.8
+//   spear: thuong.glb 0.55 0.05 0.14 -0.198 0.18 2.82 0.52 0.76
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 const args = process.argv.slice(2), turn = args[args.length - 1] === 'turn' ? (args.pop(), -1) : 1;

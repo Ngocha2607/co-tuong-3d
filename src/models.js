@@ -1426,9 +1426,9 @@ const MODELS = (() => {
   // A long blade is not cut with but brought down: drawn back over the head, then over and down to the ground ahead.
   // LEVEL: a long weapon held level before him, to scythe round as he turns.
   const CLEAVE = [[0, -2.35, -0.45, 0.15], [0.3, -0.6, -0.05, 1.2]], LEVEL = [0, -0.9, -0.1, 1.0];
-  // A spear is thrust: drawn back level by the hip, then driven straight in at arm's length (scene.js goes through
-  // the two as it does through a cut's, the hand's 'stab').
-  const STAB = [[0, 0.8, -1.5, 0.95], [0, -0.8, -0.08, 0.8]];
+  // A spear is thrust: drawn back level by the hip, then driven straight in at arm's length, turned in a little to
+  // the one before him (scene.js goes through the two as it does through a cut's, the hand's 'stab').
+  const STAB = [[0.1, 0.8, -1.5, 1.02], [0.22, -0.8, -0.08, 1.2]];
   const KNEEL_DROP = 0.05, AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1), QT = new THREE.Quaternion();
   function flexModel(fig, j) {
     const get = n => fig.getObjectByName(n), limbs = ['L', 'R'].map(s => ['arm', 'sho', 'fore', 'hand', 'leg', 'shin'].map(n => get(n + s)));
@@ -1486,7 +1486,7 @@ const MODELS = (() => {
 
   // What a figure holds can come as a file too (GEAR: name -> file, made ready for a hand by tools/fit-prop.mjs); it
   // is fetched before the figures, and where it has not come the weapon is built instead.
-  const GEAR = { sword: 'src/figures/kiem.glb', glaive: 'src/figures/dao.glb', halberd: 'src/figures/kich.glb', serpent: 'src/figures/mau.glb' }, gear = {};
+  const GEAR = { sword: 'src/figures/kiem.glb', glaive: 'src/figures/dao.glb', halberd: 'src/figures/kich.glb', serpent: 'src/figures/mau.glb', spear: 'src/figures/thuong.glb' }, gear = {};
   // a lord's sword: a beast's mask for a guard, gold clouds up the blade
   function lordSword(p) {
     if (!gear.sword) return sword(p, { trim: '#d4a017' });
@@ -1507,6 +1507,11 @@ const MODELS = (() => {
   function coiledSpear(p) {
     if (!gear.serpent) return serpentSpear(p);
     p.add(gear.serpent.clone());
+  }
+  // Zhao Yun's spear: a broad leaf of a point out of a gold lotus, a red tassel, a silver shaft
+  function lotusSpear(p) {
+    if (!gear.spear) return silverSpear(p);
+    p.add(gear.spear.clone());
   }
 
   // The figures that come as files: key (as for setFigure) -> [file, height on the board, what to add]. They are
@@ -1559,7 +1564,7 @@ const MODELS = (() => {
     }],
     'trieu-van': ['src/figures/trieu-van.glb', 0.9, (f, k) => {   // the silver spear in his right hand; a white tuft falls back from his helmet
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
-      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); silverSpear(w);
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); lotusSpear(w);
       h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
       const tuft = group(f.getObjectByName('head'), 0.003, 0.188, -0.006); tuft.scale.setScalar(1 / k); horsehair(tuft);
     }],
