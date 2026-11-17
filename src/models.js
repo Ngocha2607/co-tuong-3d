@@ -1403,6 +1403,9 @@ const MODELS = (() => {
   const FIGURES = new Map();
   function setFigure(key, scene) { if (scene) FIGURES.set(String(key), scene); else FIGURES.delete(String(key)); }
   const figured = key => FIGURES.has(String(key));        // has this figure come as a file yet?
+  // the figures whose files are on their way (loadFigures): a key leaves when its figure has come or its file failed
+  const COMING = new Set();
+  const awaited = key => COMING.has(String(key)) && !FIGURES.has(String(key));
   const JOINTS = ['legL', 'legR', 'armL', 'armR', 'head', 'body', 'trunk', 'arm', 'stone'];
   // a copy of a model; a skinned mesh of the copy is bound to the copy's own bones
   function copyModel(src) {
@@ -1580,6 +1583,8 @@ const MODELS = (() => {
   };
   function loadFigures(done) {
     if (!THREE.GLTFLoader) return;
+    for (const [key, [, , , dyed]] of Object.entries(FILES)) for (const k of [key, ...Object.keys(dyed || {})]) COMING.add(k);
+    const lost = key => { COMING.delete(key); for (const k of Object.keys(FILES[key][3] || {})) COMING.delete(k); };
     const loader = new THREE.GLTFLoader(), box = new THREE.Box3();
     const held = Promise.all(Object.entries(GEAR).map(([name, url]) => new Promise(ok => loader.load(url, g => {
       // the files' metal is a mirror, and a mirror this small shows only the dark of the room: less of a metal and
@@ -1601,10 +1606,10 @@ const MODELS = (() => {
           t.flipY = false; t.encoding = THREE.sRGBEncoding;
           copy.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); o.material.map = t; shine(o.material, 0.6); } });
           stand(copy, as);
-        }, undefined, () => {});
+        }, undefined, () => COMING.delete(as));
       }
       stand(body, key);
-    }), undefined, () => {});
+    }).catch(() => lost(key)), undefined, () => lost(key));
   }
 
   // the warriors' looks besides the painted one (skins.js): the whole figure cast in one metal; the banner keeps the
@@ -1683,5 +1688,5 @@ const MODELS = (() => {
     return root;
   }
 
-  return { board, sanguoBoard, wet, riverDist, WATER_Y, REFLECT, table, lantern, disc, warrior, settle, setFigure, figured, loadFigures, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, wet, riverDist, WATER_Y, REFLECT, table, lantern, disc, warrior, settle, setFigure, figured, awaited, loadFigures, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();

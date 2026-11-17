@@ -2351,12 +2351,14 @@
     if (pref.army) { VIEW.setArmy(true); $('#bArmy').classList.add('on'); }
     soundIcon(); renderMoves(); updateStatus(); layoutMode();
     $('#boot').remove();
-    // the dock's heroes: rendered once, just after the board is up
-    setTimeout(() => {
+    // the dock's heroes: rendered once, just after the board is up and their files are in (till then the dock shows
+    // none of them, rather than the built figures for a moment)
+    setTimeout(() => { artUp = true; dockArt(); }, 50);
+    (function still() {
+      if (!PORTRAITS.ready()) return setTimeout(still, 250);
       const art = PORTRAITS.render(400, 340);
       if (art) [['#artXq', art.xq], ['#artSg', art.sg]].forEach(([el, url]) => { $(el).src = url; $(el).hidden = false; });
-      artUp = true; dockArt();
-    }, 50);
+    })();
     let info = null;
     try { const r = await fetch('info', { cache: 'no-store' }); if (r.ok) info = await r.json(); } catch (e) { }
     const online = !!info && info.online === true;
