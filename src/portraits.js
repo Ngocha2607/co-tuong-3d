@@ -45,6 +45,11 @@ const PORTRAITS = (() => {
     return renderer.domElement.toDataURL('image/png');
   }
 
+  // are some of the heroes' files still on their way? Then nothing is shown of them yet: the built figures are not
+  // put up only to be swapped a moment later
+  const waiting = figs => figs.some(c => MODELS.awaited(c.hero));
+  const ready = () => !Object.values(CAST).some(c => waiting(c.figs));
+
   // the pictures by game, { xq, sg } as data URLs, w × h pixels each; null if WebGL is not there
   function render(w, h) {
     let renderer = null;
@@ -118,21 +123,107 @@ const PORTRAITS = (() => {
     f.war.userData.flag.visible = false;
     for (const n of JOINTS) if (!f.j[n]) f.j[n] = new THREE.Object3D();
   }
+  // ---------- the heroes come down as lightning ----------
+  // Once their files are in, each hero in turn is struck down onto the ground: a jagged bolt with a fork that flickers,
+  // a flash and a ring running out over the ground where it lands, the picture lit and shaken, and the hero is there,
+  // dropping the last span onto their feet. Then the bouts begin.
+  const INTRO = { first: 0.25, apart: 0.42, bolt: 0.32, after: 0.65 };
+  const introLen = n => INTRO.first + (n - 1) * INTRO.apart + INTRO.bolt + INTRO.after;
+  const SEG = 12;
+  // a flat ribbon of light, laid along a path each time the bolt is redrawn (lay)
+  function streak(scene, color, opacity) {
+    const geo = new THREE.BufferGeometry(), idx = [];
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(SEG * 2 * 3), 3));
+    for (let i = 0; i < SEG - 1; i++) idx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
+    geo.setIndex(idx);
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, side: THREE.DoubleSide }));
+    m.frustumCulled = false; m.visible = false; m.renderOrder = 2; m.userData.base = opacity; scene.add(m);
+    return m;
+  }
+  function lay(m, pts, w, taper) {
+    const p = m.geometry.attributes.position;
+    for (let i = 0; i < SEG; i++) {
+      const a = pts[i], b = pts[Math.max(0, i - 1)], c = pts[Math.min(SEG - 1, i + 1)];
+      let nx = -(c.y - b.y), ny = c.x - b.x;
+      const l = Math.hypot(nx, ny) || 1, h = (w * (taper ? 1 - 0.85 * i / (SEG - 1) : 1)) / 2;
+      nx = nx / l * h; ny = ny / l * h;
+      p.setXYZ(2 * i, a.x - nx, a.y - ny, a.z); p.setXYZ(2 * i + 1, a.x + nx, a.y + ny, a.z);
+    }
+    p.needsUpdate = true;
+  }
+  // a jagged path from one point to another, its ends where they are asked
+  function jag(x0, y0, x1, y1, z, rough) {
+    const pts = [];
+    for (let i = 0; i < SEG; i++) {
+      const k = i / (SEG - 1), inner = i > 0 && i < SEG - 1;
+      pts.push(new THREE.Vector3(lerp(x0, x1, k) + (inner ? (Math.random() - 0.5) * rough : 0), lerp(y0, y1, k) + (inner ? (Math.random() - 0.5) * rough * 0.3 : 0), z));
+    }
+    return pts;
+  }
+  function bolt(scene, f, flash) {
+    const b = {
+      core: streak(scene, '#ffffff', 1), glow: streak(scene, '#7fb0ff', 0.55),
+      twig: streak(scene, '#ffffff', 0.8), twigGlow: streak(scene, '#7fb0ff', 0.4),
+      flash: new THREE.Mesh(new THREE.CircleGeometry(0.55, 24), new THREE.MeshBasicMaterial({ map: flash, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })),
+      ring: new THREE.Mesh(new THREE.RingGeometry(0.1, 0.13, 40), new THREE.MeshBasicMaterial({ color: '#bcd6ff', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })),
+      light: new THREE.PointLight('#a9c8ff', 0, 2.2, 1.5), drawn: -1,
+    };
+    for (const m of [b.flash, b.ring]) { m.rotation.x = -Math.PI / 2; m.position.set(f.x, 0.006, f.z); m.visible = false; scene.add(m); }
+    b.light.position.set(f.x, 0.55, f.z + 0.25); scene.add(b.light);      // there from the start, so nothing is compiled anew when it strikes
+    return b;
+  }
+  function intro(st, t) {
+    let jolt = 0, glare = 0;
+    st.cast.forEach((f, i) => {
+      const b = f.bolt, s = t - (INTRO.first + i * INTRO.apart);       // seconds since this one's bolt began
+      const on = s >= 0 && s < INTRO.bolt, lit = on && !(s > 0.08 && s < 0.12) && !(s > 0.21 && s < 0.25);
+      if (on && Math.floor(s / 0.05) !== b.drawn) {                      // redrawn every 50 ms: it crawls
+        b.drawn = Math.floor(s / 0.05);
+        const top = jag(f.x + (Math.random() - 0.5) * 0.5, 2.4, f.x, 0, f.z + 0.15, 0.22);
+        lay(b.core, top, 0.022, false); lay(b.glow, top, 0.1, false);
+        const from = top[3 + (Math.random() * 4 | 0)], side = Math.random() < 0.5 ? -1 : 1;
+        const twig = jag(from.x, from.y, from.x + side * (0.25 + Math.random() * 0.2), from.y - 0.45 - Math.random() * 0.3, from.z, 0.12);
+        lay(b.twig, twig, 0.014, true); lay(b.twigGlow, twig, 0.06, true);
+      }
+      const fade = 1 - 0.5 * Math.max(0, s) / INTRO.bolt;
+      for (const m of [b.core, b.glow, b.twig, b.twigGlow]) { m.visible = lit; m.material.opacity = m.userData.base * fade; }
+      const burst = s < 0 ? 0 : clamp(1 - s / 0.5), spread = s < 0 ? 0 : clamp(s / 0.6);
+      b.flash.visible = burst > 0; b.flash.material.opacity = burst; b.flash.scale.setScalar(0.6 + 0.8 * out(s / 0.3));
+      b.ring.visible = s >= 0 && spread < 1; b.ring.material.opacity = 1 - spread; b.ring.scale.setScalar(1 + 6 * out(spread));
+      b.light.intensity = lit ? 4 : 4 * burst * burst;
+      if (s >= 0) { jolt = Math.max(jolt, clamp(1 - s / 0.22)); glare = Math.max(glare, lit ? 1 : burst * burst); }
+      // the hero: there once the bolt has hit, dropping the last of the way
+      const k = out((s - 0.04) / 0.28);
+      f.war.visible = f.shade.visible = s >= 0.04;
+      f.war.position.y = 0.18 * (1 - k); f.war.scale.set(1 - 0.1 * (1 - k), 1 + 0.12 * (1 - k), 1 - 0.1 * (1 - k));
+    });
+    st.jolt = jolt * 1.6; st.sky.intensity = 0.9 + 0.9 * glare;
+  }
+  function introDone(st) {
+    for (const f of st.cast) {
+      const b = f.bolt;
+      for (const m of [b.core, b.glow, b.twig, b.twigGlow, b.flash, b.ring]) m.visible = false;
+      b.light.intensity = 0; f.war.visible = f.shade.visible = true; f.war.scale.setScalar(1);
+    }
+    st.sky.intensity = 0.9;
+  }
+
   function stage(key) {
     const { aim, figs, turns } = BOUTS[key], scene = new THREE.Scene();
-    scene.add(new THREE.HemisphereLight('#ffe2c0', '#2a1408', 0.9));
+    const sky = new THREE.HemisphereLight('#ffe2c0', '#2a1408', 0.9); scene.add(sky);
     const sun = new THREE.DirectionalLight('#ffe9cc', 2.0); sun.position.set(-3, 5, 6); scene.add(sun);
     const rimL = new THREE.DirectionalLight('#ff7a4a', 1.2); rimL.position.set(-6, 3, -5); scene.add(rimL);
     const rimR = new THREE.DirectionalLight('#7fa4ff', 1.0); rimR.position.set(6, 3, -5); scene.add(rimR);
-    const dark = spot('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)');
+    const dark = spot('rgba(0,0,0,0.55)', 'rgba(0,0,0,0)'), flash = spot('rgba(225,238,255,1)', 'rgba(110,150,255,0)');
     const cast = figs.map(c => {
       const f = { ...c, shade: new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), new THREE.MeshBasicMaterial({ map: dark, transparent: true, depthWrite: false })) };
       f.shade.rotation.x = -Math.PI / 2; scene.add(f.shade);
+      f.bolt = bolt(scene, f, flash);
       return f;
     });
     const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: spot('rgba(255,244,200,1)', 'rgba(255,170,60,0)'), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
     spark.visible = false; scene.add(spark);
-    return { aim, turns, cast, scene, spark, cam: new THREE.PerspectiveCamera(30, 1, 0.05, 50), mats: [], checked: -1, jolt: 0 };
+    return { aim, turns, cast, scene, sky, spark, cam: new THREE.PerspectiveCamera(30, 1, 0.05, 50), mats: [], checked: -1, jolt: 0, born: -1, ended: false };
   }
   // the heroes at t seconds: all at ease, but for the two whose turn it is
   function pose(st, t) {
@@ -181,6 +272,7 @@ const PORTRAITS = (() => {
     raf = requestAnimationFrame(frame);
     if (now - last < 30) return;                      // thirty pictures a second are enough
     clock += Math.min(0.1, (now - last) / 1000); last = now;
+    if (waiting(BOUTS[shownKey].figs)) return;
     const { canvas, renderer, env } = live, st = live.stages[shownKey] || (live.stages[shownKey] = stage(shownKey));
     if (clock - st.checked > 0.7) {                    // the figures that have come as files since
       st.checked = clock;
@@ -191,7 +283,11 @@ const PORTRAITS = (() => {
     const w = canvas.clientWidth, h = canvas.clientHeight, pr = Math.min(2, devicePixelRatio || 1);
     if (!w || !h) return;
     if (canvas.width !== Math.round(w * pr) || canvas.height !== Math.round(h * pr)) renderer.setSize(Math.round(w * pr), Math.round(h * pr), false);
-    pose(st, clock);
+    // the first time these heroes are shown, they come down as lightning (intro) before the bouts begin
+    if (st.born < 0) st.born = clock;
+    const since = clock - st.born, len = introLen(st.cast.length);
+    pose(st, Math.max(0, since - len));
+    if (!st.ended) { if (since < len) intro(st, since); else { introDone(st); st.ended = true; } }
     // 1.55 wide, their feet near the picture's bottom edge
     const cam = st.cam, v = Math.tan((cam.fov * Math.PI) / 360), dist = 1.55 / (2 * v * (w / h)), tall = 2 * v * dist, shake = st.jolt * 0.012;
     cam.aspect = w / h; cam.updateProjectionMatrix();
@@ -213,5 +309,5 @@ const PORTRAITS = (() => {
     if (live.canvas.parentNode !== box) box.appendChild(live.canvas);
     last = performance.now(); raf = requestAnimationFrame(frame);
   }
-  return { render, show };
+  return { render, ready, show };
 })();
