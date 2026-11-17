@@ -1402,6 +1402,7 @@ const MODELS = (() => {
   // stone, leg0..3, wheel0..1) move as the built ones do; a joint the model lacks is an empty group, so nothing breaks.
   const FIGURES = new Map();
   function setFigure(key, scene) { if (scene) FIGURES.set(String(key), scene); else FIGURES.delete(String(key)); }
+  const figured = key => FIGURES.has(String(key));        // has this figure come as a file yet?
   const JOINTS = ['legL', 'legR', 'armL', 'armR', 'head', 'body', 'trunk', 'arm', 'stone'];
   // a copy of a model; a skinned mesh of the copy is bound to the copy's own bones
   function copyModel(src) {
@@ -1422,6 +1423,12 @@ const MODELS = (() => {
   // within what a wrist can do: rest, raise (the arm raised all the way), out (the arm struck forward), cut.
   const GRIP_LEAN = 1.25;
   const CUT = [[1.1, -1.25, -0.45, 2.5], [-0.8, -1.0, -0.15, 3.05]], REST = [0, 0, 0, 0];
+  // A long blade is not cut with but brought down: drawn back over the head, then over and down to the ground ahead.
+  // LEVEL: a long weapon held level before him, to scythe round as he turns.
+  const CLEAVE = [[0, -2.35, -0.45, 0.15], [0.3, -0.6, -0.05, 1.2]], LEVEL = [0, -0.9, -0.1, 1.0];
+  // A spear is thrust: drawn back level by the hip, then driven straight in at arm's length, turned in a little to
+  // the one before him (scene.js goes through the two as it does through a cut's, the hand's 'stab').
+  const STAB = [[0.1, 0.8, -1.5, 1.02], [0.22, -0.8, -0.08, 1.2]];
   const KNEEL_DROP = 0.05, AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1), QT = new THREE.Quaternion();
   function flexModel(fig, j) {
     const get = n => fig.getObjectByName(n), limbs = ['L', 'R'].map(s => ['arm', 'sho', 'fore', 'hand', 'leg', 'shin'].map(n => get(n + s)));
@@ -1429,7 +1436,7 @@ const MODELS = (() => {
     if (!skin) return;
     const body = fig.children[0], y0 = body.position.y;
     if (limbs[0][5] && limbs[1][5]) j.kneeL = limbs[0][5];             // it has knees: scene.js brings it down on one
-    skin.userData.flex = skin.onBeforeRender = () => {
+    const flex = skin.userData.flex = () => {
       const k = j.kneel || 0;
       body.position.y = y0 - KNEEL_DROP * k;
       limbs.forEach(([arm, sho, fore, hand, leg, shin], right) => {
@@ -1437,11 +1444,13 @@ const MODELS = (() => {
         if (arm && sho && fore && hand) {
           // the cut (j.cutT: 0..1 drawing back, 1..2 the blow, 2..3 back to rest) is a backhand: the hand drawn up
           // across the body to the far shoulder, then swept out and down to its own side
+          // (hold.cut: the two ends of the blow for what this hand holds, where it is another; j.cutAs names another
+          // pair among the hand's holds to go through instead, for a blow that is a hero's own)
           // (hold.kneel: how a hand keeps what it holds once he is down on one knee, so a long weapon stands on the ground)
           const a = arm.rotation.x, hold = hand.userData.hold, cut = right && j.cutT > 0, R = hold && hold.rest || REST, down = hold && hold.kneel, kn = down ? k : 0;
           if (hold || cut) {
             let A = R, B = R, k = 0;
-            if (cut) { const C = hold ? hold.cut : CUT, t = Math.min(3, j.cutT), i = Math.min(2, Math.floor(t)); k = t - i; if (i) A = C[i - 1]; if (i < 2) B = C[i]; }
+            if (cut) { const C = hold ? hold[j.cutAs] || hold.cut : CUT, t = Math.min(3, j.cutT), i = Math.min(2, Math.floor(t)); k = t - i; if (i) A = C[i - 1]; if (i < 2) B = C[i]; }
             else if (a > 0) { B = hold.out; k = Math.min(1, a); }
             else { B = hold.raise; k = Math.min(1, -a / 2.6); }
             const at = n => { const v = A[n] + (B[n] - A[n]) * k; return kn ? v + (down[n] - v) * kn : v; };
@@ -1456,6 +1465,11 @@ const MODELS = (() => {
         }
       });
     };
+    // The limbs follow as the figure's places in the world are worked out, before it is drawn: the shoulder undoes
+    // the turn of the arm it hangs from, so a frame behind it the whole arm would be thrown by as much as the arm
+    // turned in that frame, and what it holds would shake through every raise and blow.
+    const place = fig.updateMatrixWorld;
+    fig.updateMatrixWorld = function (force) { flex(); place.call(this, force); };
   }
   function fromModel(src) {
     const fig = copyModel(src), j = {};
@@ -1470,34 +1484,65 @@ const MODELS = (() => {
     return fig;
   }
 
+  // What a figure holds can come as a file too (GEAR: name -> file, made ready for a hand by tools/fit-prop.mjs); it
+  // is fetched before the figures, and where it has not come the weapon is built instead.
+  const GEAR = { sword: 'src/figures/kiem.glb', glaive: 'src/figures/dao.glb', halberd: 'src/figures/kich.glb', serpent: 'src/figures/mau.glb', spear: 'src/figures/thuong.glb' }, gear = {};
+  // a lord's sword: a beast's mask for a guard, gold clouds up the blade
+  function lordSword(p) {
+    if (!gear.sword) return sword(p, { trim: '#d4a017' });
+    const w = group(p); w.add(gear.sword.clone());
+    return w;
+  }
+  // Guan Yu's glaive: the blade comes out of a dragon's mouth, a red tassel under it, a lotus and a spike at the butt
+  function dragonGlaive(p) {
+    if (!gear.glaive) return glaive(p);
+    p.add(gear.glaive.clone()); tassel(p, 0.325);
+  }
+  // Lü Bu's halberd: flames of gold on the point and the two crescents, a lotus under them, a red tassel
+  function flameHalberd(p) {
+    if (!gear.halberd) return skyPiercer(p);
+    p.add(gear.halberd.clone());
+  }
+  // Zhang Fei's spear: a blade that winds like a snake to a forked tip, out of the coils of one, a red tassel
+  function coiledSpear(p) {
+    if (!gear.serpent) return serpentSpear(p);
+    p.add(gear.serpent.clone());
+  }
+  // Zhao Yun's spear: a broad leaf of a point out of a gold lotus, a red tassel, a silver shaft
+  function lotusSpear(p) {
+    if (!gear.spear) return silverSpear(p);
+    p.add(gear.spear.clone());
+  }
+
   // The figures that come as files: key (as for setFigure) -> [file, height on the board, what to add]. They are
   // fetched once the game is up (loadFigures), and stood on y = 0 at that height, centred; done(key) is told as each
   // arrives, since the figures built before then are the built ones.
   const FILES = {
     // The files have no weapons: ours go in the right hand, gripped, so leaning a little short of a quarter turn from
     // the forearm (GRIP_LEAN). k: the model's scale.
-    // Guan Yu stands with his forearm out and the blade upright in his fist, its butt on the ground
+    // Guan Yu stands with his forearm out and the blade upright in his fist, its butt on the ground, its edge turned
+    // to the enemy and a little out from him (so it is the edge that comes down in the blow, and the flat still shows)
     'quan-vu': ['src/figures/quan-vu.glb', 0.93, (f, k) => {
       const h = f.getObjectByName('handR'), w = group(h), d = 0.215 / k;
-      w.position.set(0.012, 0.02 - d * Math.cos(GRIP_LEAN), 0.02 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); glaive(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      w.position.set(0.012, 0.02 - d * Math.cos(GRIP_LEAN), 0.02 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, -2, 0); dragonGlaive(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: CLEAVE, sweep: [LEVEL, LEVEL] };
     }],
     // Cao Cao's sword Yitian is held out before him
     'tao-thao': ['src/figures/tao-thao.glb', 0.9, (f, k) => {
-      const h = f.getObjectByName('handR'), w = sword(h, { trim: '#d4a017' });
+      const h = f.getObjectByName('handR'), w = lordSword(h);
       w.position.set(0.012, 0.02, 0.02); w.scale.setScalar(1.45 / k); w.rotation.x = GRIP_LEAN;
       h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
     }],
     // Liu Bei's pair of swords, one in each hand
     'luu-bi': ['src/figures/luu-bi.glb', 0.9, (f, k) => {
       for (const [n, x] of [['handR', 1], ['handL', -1]]) {
-        const h = f.getObjectByName(n), w = sword(h, { trim: '#d4a017' });
+        const h = f.getObjectByName(n), w = lordSword(h);
         w.position.set(0.012 * x, 0.02, 0.02); w.scale.setScalar(1.2 / k); w.rotation.x = GRIP_LEAN;
         h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
       }
     }],
     'ton-quyen': ['src/figures/ton-quyen.glb', 0.9, (f, k) => {   // his hand hangs lower under the bracer than the others'
-      const h = f.getObjectByName('handR'), w = sword(h, { trim: '#d4a017' });
+      const h = f.getObjectByName('handR'), w = lordSword(h);
       w.position.set(0.012, -0.022, 0.028); w.scale.setScalar(1.45 / k); w.rotation.x = GRIP_LEAN;
       h.userData.hold = { raise: [0, -1.75, -0.3, 0.8], out: [0, -0.75, -0.2, 0.8], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.2, -0.05, 0.8]] };
     }],
@@ -1508,19 +1553,19 @@ const MODELS = (() => {
     }],
     'truong-phi': ['src/figures/truong-phi.glb', 0.9, (f, k) => {   // the serpent spear stands in his right hand, its butt on the ground
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
-      w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); serpentSpear(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      w.position.set(0.012, -0.004 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0.5, 0); coiledSpear(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
     }],
     'lu-bo': ['src/figures/lu-bo.glb', 0.9, (f, k) => {   // the halberd in his right hand; the two long pheasant plumes rise from his crown
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
-      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); skyPiercer(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); flameHalberd(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: CLEAVE };
       const pl = group(f.getObjectByName('head'), 0, 0.115, -0.005); pl.scale.setScalar(1 / k); longPlumes(pl);
     }],
     'trieu-van': ['src/figures/trieu-van.glb', 0.9, (f, k) => {   // the silver spear in his right hand; a white tuft falls back from his helmet
       const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
-      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); silverSpear(w);
-      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]] };
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); lotusSpear(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
       const tuft = group(f.getObjectByName('head'), 0.003, 0.188, -0.006); tuft.scale.setScalar(1 / k); horsehair(tuft);
     }],
     // The general no hero leads is one figure for every side: the file's armour is blue, and the other sides wear the
@@ -1536,7 +1581,13 @@ const MODELS = (() => {
   function loadFigures(done) {
     if (!THREE.GLTFLoader) return;
     const loader = new THREE.GLTFLoader(), box = new THREE.Box3();
-    for (const [key, [url, tall, more, dyed]] of Object.entries(FILES)) loader.load(url, g => {
+    const held = Promise.all(Object.entries(GEAR).map(([name, url]) => new Promise(ok => loader.load(url, g => {
+      // the files' metal is a mirror, and a mirror this small shows only the dark of the room: less of a metal and
+      // rougher (the roughness scales the file's, which is near none), it takes the light
+      g.scene.traverse(o => { if (o.isMesh) { o.material.metalness = 0.7; o.material.roughness = 2.2; shine(o.material, 1.2); } });
+      gear[name] = g.scene; ok();
+    }, undefined, ok))));
+    for (const [key, [url, tall, more, dyed]] of Object.entries(FILES)) loader.load(url, g => held.then(() => {
       const body = g.scene;
       box.setFromObject(body);
       const k = tall / (box.max.y - box.min.y);
@@ -1553,7 +1604,7 @@ const MODELS = (() => {
         }, undefined, () => {});
       }
       stand(body, key);
-    }, undefined, () => {});
+    }), undefined, () => {});
   }
 
   // the warriors' looks besides the painted one (skins.js): the whole figure cast in one metal; the banner keeps the
@@ -1601,8 +1652,9 @@ const MODELS = (() => {
     }
   }
 
-  // The knees, elbows and hocks follow the joints that get moved as a figure is drawn, a frame behind; a figure posed
-  // for a single picture (portraits.js) is settled by hand.
+  // The knees, elbows and hocks of a built figure follow the joints that get moved as it is drawn, a frame behind (a
+  // figure from a file follows at once: flexModel); a figure posed for a single picture (portraits.js) is settled by
+  // hand.
   function settle(w) { w.traverse(o => { if (o.userData.flex) o.userData.flex(); }); }
 
   // a warrior for a piece, facing the enemy; with a banner pole for the army view.
@@ -1631,5 +1683,5 @@ const MODELS = (() => {
     return root;
   }
 
-  return { board, sanguoBoard, wet, riverDist, WATER_Y, REFLECT, table, lantern, disc, warrior, settle, setFigure, loadFigures, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
+  return { board, sanguoBoard, wet, riverDist, WATER_Y, REFLECT, table, lantern, disc, warrior, settle, setFigure, figured, loadFigures, setEnvMap, faceTexture, clearTextureCache, palKey, typeOf, han, DISC_H, DISC_R, PAL, BRUSH };
 })();
