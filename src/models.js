@@ -893,7 +893,7 @@ const MODELS = (() => {
   }
   // a tuft of horsehair on a helmet's knob: three locks that rise a little, then fall behind (p: where it roots; units
   // are the built figure's)
-  function horsehair(p, color = '#f6f4ee') {
+  function horsehair(p, color = '#f6f4ee', bound = true) {
     for (const turn of [-0.32, 0, 0.32]) {
       const g = geo('horsehair' + turn, () => {
         const SEG = 18, RAD = 8, far = turn ? 0.84 : 1;
@@ -909,7 +909,28 @@ const MODELS = (() => {
       });
       part(g, color, p, 0, 0, 0);
     }
-    cyl(0.006, 0.0075, 0.014, '#d4a017', p, 0, 0.004, 0, 8, GOLDS);       // the ring that binds it
+    if (bound) cyl(0.006, 0.0075, 0.014, '#d4a017', p, 0, 0.004, 0, 8, GOLDS);       // the ring that binds it
+  }
+  // a lion's mane on a helmet: a tuft of tawny locks on the knob, and two rows more rooted down the ridge behind it
+  // that hang down the back of the dome to the nape (p: the top of the helmet; units are the built figure's)
+  function lionMane(p, color = '#b9720f') {
+    horsehair(p, color);
+    for (const [a, k] of [[0.5, 1], [0.95, 0.82]]) for (const turn of [-0.5, 0, 0.5]) {
+      const g = geo('maneLock', () => {
+        const SEG = 14, RAD = 8;
+        const curve = new THREE.CatmullRomCurve3([[0, 0, 0], [0, 0.008, -0.02], [0, -0.02, -0.04], [0, -0.06, -0.052], [0, -0.1, -0.05], [0, -0.125, -0.04]].map(a => new THREE.Vector3(...a)));
+        const tube = new THREE.TubeGeometry(curve, SEG, 0.02, RAD), P = tube.attributes.position, o = new THREE.Vector3(), v = new THREE.Vector3();
+        for (let i = 0; i <= SEG; i++) {
+          const t = i / SEG, thin = Math.max(0.08, 0.3 + 0.7 * Math.sin(Math.min(1, t * 2.6) * Math.PI / 2) - 0.9 * t * t * t);    // as the tuft's: tight at the root, a wisp at the end
+          curve.getPointAt(t, o);
+          for (let k = 0; k <= RAD; k++) { const n = i * (RAD + 1) + k; v.fromBufferAttribute(P, n).sub(o).multiplyScalar(thin).add(o); P.setXYZ(n, v.x, v.y, v.z); }
+        }
+        tube.computeVertexNormals();
+        return tube;
+      });
+      const l = part(g, color, p, 0, -0.07 * (1 - Math.cos(a)), -0.064 * Math.sin(a));       // down the back of the dome
+      l.rotation.y = turn; l.scale.setScalar(turn ? k * 0.9 : k);
+    }
   }
   // a cloak from the shoulders to the calves, widening as it falls
   function cloak(h, color) {
@@ -1520,6 +1541,9 @@ const MODELS = (() => {
   // The figures that come as files: key (as for setFigure) -> [file, height on the board, what to add]. They are
   // fetched once the game is up (loadFigures), and stood on y = 0 at that height, centred; done(key) is told as each
   // arrives, since the figures built before then are the built ones.
+  // A file whose silver is a mirror shows only the dark of the room in it: made less of a metal and rougher, it takes
+  // the light (as the weapons' is, loadFigures). For a figure with nothing in its hands yet.
+  const soften = f => f.traverse(o => { if (o.isMesh) { o.material.metalness = 0.6; o.material.roughness = 1.5; } });
   const FILES = {
     // The files have no weapons: ours go in the right hand, gripped, so leaning a little short of a quarter turn from
     // the forearm (GRIP_LEAN). k: the model's scale.
@@ -1570,6 +1594,21 @@ const MODELS = (() => {
       w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); lotusSpear(w);
       h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
       const tuft = group(f.getObjectByName('head'), 0.003, 0.188, -0.006); tuft.scale.setScalar(1 / k); horsehair(tuft);
+    }],
+    // Ma Chao: the long spear in his right hand, a golden mane down the ridge of the lion helmet
+    'ma-sieu': ['src/figures/ma-sieu.glb', 0.9, (f, k) => {
+      soften(f);
+      const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); lotusSpear(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
+      const mane = group(f.getObjectByName('head'), 0, 0.143, -0.004); mane.scale.setScalar(1 / k); lionMane(mane);
+    }],
+    'khuong-duy': ['src/figures/khuong-duy.glb', 0.9, (f, k) => {   // the long spear in his right hand; a red tassel on the helmet's knob
+      soften(f);
+      const h = f.getObjectByName('handR'), w = group(h), d = 0.3 / k;
+      w.position.set(0.012, -0.03 - d * Math.cos(GRIP_LEAN), 0.028 - d * Math.sin(GRIP_LEAN)); w.scale.setScalar(1.15 / k); w.rotation.set(GRIP_LEAN, 0, 0); lotusSpear(w);
+      h.userData.hold = { rest: [-0.25, 0.15, -1.4, 0], kneel: [-0.35, -1.3, -1.0, 0.7], raise: [-0.25, -1.75, -0.3, 0.8], out: [-0.2, -0.2, -0.2, 0.85], cut: [[1.1, -1.25, -0.45, -0.2], [-0.8, -0.5, -0.1, 0.9]], stab: STAB };
+      const tuft = group(f.getObjectByName('head'), 0, 0.146, -0.002); tuft.scale.setScalar(1 / k); horsehair(tuft, '#c0201a');
     }],
     // The general no hero leads is one figure for every side: the file's armour is blue, and the other sides wear the
     // same picture dyed their colour (a fourth entry: key -> picture). A sword in his right hand, a tuft of the side's

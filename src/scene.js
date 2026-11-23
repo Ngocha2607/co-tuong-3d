@@ -577,6 +577,7 @@ const VIEW = (() => {
     // Zhao Yun and Ma Chao: three thrusts, quick as lightning
     'trieu-van': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
     'ma-sieu': async (u, j, s) => { for (let i = 0; i < 3; i++) await s.thrust(70); },
+    'khuong-duy': async (u, j, s) => { await s.thrust(110); await s.thrust(80); },      // a measured thrust, and one more
     // Lü Bu leaps high, the halberd drawn back over his head, and brings it down, the board shaking under him
     'lu-bo': async (u, j, s) => {
       await tween(300, k => { u.war.position.y = Math.sin(k * Math.PI * 0.5) * 0.45; j.cutT = out(k); j.armR.rotation.x = -2.6 * out(k); s.lunge(0.15 * k); });
